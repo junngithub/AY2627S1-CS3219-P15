@@ -1,0 +1,27 @@
+meta {
+  name: Photo part is missing
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/collect
+  body: multipart-form
+  auth: bearer
+}
+
+auth:bearer {
+  token: stub:collect-nophoto-courier@u.nus.edu
+}
+
+body:multipart-form {
+  note: missing
+}
+
+tests {
+  test("status is 400", function() {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().error).to.include("photo is required");
+  });
+}
+

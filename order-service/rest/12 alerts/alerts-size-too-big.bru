@@ -1,0 +1,23 @@
+meta {
+  name: Page size over 1000
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/v1/orders/alerts?size=1001
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: stub:alerts-req@u.nus.edu
+}
+
+tests {
+  test("status is 400", function() {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().error).to.include("Page size");
+  });
+}
+

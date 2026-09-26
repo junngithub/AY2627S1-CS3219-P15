@@ -1,0 +1,27 @@
+meta {
+  name: Another courier delivers
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/deliver
+  body: multipart-form
+  auth: bearer
+}
+
+auth:bearer {
+  token: stub:deliver-stranger@u.nus.edu
+}
+
+body:multipart-form {
+  photo: @file(../fixtures/proof.png)
+}
+
+tests {
+  test("status is 409", function() {
+    expect(res.getStatus()).to.equal(409);
+    expect(res.getBody().error).to.include("assigned courier");
+  });
+}
+

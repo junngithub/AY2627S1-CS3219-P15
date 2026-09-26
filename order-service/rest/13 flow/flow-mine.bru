@@ -1,0 +1,22 @@
+meta {
+  name: Mine
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/v1/orders/mine
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: stub:flow-req@u.nus.edu
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+}
+

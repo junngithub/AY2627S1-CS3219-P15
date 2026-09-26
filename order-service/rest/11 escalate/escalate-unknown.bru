@@ -1,0 +1,29 @@
+meta {
+  name: Unknown order
+  type: http
+  seq: 22
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/00000000-0000-0000-0000-000000000001/escalate
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: stub:esc-req@u.nus.edu
+}
+
+body:json {
+  {
+    "disputeText": "The courier collected the wrong item"
+  }
+}
+
+tests {
+  test("status is 404", function() {
+    expect(res.getStatus()).to.equal(404);
+    expect(res.getBody().error).to.include("Order not found");
+  });
+}
+

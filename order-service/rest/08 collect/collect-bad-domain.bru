@@ -1,0 +1,27 @@
+meta {
+  name: collect bad email domain
+  type: http
+  seq: 20
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/collect
+  body: multipart-form
+  auth: bearer
+}
+
+auth:bearer {
+  token: stub:not-a-student
+}
+
+body:multipart-form {
+  photo: @file(../fixtures/proof.png)
+}
+
+tests {
+  test("status is 401", function() {
+    expect(res.getStatus()).to.equal(401);
+    expect(res.getBody().error).to.include("Sign in is required");
+  });
+}
+

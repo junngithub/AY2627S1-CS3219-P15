@@ -1,0 +1,23 @@
+meta {
+  name: Unknown pickup
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/v1/orders/search?pickupLocationId=nowhere
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: stub:search-courier@u.nus.edu
+}
+
+tests {
+  test("status is 400", function() {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().error).to.include("approved supplier");
+  });
+}
+

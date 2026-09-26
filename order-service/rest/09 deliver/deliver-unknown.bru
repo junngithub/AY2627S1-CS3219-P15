@@ -1,0 +1,27 @@
+meta {
+  name: Unknown order
+  type: http
+  seq: 23
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/00000000-0000-0000-0000-000000000001/deliver
+  body: multipart-form
+  auth: bearer
+}
+
+auth:bearer {
+  token: stub:deliver-courier@u.nus.edu
+}
+
+body:multipart-form {
+  photo: @file(../fixtures/proof.png)
+}
+
+tests {
+  test("status is 404", function() {
+    expect(res.getStatus()).to.equal(404);
+    expect(res.getBody().error).to.include("Order not found");
+  });
+}
+

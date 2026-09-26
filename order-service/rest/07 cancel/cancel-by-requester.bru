@@ -1,0 +1,23 @@
+meta {
+  name: Requester cancels an open order
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/cancel
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: stub:cancel-req@u.nus.edu
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().status).to.equal("CANCELLED");
+  });
+}
+

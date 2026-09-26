@@ -1,0 +1,11 @@
+{
+  "eventId": "EVENT_ID",
+  "eventType": "rating.permission.granted",
+  "schemaVersion": 1,
+  "occurredAt": "2026-09-23T00:00:00Z",
+  "orderId": "00000000-0000-0000-0000-000000000000",
+  "raterEmail": "courier@u.nus.edu",
+  "raterRole": "COURIER",
+  "rateeEmail": "requester@u.nus.edu",
+  "rateeRole": "REQUESTER"
+}

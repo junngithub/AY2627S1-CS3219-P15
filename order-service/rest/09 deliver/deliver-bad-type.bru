@@ -1,0 +1,27 @@
+meta {
+  name: Photo is not an image
+  type: http
+  seq: 22
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/deliver
+  body: multipart-form
+  auth: bearer
+}
+
+auth:bearer {
+  token: stub:deliver-type-courier@u.nus.edu
+}
+
+body:multipart-form {
+  photo: @file(../fixtures/notes.txt)
+}
+
+tests {
+  test("status is 400", function() {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().error).to.include("JPEG, PNG, or WebP");
+  });
+}
+

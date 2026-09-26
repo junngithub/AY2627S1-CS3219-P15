@@ -2,6 +2,17 @@
 dist/
 build/
 out/
+target/
+
+order-service/data/
+
+# Local SonarQube credentials
+.sonar/
+
+# Local Spring profile. Machine-specific; do not commit.
+application-local.yml
+application-local.yaml
+application-local.properties
 
 # Environment / secrets
 .env

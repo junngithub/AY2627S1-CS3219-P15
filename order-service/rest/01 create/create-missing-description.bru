@@ -1,0 +1,33 @@
+meta {
+  name: Missing item description
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: stub:create-nodesc@u.nus.edu
+}
+
+body:json {
+  {
+    "credits": 1,
+    "expiryTime": "{{acceptanceExpiry}}",
+    "deliveryTime": "{{deliveryDeadline}}",
+    "fromLocation": "nus-coop",
+    "toLocation": "cool-spot"
+  }
+}
+
+tests {
+  test("status is 400", function() {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().error).to.include("itemDescription");
+  });
+}
+

@@ -1,0 +1,29 @@
+meta {
+  name: Blank dispute text
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/escalate
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: stub:esc-blank-req@u.nus.edu
+}
+
+body:json {
+  {
+    "disputeText": "   "
+  }
+}
+
+tests {
+  test("status is 400", function() {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().error).to.include("disputeText");
+  });
+}
+

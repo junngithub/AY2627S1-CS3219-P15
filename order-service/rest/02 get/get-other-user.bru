@@ -1,0 +1,23 @@
+meta {
+  name: Another user cannot see the order
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: stub:get-stranger@u.nus.edu
+}
+
+tests {
+  test("status is 404", function() {
+    expect(res.getStatus()).to.equal(404);
+    expect(res.getBody().error).to.include("Order not found");
+  });
+}
+

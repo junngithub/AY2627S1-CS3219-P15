@@ -1,0 +1,23 @@
+meta {
+  name: Requester cannot cancel after accept
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/cancel
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: stub:cancel-late-req@u.nus.edu
+}
+
+tests {
+  test("status is 409", function() {
+    expect(res.getStatus()).to.equal(409);
+    expect(res.getBody().error).to.include("cannot be cancelled");
+  });
+}
+

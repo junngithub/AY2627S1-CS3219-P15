@@ -1,0 +1,22 @@
+meta {
+  name: Pool
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/v1/orders?latitude=1.2968&longitude=103.7733
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: stub:flow-courier@u.nus.edu
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+}
+

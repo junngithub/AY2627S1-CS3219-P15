@@ -1,0 +1,171 @@
+package sg.edu.nus.cs3219.order.service;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import sg.edu.nus.cs3219.order.client.SupplierClient;
+import sg.edu.nus.cs3219.order.client.UserAccount;
+import sg.edu.nus.cs3219.order.client.UserClient;
+import sg.edu.nus.cs3219.order.config.OrderProperties;
+import sg.edu.nus.cs3219.order.domain.OrderStatus;
+import sg.edu.nus.cs3219.order.domain.ProximityRanker;
+import sg.edu.nus.cs3219.order.persistence.AlertEntity;
+import sg.edu.nus.cs3219.order.persistence.AlertRepository;
+import sg.edu.nus.cs3219.order.persistence.OrderEntity;
+import sg.edu.nus.cs3219.order.persistence.OrderRepository;
+import sg.edu.nus.cs3219.order.rest.ApiException;
+import sg.edu.nus.cs3219.order.rest.PageResponse;
+
+import java.util.List;
+import java.util.UUID;
+
+@Service
+public class OrderQueryService {
+
+    private final OrderRepository orders;
+    private final AlertRepository alerts;
+    private final UserClient users;
+    private final SupplierClient suppliers;
+    private final OrderProperties properties;
+
+    public OrderQueryService(
+            OrderRepository orders,
+            AlertRepository alerts,
+            UserClient users,
+            SupplierClient suppliers,
+            OrderProperties properties
+    ) {
+        this.orders = orders;
+        this.alerts = alerts;
+        this.users = users;
+        this.suppliers = suppliers;
+        this.properties = properties;
+    }
+
+    @Transactional(readOnly = true)
+    public OrderEntity get(String authorization, UUID orderId) {
+        UserAccount actor = users.authenticate(authorization);
+        OrderEntity order = orders.findById(orderId).orElseThrow(() -> ApiException.notFound("Order not found"));
+        boolean requester = order.getRequesterEmail().equalsIgnoreCase(actor.email());
+        boolean courier = order.getCourierEmail() != null && order.getCourierEmail().equalsIgnoreCase(actor.email());
+        if (!requester && !courier) {
+            throw ApiException.notFound("Order not found");
+        }
+        return order;
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<OrderEntity> pool(String authorization, Double latitude, Double longitude, int page, int size) {
+        UserAccount actor = users.authenticate(authorization);
+        requirePage(page, size);
+        if (size == 0) {
+            return PageResponse.empty(page, size);
+        }
+        if (latitude == null || longitude == null) {
+            Page<OrderEntity> result = orders.searchOpen(
+                    OrderStatus.CREATED,
+                    actor.email(),
+                    null,
+                    null,
+                    PageRequest.of(page, size, Sort.by(Sort.Order.desc("amount"), Sort.Order.desc("requestTime")))
+            );
+            return PageResponse.of(result.getContent(), page, size, result.getTotalElements());
+        }
+        ProximityRanker.BoundingBox box = ProximityRanker.box(latitude, longitude, properties.getRanking().getRadiusKm());
+        List<OrderEntity> candidates = orders.findOpenInBox(
+                OrderStatus.CREATED,
+                actor.email(),
+                box.minLat(),
+                box.maxLat(),
+                box.minLng(),
+                box.maxLng()
+        );
+        List<ProximityRanker.RankedOrder> ranked = ProximityRanker.rank(candidates.stream()
+                .map(order -> new ProximityRanker.RankedOrder(
+                        order.getId().toString(),
+                        order.getAmount(),
+                        order.getPickupLat(),
+                        order.getPickupLng(),
+                        order.getRequestTime().toEpochMilli()))
+                .toList(), latitude, longitude);
+        return slice(candidates, ranked, page, size);
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<OrderEntity> mine(String authorization, int page, int size) {
+        UserAccount actor = users.authenticate(authorization);
+        requirePage(page, size);
+        if (size == 0) {
+            return PageResponse.empty(page, size);
+        }
+        Page<OrderEntity> result = orders.findByRequesterEmailOrderByRequestTimeDesc(
+                actor.email(),
+                PageRequest.of(page, size)
+        );
+        return PageResponse.of(result.getContent(), page, size, result.getTotalElements());
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<OrderEntity> search(String authorization, String pickupLocationId, String dropoffLocationId, int page, int size) {
+        UserAccount actor = users.authenticate(authorization);
+        requirePage(page, size);
+        if ((pickupLocationId == null || pickupLocationId.isBlank()) && (dropoffLocationId == null || dropoffLocationId.isBlank())) {
+            throw ApiException.badRequest("Provide a pickup location or a dropoff location");
+        }
+        if (pickupLocationId != null && !pickupLocationId.isBlank()) {
+            suppliers.requirePlace(pickupLocationId, authorization);
+        }
+        if (dropoffLocationId != null && !dropoffLocationId.isBlank()) {
+            suppliers.requirePlace(dropoffLocationId, authorization);
+        }
+        if (size == 0) {
+            return PageResponse.empty(page, size);
+        }
+        Page<OrderEntity> result = orders.searchOpen(
+                OrderStatus.CREATED,
+                actor.email(),
+                blankToNull(pickupLocationId),
+                blankToNull(dropoffLocationId),
+                PageRequest.of(page, size, Sort.by(Sort.Order.desc("amount")))
+        );
+        return PageResponse.of(result.getContent(), page, size, result.getTotalElements());
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<AlertEntity> alerts(String authorization, int page, int size) {
+        UserAccount actor = users.authenticate(authorization);
+        requirePage(page, size);
+        if (size == 0) {
+            return PageResponse.empty(page, size);
+        }
+        Page<AlertEntity> result = alerts.findByRequesterEmailAndNotifyRequesterTrueOrderByCreatedAtDesc(
+                actor.email(),
+                PageRequest.of(page, size)
+        );
+        return PageResponse.of(result.getContent(), page, size, result.getTotalElements());
+    }
+
+    private PageResponse<OrderEntity> slice(List<OrderEntity> candidates, List<ProximityRanker.RankedOrder> ranked, int page, int size) {
+        int from = page * size;
+        if (from >= ranked.size()) {
+            return PageResponse.empty(page, size, ranked.size());
+        }
+        int to = Math.min(from + size, ranked.size());
+        List<OrderEntity> content = ranked.subList(from, to).stream()
+                .map(item -> candidates.stream().filter(order -> order.getId().toString().equals(item.id())).findFirst().orElseThrow())
+                .toList();
+        return PageResponse.of(content, page, size, ranked.size());
+    }
+
+    private static void requirePage(int page, int size) {
+        if (page < 0 || size < 0 || size > 1000) {
+            throw ApiException.badRequest("Page size must be between 0 and 1000");
+        }
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value;
+    }
+}

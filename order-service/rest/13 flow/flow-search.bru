@@ -1,0 +1,22 @@
+meta {
+  name: Search
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/v1/orders/search?pickupLocationId=nus-coop&dropoffLocationId=cool-spot
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: stub:flow-courier@u.nus.edu
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+}
+

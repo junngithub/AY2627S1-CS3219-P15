@@ -1,0 +1,28 @@
+meta {
+  name: Escalate with an optional photo
+  type: http
+  seq: 29
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/escalate
+  body: multipart-form
+  auth: bearer
+}
+
+auth:bearer {
+  token: stub:esc-photo-req@u.nus.edu
+}
+
+body:multipart-form {
+  disputeText: The courier delivered the wrong item
+  photo: @file(../fixtures/proof.png)
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().status).to.equal("ESCALATED");
+    expect(res.getBody().disputePhotoRef).to.include("dispute");
+  });
+}

@@ -1,0 +1,23 @@
+meta {
+  name: Accept courier dispute
+  type: http
+  seq: 19
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/accept
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: stub:esc-notreq-courier@u.nus.edu
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().status).to.equal("ACCEPTED");
+  });
+}
+

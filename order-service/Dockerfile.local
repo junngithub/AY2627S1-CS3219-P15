@@ -1,0 +1,4 @@
+# Local-only SonarQube server. Not deployed.
+# The application image is Dockerfile. This image does not contain the app.
+# JDBC settings are supplied by compose.local.yaml.
+FROM sonarqube:26.9.0.129388-community

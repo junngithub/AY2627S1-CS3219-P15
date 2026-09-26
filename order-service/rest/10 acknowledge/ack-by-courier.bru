@@ -1,0 +1,23 @@
+meta {
+  name: Courier cannot acknowledge
+  type: http
+  seq: 15
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/acknowledge
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: stub:ack-notreq-courier@u.nus.edu
+}
+
+tests {
+  test("status is 409", function() {
+    expect(res.getStatus()).to.equal(409);
+    expect(res.getBody().error).to.include("Only the requester");
+  });
+}
+

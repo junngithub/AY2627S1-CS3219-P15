@@ -1,0 +1,27 @@
+meta {
+  name: Collect before accept
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/collect
+  body: multipart-form
+  auth: bearer
+}
+
+auth:bearer {
+  token: stub:collect-courier@u.nus.edu
+}
+
+body:multipart-form {
+  photo: @file(../fixtures/proof.png)
+}
+
+tests {
+  test("status is 409", function() {
+    expect(res.getStatus()).to.equal(409);
+    expect(res.getBody().error).to.include("not waiting for collection");
+  });
+}
+

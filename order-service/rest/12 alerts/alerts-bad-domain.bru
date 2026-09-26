@@ -1,0 +1,23 @@
+meta {
+  name: alerts bad email domain
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/api/v1/orders/alerts
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: stub:not-a-student
+}
+
+tests {
+  test("status is 401", function() {
+    expect(res.getStatus()).to.equal(401);
+    expect(res.getBody().error).to.include("Sign in is required");
+  });
+}
+

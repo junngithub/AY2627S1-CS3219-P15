@@ -1,0 +1,23 @@
+meta {
+  name: Pool ranked by proximity
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/v1/orders?latitude=1.2968&longitude=103.7733&page=0&size=20
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: stub:pool-courier@u.nus.edu
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().content.length).to.be.at.least(1);
+  });
+}
+

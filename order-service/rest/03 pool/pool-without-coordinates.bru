@@ -1,0 +1,22 @@
+meta {
+  name: Pool sorted by reward
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/v1/orders
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: stub:pool-courier@u.nus.edu
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+}
+

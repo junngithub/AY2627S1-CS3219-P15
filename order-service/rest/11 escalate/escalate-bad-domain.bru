@@ -1,0 +1,29 @@
+meta {
+  name: escalate bad email domain
+  type: http
+  seq: 24
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/escalate
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: stub:not-a-student
+}
+
+body:json {
+  {
+    "disputeText": "The courier collected the wrong item"
+  }
+}
+
+tests {
+  test("status is 401", function() {
+    expect(res.getStatus()).to.equal(401);
+    expect(res.getBody().error).to.include("Sign in is required");
+  });
+}
+

@@ -1,0 +1,23 @@
+meta {
+  name: Acknowledge an open order
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/acknowledge
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: stub:ack-open-req@u.nus.edu
+}
+
+tests {
+  test("status is 409", function() {
+    expect(res.getStatus()).to.equal(409);
+    expect(res.getBody().error).to.include("cannot be acknowledged");
+  });
+}
+
