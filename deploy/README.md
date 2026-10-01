@@ -188,6 +188,28 @@ helm template credit charts/foc-service \
 
 The Argo CD files (`argocd/`) are **not** used locally. They first run in dev.
 
+### Local test users
+
+User has no seed and no Telegram verification yet, so two logins were made by
+hand on the local database (password `Password123` for both):
+
+| Email | Role | Status |
+|---|---|---|
+| `student@u.nus.edu` | USER | Verified (email + Telegram) |
+| `admin@u.nus.edu` | ADMIN | Verified (email + Telegram) |
+
+They live only in the local `local_user` database, so they're gone if it's
+reset. To recreate them: `POST /api/v1/user/signup` for each (body: `email`,
+`password`, `telegramHandle`), then run this as the `user-db` login (e.g. a
+one-off `postgres:16-alpine` Job with `DATABASE_URL` from Secret `user-db`,
+like the seed Job below):
+
+```sql
+UPDATE "User" SET "emailVerifiedAt" = now(), "telegramVerifiedAt" = now()
+ WHERE email IN ('student@u.nus.edu', 'admin@u.nus.edu');
+UPDATE "User" SET role = 'ADMIN' WHERE email = 'admin@u.nus.edu';
+```
+
 ### Seed Supplier's database (local)
 
 Supplier's seed (`supplier-service/prisma/seed.ts`, data inline) ships in its
