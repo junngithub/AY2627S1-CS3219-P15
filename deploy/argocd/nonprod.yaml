@@ -1,0 +1,226 @@
+# Argo CD objects for the NON-PROD EKS cluster. The root Application
+# created by infra/nonprod/bootstrap applies this file plus projects/.
+#
+# Environments on this cluster: dev → namespace foc-dev, stg → namespace foc-stg.
+#
+# Ordering: Kafka objects need Strimzi's CRDs, and services need Strimzi's
+# Kafka user Secrets. Instead of cross-app sync waves (which ApplicationSets
+# don't honour), every app retries until its dependencies exist.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: strimzi
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: foc-platform
+  source:
+    repoURL: https://github.com/junngithub/AY2627S1-CS3219-P15.git
+    targetRevision: main
+    path: deploy/charts/strimzi
+    helm:
+      valueFiles:
+        - ../../values/clusters/nonprod/strimzi.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: strimzi
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true # Strimzi CRDs exceed the client-side apply annotation limit
+    retry:
+      limit: 10
+      backoff: { duration: 10s, factor: 2, maxDuration: 5m }
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: envoy-gateway
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: foc-platform
+  source:
+    repoURL: https://github.com/junngithub/AY2627S1-CS3219-P15.git
+    targetRevision: main
+    path: deploy/charts/envoy-gateway
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: envoy-gateway-system
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true # Gateway API / Envoy Gateway CRDs are large
+    retry:
+      limit: 10
+      backoff: { duration: 10s, factor: 2, maxDuration: 5m }
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: foc-namespaces
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - list:
+        elements:
+          - { env: dev, namespace: foc-dev }
+          - { env: stg, namespace: foc-stg }
+  template:
+    metadata:
+      name: "{{ .env }}-namespace"
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: foc
+      source:
+        repoURL: https://github.com/junngithub/AY2627S1-CS3219-P15.git
+        targetRevision: main
+        path: deploy/charts/foc-namespace
+        helm:
+          valueFiles:
+            - "../../values/envs/{{ .env }}/namespace.yaml"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{ .namespace }}"
+      syncPolicy:
+        automated: { prune: true, selfHeal: true }
+        syncOptions:
+          - CreateNamespace=true
+        managedNamespaceMetadata:
+          labels:
+            foc.io/env: "{{ .env }}"
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: foc-kafka
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - list:
+        elements:
+          - { env: dev, namespace: foc-dev }
+          - { env: stg, namespace: foc-stg }
+  template:
+    metadata:
+      name: "{{ .env }}-kafka"
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: foc
+      source:
+        repoURL: https://github.com/junngithub/AY2627S1-CS3219-P15.git
+        targetRevision: main
+        path: deploy/charts/foc-kafka
+        helm:
+          valueFiles:
+            - "../../values/envs/{{ .env }}/kafka.yaml"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{ .namespace }}"
+      syncPolicy:
+        automated: { prune: true, selfHeal: true }
+        syncOptions:
+          - CreateNamespace=true
+          - SkipDryRunOnMissingResource=true # Strimzi CRDs may not exist yet
+        retry:
+          limit: 10
+          backoff: { duration: 10s, factor: 2, maxDuration: 5m }
+---
+# One Application per service values file in values/envs/<env>/services/.
+# Adding a service to an env = adding that file.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: foc-services
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - matrix:
+        generators:
+          - list:
+              elements:
+                - { env: dev, namespace: foc-dev }
+                - { env: stg, namespace: foc-stg }
+          - git:
+              repoURL: https://github.com/junngithub/AY2627S1-CS3219-P15.git
+              revision: main
+              files:
+                - path: "deploy/values/envs/{{ .env }}/services/*.yaml"
+  template:
+    metadata:
+      name: '{{ .env }}-{{ trimSuffix ".yaml" .path.filename }}'
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: foc
+      source:
+        repoURL: https://github.com/junngithub/AY2627S1-CS3219-P15.git
+        targetRevision: main
+        path: deploy/charts/foc-service
+        helm:
+          # Later files override earlier ones.
+          valueFiles:
+            - "../../values/services/{{ .path.filename }}"
+            - "../../values/envs/{{ .env }}/common.yaml"
+            - "../../values/envs/{{ .env }}/services/{{ .path.filename }}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{ .namespace }}"
+      syncPolicy:
+        automated: { prune: true, selfHeal: true }
+        syncOptions:
+          - CreateNamespace=true
+        retry:
+          limit: 10
+          backoff: { duration: 10s, factor: 2, maxDuration: 5m }
+---
+# Each env's entry point (Gateway, routes, auth). Needs Envoy Gateway's CRDs
+# and the env's User service; retries until both exist.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: foc-gateway
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - list:
+        elements:
+          - { env: dev, namespace: foc-dev }
+          - { env: stg, namespace: foc-stg }
+  template:
+    metadata:
+      name: "{{ .env }}-gateway"
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: foc
+      source:
+        repoURL: https://github.com/junngithub/AY2627S1-CS3219-P15.git
+        targetRevision: main
+        path: deploy/charts/foc-gateway
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{ .namespace }}"
+      syncPolicy:
+        automated: { prune: true, selfHeal: true }
+        syncOptions:
+          - CreateNamespace=true
+          - SkipDryRunOnMissingResource=true # Envoy Gateway CRDs may not exist yet
+        retry:
+          limit: 10
+          backoff: { duration: 10s, factor: 2, maxDuration: 5m }

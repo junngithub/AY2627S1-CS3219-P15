@@ -1,0 +1,5 @@
+apiVersion: v2
+name: foc-namespace
+description: Guard rails for one FoC environment namespace (quota, default limits, network isolation).
+type: application
+version: 0.1.0

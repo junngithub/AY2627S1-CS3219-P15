@@ -1,0 +1,51 @@
+# GatewayClass from charts/envoy-gateway.
+gatewayClassName: envoy
+
+# Namespace where Envoy Gateway runs the proxies (the envoy-gateway release).
+envoyNamespace: envoy-gateway-system
+# Name of this env's Envoy proxy Service there. Default: envoy-<release namespace>.
+envoyServiceName: ""
+
+listenerPort: 80
+
+# Headers that carry identity from the gateway to services. Removed from every
+# client request before anything else, then set only by the auth check.
+identityHeaders: [x-user-id, x-is-admin]
+
+# ADR-0007: every protected request is checked with User's authorize endpoint.
+auth:
+  service: user
+  port: 3000
+  path: /api/v1/user/authorize
+
+# Protected routes (auth required): path prefix → service. Paths from the API
+# contract; ports must match deploy/values/services/<svc>.yaml.
+routes:
+  - { prefix: /api/v1/user, service: user, port: 3000 }
+  - { prefix: /api/v1/supplier, service: supplier, port: 8081 }
+  - { prefix: /api/v1/credit, service: credit, port: 3000 }
+  - { prefix: /api/v1/orders, service: order, port: 8080 }
+  - { prefix: /api/v1/rating, service: rating, port: 3000 }
+  - { prefix: /api/v1/badges, service: badges, port: 3000 }
+  - { prefix: /api/v1/admin, service: admin, port: 3000 }
+
+# Public endpoints (no auth), exact path + method, from the API contract.
+# Exact matches take precedence over the prefixes above.
+publicRoutes:
+  - { method: POST, path: /api/v1/user/signup, service: user, port: 3000 }
+  - { method: POST, path: /api/v1/user/verify-email, service: user, port: 3000 }
+  - { method: POST, path: /api/v1/user/resend-verification, service: user, port: 3000 }
+  - { method: POST, path: /api/v1/user/login, service: user, port: 3000 }
+  - { method: POST, path: /api/v1/user/forgot-password, service: user, port: 3000 }
+  - { method: POST, path: /api/v1/user/reset-password, service: user, port: 3000 }
+  - { method: GET, path: /api/v1/supplier, service: supplier, port: 8081 }
+
+# Internal-only paths: answered with 404 at the gateway, never forwarded.
+blockedPaths:
+  - /api/v1/user/authorize
+
+# `helm test` pod (not used by Argo CD).
+tests:
+  curlImage: curlimages/curl:8.10.1
+  userToken: stub:alice@u.nus.edu # accepted by the connectivity stub's /authorize
+  adminToken: stub:admin@u.nus.edu

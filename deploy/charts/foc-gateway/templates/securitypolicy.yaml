@@ -1,0 +1,22 @@
+# ADR-0007: before a protected request reaches a service, Envoy sends its
+# Authorization header to User's authorize endpoint. 2xx → forwarded, with the
+# identity headers User returned; anything else → that response goes back to
+# the client. If User can't be reached, requests are refused (fail closed).
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: foc-auth
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: foc-protected
+  extAuth:
+    headersToExtAuth: [authorization]
+    http:
+      backendRefs:
+        - name: {{ .Values.auth.service }}
+          port: {{ .Values.auth.port }}
+      pathOverride: {{ .Values.auth.path }} # exact path; `path` would append the request path
+      headersToBackend:
+        {{- toYaml .Values.identityHeaders | nindent 8 }}

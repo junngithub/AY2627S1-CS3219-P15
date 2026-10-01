@@ -1,0 +1,36 @@
+# Short name, e.g. "credit". Becomes the Service name, so other services call
+# http://<name>:<port> in every environment.
+name: ""
+
+image:
+  registry: "" # per env, e.g. <account>.dkr.ecr.<region>.amazonaws.com
+  name: "" # e.g. foc/credit-service
+  tag: "" # git SHA in the cloud; anything locally
+  pullPolicy: IfNotPresent
+
+replicas: 1
+port: 3000
+
+# Plain settings, exposed to the container as environment variables.
+env: {}
+
+# If set, the pod gets KAFKA_BROKERS, KAFKA_USERNAME, KAFKA_PASSWORD,
+# KAFKA_SASL_MECHANISM and KAFKA_CA_CERT (path to the cluster CA certificate).
+# The user must exist in charts/foc-kafka (Strimzi creates its Secret).
+kafka:
+  user: ""
+  clusterName: kafka
+
+# HTTP health check path; "" disables the probes and the HTTP test.
+healthPath: /health
+
+# `helm test` pods (not used by Argo CD).
+tests:
+  curlImage: curlimages/curl:8.10.1
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 256Mi

@@ -1,0 +1,4 @@
+# Applied to every service in the local environment.
+image:
+  registry: 000000000000.dkr.ecr.ap-southeast-1.localhost:4566 # Floci ECR
+  pullPolicy: Always # re-pushing a mutable tag (e.g. :dev) takes effect on restart
