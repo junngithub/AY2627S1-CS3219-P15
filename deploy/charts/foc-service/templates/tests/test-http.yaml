@@ -1,7 +1,8 @@
 {{- if .Values.healthPath }}
 # `helm test <release>`: from another pod in the namespace,
 #   1. this service answers on its Service name, and
-#   2. every peer URL it's configured with (env *_SERVICE_URL) answers /health,
+#   2. its database health endpoint answers, if database.healthPath is set, and
+#   3. every peer URL it's configured with (env *_SERVICE_URL) answers /health,
 #      so a wrong name or port in the values fails here, not in app code.
 # Argo CD ignores Helm test hooks.
 apiVersion: v1
@@ -32,6 +33,9 @@ spec:
             echo "FAIL $1: GET $2"; FAIL=1
           }
           check "self" "http://{{ include "foc-service.name" . }}:{{ .Values.port }}{{ .Values.healthPath }}"
+          {{- if and .Values.database.enabled .Values.database.healthPath }}
+          check "database" "http://{{ include "foc-service.name" . }}:{{ .Values.port }}{{ .Values.database.healthPath }}"
+          {{- end }}
           {{- range $key, $url := .Values.env }}
           {{- if hasSuffix "_SERVICE_URL" $key }}
           check "{{ $key }}" "{{ trimSuffix "/" (toString $url) }}/health"

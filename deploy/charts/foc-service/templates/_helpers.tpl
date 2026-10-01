@@ -9,6 +9,10 @@
 {{- printf "%s/%s:%s" $registry $name $tag -}}
 {{- end }}
 
+{{- define "foc-service.migrateImage" -}}
+{{- printf "%s%s" (include "foc-service.image" .) .Values.migrate.tagSuffix -}}
+{{- end }}
+
 {{- define "foc-service.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "foc-service.name" . }}
 {{- end }}

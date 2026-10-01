@@ -2,3 +2,7 @@
 image:
   registry: 000000000000.dkr.ecr.ap-southeast-1.localhost:4566 # Floci ECR
   pullPolicy: Always # re-pushing a mutable tag (e.g. :dev) takes effect on restart
+env:
+  # Floci's Postgres proxy uses a self-signed TLS certificate; local traffic
+  # stays inside Docker. The cloud keeps TLS on with the RDS CA bundle (ADR-0010).
+  DB_SSL: "false"
