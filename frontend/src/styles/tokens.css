@@ -1,0 +1,84 @@
+/*
+ * AI Assistance Disclosure
+ * Tool: Claude Code (Claude Opus 5), date: 2026-09-23
+ * Scope: Generated design tokens, updated from the sign-up mockups.
+ * Reviewed by Ngooi Jun Sen.
+ *
+ * UI NFR10.1.2: every colour, size and spacing value in the app comes from here.
+ */
+
+:root {
+  /* Surfaces */
+  --color-bg: #121110;
+  --color-surface: #1c1a19;
+  --color-surface-raised: #242120;
+  --color-field: #171514;
+  --color-border: #322e2b;
+  --color-border-strong: #45403c;
+
+  /* Decorative backdrop behind the auth card on desktop */
+  --auth-backdrop: radial-gradient(
+      120% 90% at 8% 0%,
+      rgba(120, 45, 30, 0.55) 0%,
+      rgba(18, 17, 16, 0) 55%
+    ),
+    radial-gradient(100% 80% at 100% 100%, rgba(90, 33, 22, 0.45) 0%, rgba(18, 17, 16, 0) 60%);
+
+  /* Text */
+  --color-text: #f4efe9;
+  --color-text-muted: #a49a92;
+  --color-text-subtle: #736a64;
+  --color-placeholder: #6b625c;
+
+  /* Accent: primary buttons, links, credit pill */
+  --color-accent: #e8785c;
+  --color-accent-hover: #f08a70;
+  --color-accent-contrast: #1a1110;
+
+  /* Feedback */
+  --color-success: #4cbd6b;
+  --color-success-bg: #14301d;
+  --color-danger: #e0584a;
+  --color-danger-bg: #2e1512;
+  --color-danger-border: #7a3129;
+  --color-warning: #d9a83a;
+  --color-warning-bg: #322713;
+
+  /* Disabled controls */
+  --color-disabled-bg: #2a2725;
+  --color-disabled-text: #7d746e;
+
+  /* Type */
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.25rem;
+  --font-size-xl: 1.75rem;
+  --font-weight-regular: 400;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* Spacing */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+
+  /* Shape */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+
+  /* Layout */
+  --nav-height: 56px;
+  --content-max: 1200px;
+  --auth-card-width: 420px; /* UI FR1.4.1 */
+  --auth-card-width-wide: 520px; /* sign-up card in the desktop mockup */
+  --touch-target: 44px; /* UI NFR2.1.1 */
+  --touch-gap: 8px; /* UI NFR2.1.2 */
+}
