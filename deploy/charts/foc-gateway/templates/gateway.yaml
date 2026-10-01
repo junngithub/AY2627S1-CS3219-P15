@@ -1,0 +1,50 @@
+# How Envoy Gateway runs this env's proxy: a LoadBalancer Service with a fixed
+# name. Locally k3s ServiceLB fulfils it; on EKS the AWS Load Balancer
+# Controller turns it into an NLB.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: foc-gateway
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        name: {{ include "foc-gateway.envoyServiceName" . }}
+        type: LoadBalancer
+---
+# The entry point: one HTTP listener; routes must be in this namespace.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: foc
+spec:
+  gatewayClassName: {{ .Values.gatewayClassName }}
+  infrastructure:
+    parametersRef:
+      group: gateway.envoyproxy.io
+      kind: EnvoyProxy
+      name: foc-gateway
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: {{ .Values.listenerPort }}
+      allowedRoutes:
+        namespaces:
+          from: Same
+---
+# Strip identity headers from every client request before any other
+# processing, so only the auth check can set them (ADR-0007).
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: ClientTrafficPolicy
+metadata:
+  name: foc-strip-identity-headers
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: foc
+  headers:
+    earlyRequestHeaders:
+      remove:
+        {{- toYaml .Values.identityHeaders | nindent 8 }}
