@@ -1,7 +1,10 @@
 # Service-local dev dependencies for credit-service.
-# The app itself runs on the host (`npm run dev`); this brings up only Postgres.
+# Runs Postgres and the app. The app container uses the dev stage of the
+# Dockerfile (tsx watch, live reload through the bind mounts) and applies
+# migrations on start. Don't also run `npm run dev` on the host: both want
+# port 3000. To run only Postgres, use `docker compose up -d postgres`.
 #
-#   docker compose up -d        # start Postgres
+#   docker compose up --build   # Postgres + app (port 3000)
 #   docker compose down         # stop (keep data)
 #   docker compose down -v      # stop and wipe the volume
 #
@@ -26,6 +29,27 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  credit-service:
+    build:
+      context: .
+      target: build # dev tooling (tsx, drizzle-kit); the default image is the slim runtime
+    ports:
+      - "${CREDIT_SERVICE_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgres://${POSTGRES_USER:-credit}:${POSTGRES_PASSWORD:-credit}@postgres:5432/${POSTGRES_DB:-credit_db}
+      # This Postgres has no TLS, and its host is "postgres", not localhost.
+      DB_SSL: "false"
+    volumes:
+      - ./src:/app/src
+      - ./drizzle:/app/drizzle
+      - ./drizzle.config.ts:/app/drizzle.config.ts
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: sh -c "npm run db:migrate && npm run dev"
 
 volumes:
   credit-postgres-data:

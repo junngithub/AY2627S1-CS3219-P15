@@ -31,19 +31,18 @@ credit-service/
 ## Quickstart (local dev)
 
 ```bash
-# 1. Start Postgres (Docker)
-docker compose up -d
-
-# 2. Install deps
-npm install
-
-# 3. (once table migrations exist) apply them
-npm run db:generate   # generate SQL from src/database/schema.ts
-npm run db:migrate    # apply migrations to the DB
-
-# 4. Run the server (watch mode)
-npm run dev
+docker compose up --build   # Postgres + the app (dev stage: live reload, migrations on start) on :3000
 ```
+
+`docker compose up -d postgres` starts only the database, for running the app on the host:
+
+```bash
+npm install
+npm run db:migrate    # apply migrations to the DB
+npm run dev           # watch mode; don't run it while the compose app is up (port 3000)
+```
+
+After changing `src/database/schema.ts`, run `npm run db:generate` to create the migration SQL.
 
 The app defaults to `postgres://credit:credit@localhost:5432/credit_db`, matching
 `docker-compose.yml`. Override with `DATABASE_URL` (a local `.env` in this folder is

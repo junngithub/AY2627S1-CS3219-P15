@@ -1,4 +1,5 @@
 import { defineConfig } from 'drizzle-kit';
+import { sslRequired } from './src/config.js';
 
 // drizzle-kit doesn't auto-load .env — load it so db:* commands see DATABASE_URL.
 try {
@@ -14,7 +15,7 @@ export default defineConfig({
   schema: './src/database/schema.ts',
   out: './drizzle',
   dialect: 'postgresql',
-  dbCredentials: { url: DATABASE_URL },
+  dbCredentials: { url: DATABASE_URL, ssl: sslRequired(DATABASE_URL) },
   casing: 'snake_case',
   strict: true,
   verbose: true,
