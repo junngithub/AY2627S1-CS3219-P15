@@ -311,10 +311,18 @@ export const openApiDocument = {
       post: {
         tags: ["User"],
         summary: "Validate a session for another service",
+        description:
+          "Called by the API gateway for every protected request, with the client's HTTP method and no body, so every method is accepted (POST shown). The gateway reads only the status and the identity headers. Responses are never cached.",
         security: [{ bearerAuth: [] }],
         responses: {
           "200": {
             description: "Session is valid",
+            headers: {
+              "x-user-id": { schema: { type: "string", format: "uuid" } },
+              "x-is-admin": { schema: { type: "string", enum: ["true", "false"] } },
+              "x-permitted-action": { schema: { type: "string", enum: ["true", "false"] } },
+              "Cache-Control": { schema: { type: "string", example: "no-store" } },
+            },
             content: {
               "application/json": { schema: { $ref: "#/components/schemas/AuthorizationResponse" } },
             },
