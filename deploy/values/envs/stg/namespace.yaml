@@ -1,0 +1,11 @@
+# dev and stg share the non-prod nodes; each gets half-ish of them.
+quota:
+  requests.cpu: "2"
+  requests.memory: 5Gi
+  limits.cpu: "4"
+  limits.memory: 10Gi
+  persistentvolumeclaims: "10"
+  pods: "40"
+networkPolicy:
+  # Envoy proxies (charts/foc-gateway) route traffic in and call User's /authorize.
+  allowFromNamespaces: [envoy-gateway-system]
