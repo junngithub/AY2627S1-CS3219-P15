@@ -1,0 +1,23 @@
+# Cluster-wide platform components (Strimzi operator, Envoy Gateway: CRDs,
+# ClusterRoles, GatewayClass).
+# Admin-level: only reviewed changes should land here.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: foc-platform
+  namespace: argocd
+spec:
+  description: FoC platform operators (cluster-scoped resources allowed)
+  sourceRepos:
+    - https://github.com/junngithub/AY2627S1-CS3219-P15.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: strimzi
+    - server: https://kubernetes.default.svc
+      namespace: envoy-gateway-system
+    # Strimzi creates RoleBindings in the namespaces it watches.
+    - server: https://kubernetes.default.svc
+      namespace: "foc*"
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
