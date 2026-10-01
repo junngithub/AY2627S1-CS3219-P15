@@ -1,0 +1,11 @@
+apiVersion: v2
+name: strimzi
+description: >-
+  Wrapper around the official Strimzi operator chart. The dependency is pinned
+  and vendored under charts/ so the operator only changes when this repo does.
+type: application
+version: 0.1.0
+dependencies:
+  - name: strimzi-kafka-operator
+    version: 1.2.0 # Kafka 4.2.x–4.3.x, CRD API kafka.strimzi.io/v1 only
+    repository: oci://quay.io/strimzi-helm
