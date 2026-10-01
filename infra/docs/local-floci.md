@@ -30,27 +30,57 @@ keeps each region separate, just like AWS.
 - AWS CLI v2, kubectl, Helm (`brew install helm`)
 - Terraform via `tfenv` (`brew install tfenv`). `infra/.terraform-version`
   pins the version, and tfenv installs it on first use.
+- Node.js 22 and npm, only to run the frontend dev server.
 
 ## Quick start
+
+All commands run from the repository root.
 
 ```bash
 # 1. Start Floci (compose.yaml mounts the Docker socket so Floci can run k3s + the registry)
 docker compose -f infra/local/compose.yaml up -d
 
-# 2. Local "AWS": IAM user, 7 ECR repos, VPC/subnets, EKS (k3s) cluster, infra/local/kubeconfig
+# 2. Local "AWS": IAM user, ECR repos, VPC/subnets, EKS (k3s) cluster,
+#    Postgres (RDS), and infra/local/kubeconfig
 terraform -chdir=infra/local/aws init && terraform -chdir=infra/local/aws apply
 
-# 3. Push images (see below): user, supplier and credit, plus the connectivity
-#    stub that stands in for the 4 services without code yet. Then deploy everything:
-deploy/local.sh            # databases → Strimzi → Kafka (7 topics, 5 users) → 7 services (migrations first)
-deploy/local.sh check      # connectivity tests: database logins, Kafka logins/ACLs, HTTP to every service, the gateway
-deploy/local.sh gateway    # the API gateway on http://localhost:8080 (port-forward)
+# 3. Build and push images to local ECR (each also pushes <tag>-migrate if
+#    its Dockerfile has a migrate stage)
+deploy/push-local.sh user
+deploy/push-local.sh supplier
+deploy/push-local.sh credit
+deploy/push-local.sh connectivity-stub     # stands in for order, rating, badges, admin
 
-# 4. Use the cluster
+# 4. Deploy everything: databases → Strimzi → Envoy Gateway → Kafka (7 topics,
+#    5 users) → 7 services (each runs its migrations first) → gateway
+deploy/local.sh
+
+# 5. Check connectivity: database logins, Kafka logins/ACLs, HTTP to every
+#    service and its peers, requests through the gateway
+deploy/local.sh check
+
+# 6. Test data (optional, local only):
+#    - suppliers: the seed Job in deploy/README.md ("Seed Supplier's database")
+#    - logins: student@u.nus.edu / admin@u.nus.edu, password Password123
+#      (deploy/README.md, "Local test users", for how to create them)
+
+# 7. Open the API gateway on http://localhost:8080 (keep it running)
+deploy/local.sh gateway
+
+# 8. Frontend through the gateway (another terminal) → http://localhost:5173
+printf 'VITE_AUTH_ENABLED=true\nAPI_GATEWAY_URL=http://localhost:8080\n' > frontend/.env.local
+(cd frontend && npm ci && npm run dev)
+
+# Inspect the cluster
 export KUBECONFIG=$PWD/infra/local/kubeconfig
 deploy/local.sh status
 kubectl -n foc get pods
+kubectl -n foc logs deploy/user          # e.g. the email OTP after a signup
 ```
+
+After restarting Docker or Floci, see
+[After restarting Floci](#after-restarting-floci-or-docker): run
+`terraform -chdir=infra/local/aws apply`, then `deploy/local.sh`.
 
 ### Push an image to local ECR
 
