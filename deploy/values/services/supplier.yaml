@@ -1,0 +1,6 @@
+# supplier-service: settings that are the same in every environment.
+name: supplier
+image:
+  name: foc/supplier-service
+port: 8081 # origin/supplier-service listens on PORT, default 8081
+healthPath: /health

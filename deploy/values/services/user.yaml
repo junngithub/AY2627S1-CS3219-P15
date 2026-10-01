@@ -1,0 +1,8 @@
+# user-service: settings that are the same in every environment.
+name: user
+image:
+  name: foc/user-service
+port: 3000 # placeholder until user-service exists
+healthPath: /health
+kafka:
+  user: user # writes foc.user.status (ADR-0004)

@@ -1,0 +1,10 @@
+# badges-service: settings that are the same in every environment.
+name: badges
+image:
+  name: foc/badges-service
+port: 3000 # placeholder until badges-service exists
+healthPath: /health
+env:
+  # Peers this service calls over HTTP (short names resolve within the env's namespace).
+  USER_SERVICE_URL: http://user:3000 # daily metrics pull
+  ORDER_SERVICE_URL: http://order:8080 # daily metrics pull

@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "foc-service.name" . }}
+  labels:
+    {{- include "foc-service.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      {{- include "foc-service.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "foc-service.labels" . | nindent 8 }}
+      annotations:
+        # Restart pods when the ConfigMap changes.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      # Don't inject legacy <SERVICE>_PORT_* variables for every Service in the
+      # namespace (e.g. KAFKA_KAFKA_BOOTSTRAP_*), which clash with KAFKA_* config.
+      enableServiceLinks: false
+      containers:
+        - name: {{ include "foc-service.name" . }}
+          image: {{ include "foc-service.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.port }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "foc-service.name" . }}
+          env:
+            # Always set, so any service (or the connectivity stub) can rely on them.
+            - name: PORT
+              value: {{ .Values.port | quote }}
+            - name: SERVICE_NAME
+              value: {{ include "foc-service.name" . }}
+          {{- with .Values.kafka.user }}
+            - name: KAFKA_BROKERS
+              value: {{ printf "%s-kafka-bootstrap:9093" $.Values.kafka.clusterName }}
+            - name: KAFKA_SASL_MECHANISM
+              value: SCRAM-SHA-512
+            - name: KAFKA_USERNAME
+              value: {{ . }}
+            - name: KAFKA_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . }} # created by Strimzi for KafkaUser "{{ . }}"
+                  key: password
+            - name: KAFKA_CA_CERT
+              value: /etc/kafka/ca/ca.crt
+          volumeMounts:
+            - name: kafka-ca
+              mountPath: /etc/kafka/ca
+              readOnly: true
+          {{- end }}
+          {{- with .Values.healthPath }}
+          readinessProbe:
+            httpGet:
+              path: {{ . }}
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: {{ . }}
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+      {{- if .Values.kafka.user }}
+      volumes:
+        - name: kafka-ca
+          secret:
+            # Kafka's TLS certificate authority, created by Strimzi.
+            secretName: {{ printf "%s-cluster-ca-cert" .Values.kafka.clusterName }}
+            items:
+              - key: ca.crt
+                path: ca.crt
+      {{- end }}
