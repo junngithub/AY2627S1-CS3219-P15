@@ -11,6 +11,10 @@ RUN npm ci
 COPY tsconfig.json vite.config.ts index.html ./
 COPY public ./public
 COPY src ./src
+# Vite fixes this at build time. Pass --build-arg VITE_AUTH_ENABLED=true once
+# the User Service is running; see src/lib/session.ts.
+ARG VITE_AUTH_ENABLED=false
+ENV VITE_AUTH_ENABLED=$VITE_AUTH_ENABLED
 RUN npm run build
 
 # --- runtime stage -------------------------------------------------------

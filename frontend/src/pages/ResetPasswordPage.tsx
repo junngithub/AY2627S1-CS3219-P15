@@ -14,6 +14,8 @@ import { Alert } from '../components/ui/Alert';
 import { Button } from '../components/ui/Button';
 import { PasswordRules } from '../components/ui/PasswordRules';
 import { TextField } from '../components/ui/TextField';
+import { errorMessage } from '../lib/api';
+import { resetPassword } from '../lib/user';
 import { checkPasswordRules, isValidPassword } from '../lib/validation';
 import styles from './ResetPasswordPage.module.css';
 
@@ -31,6 +33,7 @@ export function ResetPasswordPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [confirmTouched, setConfirmTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
 
   const rules = checkPasswordRules(password);
   const passwordOk = isValidPassword(password);
@@ -39,13 +42,17 @@ export function ResetPasswordPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!canSubmit || submitting) return;
+    if (!canSubmit || submitting || token === null) return;
 
     setSubmitting(true);
+    setFailure(null);
     try {
-      // TODO(user-service): submit the token and new password, then send the
-      // user to login. User F2.3 also unlocks a locked account at this point.
-      navigate('/login');
+      // User F2.3 also unlocks a locked account at this point, on the server.
+      await resetPassword(token, password);
+      navigate('/login', { replace: true });
+    } catch (error) {
+      // An expired or already-used token lands here with the service's reason.
+      setFailure(errorMessage(error, 'Could not reach the server. Try again in a moment.'));
     } finally {
       setSubmitting(false);
     }
@@ -63,6 +70,8 @@ export function ResetPasswordPage() {
           This reset link is missing or invalid. Request a new one from the log-in page.
         </Alert>
       ) : null}
+
+      {failure ? <Alert variant="danger">{failure}</Alert> : null}
 
       <TextField
         label="New password"
@@ -89,7 +98,7 @@ export function ResetPasswordPage() {
 
       {/* UI FR20.2.1: pinned to the bottom of the viewport on mobile. */}
       <div className={styles.actions}>
-        <Button type="submit" fullWidth disabled={!canSubmit} loading={submitting}>
+        <Button type="submit" fullWidth disabled={!canSubmit || token === null} loading={submitting}>
           Save password
         </Button>
       </div>

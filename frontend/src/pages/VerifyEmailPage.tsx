@@ -9,9 +9,12 @@
 
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { Alert } from '../components/ui/Alert';
 import { Button } from '../components/ui/Button';
 import { Icon } from '../components/ui/Icon';
+import { errorMessage } from '../lib/api';
 import { formatCountdown, useCountdown } from '../lib/useCountdown';
+import { resendVerification } from '../lib/user';
 import styles from './VerifyEmailPage.module.css';
 
 /** UI FR2.2.2: the resend button is disabled for 60 seconds after a send. */
@@ -26,9 +29,24 @@ export function VerifyEmailPage() {
   const secondsLeft = useCountdown(cooldownEnd);
   const waiting = secondsLeft > 0;
 
-  function handleResend() {
-    // TODO(user-service): call the resend endpoint (User F1.3.4).
+  const [failure, setFailure] = useState<string | null>(null);
+
+  async function handleResend() {
+    // Without the address there is nothing to resend to; that only happens
+    // when this page is opened directly rather than from sign-up.
+    if (email === null) {
+      setFailure('Sign up again to get a new verification email.');
+      return;
+    }
+    setFailure(null);
+    // Start the cooldown before the call, so a slow response cannot be
+    // double-clicked into two emails (UI FR2.2.2).
     setCooldownEnd(Date.now() + RESEND_COOLDOWN_MS);
+    try {
+      await resendVerification(email);
+    } catch (error) {
+      setFailure(errorMessage(error, 'Could not reach the server. Try again in a moment.'));
+    }
   }
 
   return (
@@ -43,6 +61,8 @@ export function VerifyEmailPage() {
         We sent a link to <strong className={styles.email}>{email ?? 'your NUS email'}</strong>. Open
         it to activate your account &mdash; the link expires in 24 hours.
       </p>
+
+      {failure ? <Alert variant="danger">{failure}</Alert> : null}
 
       <Button variant="secondary" fullWidth onClick={handleResend} disabled={waiting}>
         {waiting ? `Resend email in ${formatCountdown(secondsLeft)}` : 'Resend email'}

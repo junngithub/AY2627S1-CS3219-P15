@@ -18,6 +18,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert } from '../components/ui/Alert';
 import { Button } from '../components/ui/Button';
 import { ConfirmDialog } from '../components/ui/Dialog';
+import { errorMessage } from '../lib/api';
 import { formatHours, fetchSuppliersForAdmin, setSupplierStatus, type Supplier } from '../lib/suppliers';
 import styles from './AdminSuppliersPage.module.css';
 
@@ -45,9 +46,9 @@ export function AdminSuppliersPage() {
     try {
       const result = await fetchSuppliersForAdmin(filter === 'all' ? undefined : filter);
       setRows(result);
-    } catch {
+    } catch (error) {
       setRows([]);
-      setError('Could not reach the Supplier Service. Start it and reload.');
+      setError(errorMessage(error, 'Could not reach the Supplier Service. Start it and reload.'));
     }
   }, [filter]);
 
@@ -67,8 +68,12 @@ export function AdminSuppliersPage() {
       // service actually stored.
       await load();
       setPendingDecision(null);
-    } catch {
-      setError(`Could not set ${supplier.name} to ${status}.`);
+    } catch (error) {
+      // A denied request (Supplier F1.3.1 is admin only) says so, rather than
+      // reading as an outage.
+      setError(
+        errorMessage(error, `Could not reach the Supplier Service, so ${supplier.name} is unchanged.`),
+      );
     } finally {
       setWorking(null);
     }

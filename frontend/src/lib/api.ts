@@ -14,6 +14,9 @@ import { clearToken, getToken } from './session';
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
+/** Fired on any 401, so the session can end without every page checking. */
+export const UNAUTHORIZED_EVENT = 'foc:unauthorized';
+
 /** The contract fixes the error body as { error, code }. */
 export class ApiError extends Error {
   readonly status: number;
@@ -79,9 +82,11 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   }
 
   if (response.status === 401) {
-    // The token is gone or expired. Drop it so the next render sends the user
-    // back to login rather than retrying with something already rejected.
+    // The token is gone or expired. Drop it, and tell AuthProvider so the
+    // route guard sends the user back to login rather than retrying with
+    // something already rejected.
     clearToken();
+    window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
   }
 
   if (response.status === 204) {
@@ -108,6 +113,23 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   }
 
   return payload as T;
+}
+
+/**
+ * What to tell the user when a call fails. A denied request is named as such
+ * rather than reported as an outage, so a user without the right role sees
+ * why (D2 Part 2 point 2: "respond to denied requests").
+ *
+ * 404 is not translated: Admin F2.2.1 answers non-admins with 404 on purpose,
+ * so the caller decides what a 404 means on its own page.
+ */
+export function errorMessage(error: unknown, unreachable: string): string {
+  if (error instanceof ApiError) {
+    if (error.status === 401) return 'Your session has ended. Log in again.';
+    if (error.status === 403) return 'You do not have permission to do that.';
+    return error.message;
+  }
+  return unreachable;
 }
 
 export const api = {

@@ -45,4 +45,6 @@ The importers, as of 28 September 2026:
 - `src/components/layout/AppShell.tsx` — balance and reserved
 - `src/auth/AuthProvider.tsx` — the demo user, used while `AUTH_ENABLED` is
   false in `src/lib/session.ts`
+- `src/lib/adminUsers.ts` — the user management rows, used only while
+  `AUTH_ENABLED` is false
 

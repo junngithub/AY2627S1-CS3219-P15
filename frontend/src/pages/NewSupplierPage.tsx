@@ -20,7 +20,7 @@ import { Chip } from '../components/ui/Chip';
 import { Field } from '../components/ui/Field';
 import { TextField } from '../components/ui/TextField';
 import { TextAreaField } from '../components/ui/Inputs';
-import { ApiError } from '../lib/api';
+import { errorMessage } from '../lib/api';
 import { createSupplier, fetchSuppliers } from '../lib/suppliers';
 import styles from './NewSupplierPage.module.css';
 
@@ -142,9 +142,7 @@ export function NewSupplierPage() {
       // Supplier NFR2.1.1 rejects an invalid submission with a specific error,
       // so show that rather than swallowing it.
       setFailure(
-        error instanceof ApiError
-          ? error.message
-          : 'Could not reach the Supplier Service. Check that it is running and try again.',
+        errorMessage(error, 'Could not reach the Supplier Service. Check that it is running and try again.'),
       );
     } finally {
       setSubmitting(false);

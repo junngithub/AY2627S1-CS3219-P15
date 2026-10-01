@@ -7,11 +7,15 @@
  */
 
 /**
- * Turned off until the User Service exists. While false the app treats every
- * visitor as signed in, so the five auth pages and the signed-in shell stay
- * walkable for a demo. Flip it to true the day login returns a real token.
+ * Off until the User Service exists. While off the app treats every visitor
+ * as the demo user in src/samples/account.ts, and every User and Admin call
+ * is stubbed, so the auth pages and the signed-in shell stay walkable.
+ *
+ * Turn it on with VITE_AUTH_ENABLED=true (in frontend/.env.local, or on the
+ * command line) the day login returns a real token. Supplier calls are real
+ * either way.
  */
-export const AUTH_ENABLED = false;
+export const AUTH_ENABLED = import.meta.env.VITE_AUTH_ENABLED === 'true';
 
 /**
  * WHERE THE TOKEN LIVES - the decision to make before the codebase grows.

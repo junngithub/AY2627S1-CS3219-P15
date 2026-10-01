@@ -7,7 +7,7 @@
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { api } from '../lib/api';
+import { api, UNAUTHORIZED_EVENT } from '../lib/api';
 import { AUTH_ENABLED, clearToken, setToken } from '../lib/session';
 import { DEMO_USER } from '../samples/account';
 
@@ -59,6 +59,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Any 401 from any service ends the session, so RequireAuth sends the user
+  // to login instead of leaving them on a page whose calls all fail.
+  useEffect(() => {
+    if (!AUTH_ENABLED) return undefined;
+    function onUnauthorized() {
+      setUser(null);
+      setStatus('anonymous');
+    }
+    window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+  }, []);
 
   const signIn = useCallback(
     async (email: string, password: string) => {

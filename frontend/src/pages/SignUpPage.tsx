@@ -10,9 +10,12 @@
 
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Alert } from '../components/ui/Alert';
 import { Button } from '../components/ui/Button';
 import { PasswordRules } from '../components/ui/PasswordRules';
 import { TextField } from '../components/ui/TextField';
+import { errorMessage } from '../lib/api';
+import { signUp } from '../lib/user';
 import {
   checkPasswordRules,
   isNusEmail,
@@ -31,6 +34,7 @@ export function SignUpPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
 
   // A field only shows feedback once the user has typed in it, so the form
   // does not open covered in red.
@@ -53,10 +57,16 @@ export function SignUpPage() {
     if (!formValid || submitting) return;
 
     setSubmitting(true);
+    setFailure(null);
     try {
-      // TODO(user-service): POST the registration once the endpoint exists.
-      // On success the user lands on the verification-pending page (UI FR2).
-      navigate('/verify-email', { state: { email } });
+      // The name is not sent: the contract's signup body has no field for it.
+      await signUp({ email: email.trim(), password, telegramHandle: telegram });
+      // UI FR2: on success the user lands on the verification-pending page.
+      navigate('/verify-email', { state: { email: email.trim() } });
+    } catch (error) {
+      // User F1.1/F1.2 validate again on the server; show its reason, such as
+      // an address already registered, rather than a generic failure.
+      setFailure(errorMessage(error, 'Could not reach the server. Try again in a moment.'));
     } finally {
       setSubmitting(false);
     }
@@ -70,6 +80,8 @@ export function SignUpPage() {
           NUS email required &mdash; we verify before you can post errands.
         </p>
       </header>
+
+      {failure ? <Alert variant="danger">{failure}</Alert> : null}
 
       <TextField
         label="Name"

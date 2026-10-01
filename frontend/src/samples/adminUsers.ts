@@ -12,12 +12,14 @@
 import type { AdminUser } from '../lib/adminUsers';
 
 export const SAMPLE_ADMIN_USERS: AdminUser[] = [
+  // The demo user from samples/account.ts, so their own row shows the "You"
+  // tag and no Suspend button.
   {
-    userId: 'usr-1',
+    userId: 'demo-user',
     name: 'Priya Nair',
     email: 'e1234567@u.nus.edu',
     status: 'Verified',
-    isAdmin: false,
+    isAdmin: true,
     credits: 20,
   },
   {

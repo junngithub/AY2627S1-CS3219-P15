@@ -34,20 +34,36 @@ variables cannot be used inside media queries, so `767px` is written literally.
 
 ## Routes
 
-- Signed out: `/login`, `/signup`, `/verify-email`, `/forgot-password`, `/reset-password`
+- Signed out: `/login`, `/signup`, `/verify-email`, `/verify-email/confirm?token=`
+  (where the verification email should link), `/forgot-password`,
+  `/reset-password?token=`
 - Signed in: `/browse`, `/my-requests`, `/my-deliveries`, `/requests/new`,
   `/orders/:orderId`, `/suppliers`, `/suppliers/new`, `/profile`, `/account-status`
 - Admin: `/admin`, `/admin/suppliers`, `/admin/users`, `/admin/escalations`, `/admin/ratings`
 
+## Sign-in and demo mode
+
+Sign-in is off by default, because the User Service does not exist yet. While
+it is off, every visitor is the demo user in `src/samples/account.ts` (an
+admin), and every User and Admin Service call is stubbed. Supplier calls are
+always real.
+
+To use the real services, create `frontend/.env.local`:
+
+```
+VITE_AUTH_ENABLED=true
+# Placeholders until the team agrees ports; see vite.config.ts.
+USER_SERVICE_URL=http://localhost:8082
+ADMIN_SERVICE_URL=http://localhost:8083
+```
+
+For the Docker image, pass `--build-arg VITE_AUTH_ENABLED=true`.
+
 ## Not wired yet
 
-- No API calls. Backend ports, base paths and whether requests go through a
-  gateway are still to be agreed; `vite.config.ts` and `nginx.conf` have
-  marked spots for the proxy.
-- No auth. Signed-in routes are reachable without logging in until User Service
-  defines its token flow.
-- The nav credit balance shows a placeholder: Credit Service has no read-balance
-  requirement in the backlog.
+- The nav credit balance shows a placeholder, though
+  `GET /api/v1/credit/me/balance` now exists.
+- Order pages run on sample data; see `src/samples/README.md`.
 
 ## AI assistance
 

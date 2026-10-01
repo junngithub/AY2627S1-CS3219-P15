@@ -24,6 +24,7 @@ import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { LoginPage } from './pages/LoginPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { SignUpPage } from './pages/SignUpPage';
+import { VerifyEmailLinkPage } from './pages/VerifyEmailLinkPage';
 import { VerifyEmailPage } from './pages/VerifyEmailPage';
 
 export function App() {
@@ -47,6 +48,9 @@ export function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
+        {/* TODO(user-service): the path the verification email links to,
+            with ?token=. Whoever writes the email template must use it. */}
+        <Route path="/verify-email/confirm" element={<VerifyEmailLinkPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
       </Route>

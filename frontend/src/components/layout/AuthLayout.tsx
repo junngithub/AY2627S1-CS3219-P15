@@ -15,7 +15,7 @@ const WIDE_ROUTES = ['/signup'];
  * Routes that drop the wordmark on mobile. The verification mockup starts
  * straight at the icon, while sign-up shows "FoC" above the heading.
  */
-const NO_MOBILE_BRAND_ROUTES = ['/verify-email'];
+const NO_MOBILE_BRAND_ROUTES = ['/verify-email', '/verify-email/confirm'];
 
 /** UI FR1.4, FR2.3, FR3.3, FR4.3: centered card on desktop, full width on mobile. */
 export function AuthLayout() {
