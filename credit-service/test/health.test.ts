@@ -18,7 +18,7 @@ describe('health', () => {
   it('GET /health returns ok', async () => {
     const res = await app.inject({ method: 'GET', url: '/health' });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ status: 'ok' });
+    expect(res.json()).toEqual({ service: 'credit-service', status: 'ok' });
   });
 
   it('GET /health/db reports the database is reachable', async () => {
