@@ -55,11 +55,19 @@ require_cluster() {
 # Remove dead nodes and reset volumes pinned to nodes that no longer exist.
 # Locally this only loses Kafka's messages; topics and users are recreated.
 heal_after_floci_restart() {
-  local node pv ns claim pinned pod
-  for node in $(kubectl get nodes --no-headers | awk '$2 ~ /NotReady/ {print $1}'); do
-    log "Removing dead node $node (k3s container was recreated)"
-    kubectl delete node "$node" --ignore-not-found
+  local node pv ns claim pinned pod stale
+  # Floci runs one k3s node, so every node but the newest is from an earlier
+  # k3s container. Don't wait for NotReady: that takes ~40s after a restart,
+  # and pods (CoreDNS too) stay stuck on the dead node until it's deleted.
+  stale=$(kubectl get nodes --sort-by=.metadata.creationTimestamp -o name | sed '$d')
+  for node in $stale; do
+    log "Removing dead ${node} (k3s container was recreated)"
+    kubectl delete "$node" --ignore-not-found
   done
+  if [[ -n "$stale" ]]; then
+    log "Waiting for cluster DNS on the new node"
+    kubectl -n kube-system rollout status deploy/coredns --timeout=3m
+  fi
   local nodes
   nodes=" $(kubectl get nodes -o jsonpath='{.items[*].metadata.name}') "
   kubectl get pv -o jsonpath='{range .items[*]}{.metadata.name} {.spec.claimRef.namespace} {.spec.claimRef.name} {.spec.nodeAffinity.required.nodeSelectorTerms[0].matchExpressions[0].values[0]}{"\n"}{end}' |
@@ -74,6 +82,9 @@ heal_after_floci_restart() {
           kubectl -n "$ns" delete pod "$pod" --force --grace-period=0 >/dev/null 2>&1 || true
         done
         kubectl -n "$ns" delete pvc "$claim" --ignore-not-found --wait=false >/dev/null
+        # Wait until it's gone: a pod recreated meanwhile would bind to the
+        # dying claim, look ready, then be replaced minutes later.
+        kubectl -n "$ns" wait --for=delete "pvc/$claim" --timeout=3m >/dev/null 2>&1 || true
       fi
       # The stale volume's cleanup hook can never run on a node that's gone.
       log "Removing stale volume $pv (pinned to missing node $pinned)"
@@ -111,6 +122,9 @@ up() {
   kubectl -n "$NS" wait kafka/kafka --for=condition=Ready --timeout=10m
   # Kafka's status can lag behind a broker that's being recreated; wait for the pods too.
   kubectl -n "$NS" wait pod -l strimzi.io/cluster=kafka,strimzi.io/kind=Kafka --for=condition=Ready --timeout=10m
+  # The topic and user operators crash-loop while the broker is down, and
+  # recreate topics and logins once they're back up.
+  kubectl -n "$NS" rollout status deploy/kafka-entity-operator --timeout=10m
   kubectl -n "$NS" wait kafkatopic --all --for=condition=Ready --timeout=5m
   kubectl -n "$NS" wait kafkauser --all --for=condition=Ready --timeout=5m
 
