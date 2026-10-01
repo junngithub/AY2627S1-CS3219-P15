@@ -31,7 +31,7 @@ resource "local_sensitive_file" "kubeconfig" {
       name = aws_iam_user.admin.name
       user = {
         exec = {
-          apiVersion      = "client.authentication.k8s.io/v1beta1"
+          apiVersion = "client.authentication.k8s.io/v1beta1"
           # Wraps `aws eks get-token` with a 45 s client-side expiry, because
           # Floci rejects tokens older than 60 s (real EKS allows ~15 min).
           command         = abspath("${path.module}/../eks-token.sh")

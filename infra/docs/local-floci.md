@@ -17,6 +17,7 @@ and is a drop-in replacement for LocalStack.
 | **ECR** | a real `registry:2`, at `000000000000.dkr.ecr.ap-southeast-1.localhost:4566/<repo>` | `docker push` / `pull` with the same flow as CI |
 | **IAM / STS** | in-process | roles referenced by EKS; the IAM user whose key logs kubectl in |
 | **S3** | in-process | optional: Terraform state for `infra/local` |
+| **RDS** | a real `postgres:16` container behind a proxy on ports 7001–7099 | one instance, a database and login per service ([ADR-0010](adr/0010-postgres-per-service-database.md)) |
 | **MSK** | Redpanda | **not used.** We run Strimzi so local matches the cloud. |
 
 Defaults: account `000000000000`, credentials `test` / `test`. We use region
@@ -106,7 +107,7 @@ deploy/local.sh                                                      # redeploy 
 | Path | Terraform state | Creates |
 |---|---|---|
 | `compose.yaml` | n/a | Floci |
-| `aws/` | `aws/terraform.tfstate` | IAM user `foc-local-admin` + key, ECR `foc/<service>` ×7 (MUTABLE), VPC + 2 subnets, IAM role, EKS cluster `foc-local`, `../kubeconfig` (0600, git-ignored) |
+| `aws/` | `aws/terraform.tfstate` | IAM user `foc-local-admin` + key, ECR `foc/<service>` ×7 (MUTABLE), VPC + 2 subnets, IAM role, EKS cluster `foc-local`, `../kubeconfig` (0600, git-ignored), RDS Postgres `foc-local` + generated passwords (admin and one per service in `var.databases`) |
 
 Everything inside the cluster comes from `deploy/local.sh`, not Terraform
 (see [`deploy/README.md`](../../deploy/README.md)).
@@ -117,6 +118,10 @@ Everything inside the cluster comes from `deploy/local.sh`, not Terraform
   `modules/eks` (node group, node role with ECR read-only).
 - The cloud envs add a second Terraform layer (`bootstrap/`) that installs
   Argo CD via `modules/argocd`. Local has none.
+- RDS (`aws/rds.tf`) has a Terraform-generated admin password and no subnet
+  or security group; the cloud lets RDS manage the admin password in Secrets
+  Manager and keeps the instance in private subnets. Pods reach Floci's RDS
+  by the IP Terraform outputs (Docker names don't resolve in pods).
 - ECR repositories are declared directly in `aws/ecr.tf` (mutable tags,
   force-delete). The cloud registry in `global/ecr` gets its own `ecr.tf` with
   immutable tags, scanning and a lifecycle policy.
