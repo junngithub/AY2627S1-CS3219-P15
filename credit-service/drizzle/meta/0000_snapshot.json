@@ -1,0 +1,220 @@
+{
+  "id": "3f87a7fa-3979-4787-9e83-a57bf07c3023",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.credit_log": {
+      "name": "credit_log",
+      "schema": "",
+      "columns": {
+        "log_id": {
+          "name": "log_id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "operation_type": {
+          "name": "operation_type",
+          "type": "credit_operation",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount": {
+          "name": "amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actor_id": {
+          "name": "actor_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "order_id": {
+          "name": "order_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "balance_after": {
+          "name": "balance_after",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "credit_log_actor_id_credit_user_user_id_fk": {
+          "name": "credit_log_actor_id_credit_user_user_id_fk",
+          "tableFrom": "credit_log",
+          "tableTo": "credit_user",
+          "columnsFrom": [
+            "actor_id"
+          ],
+          "columnsTo": [
+            "user_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "credit_log_amount_positive": {
+          "name": "credit_log_amount_positive",
+          "value": "\"credit_log\".\"amount\" > 0"
+        },
+        "credit_log_balance_nonneg": {
+          "name": "credit_log_balance_nonneg",
+          "value": "\"credit_log\".\"balance_after\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.credit_order": {
+      "name": "credit_order",
+      "schema": "",
+      "columns": {
+        "order_id": {
+          "name": "order_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "requester_id": {
+          "name": "requester_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reserved_credits": {
+          "name": "reserved_credits",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "credit_order_requester_id_credit_user_user_id_fk": {
+          "name": "credit_order_requester_id_credit_user_user_id_fk",
+          "tableFrom": "credit_order",
+          "tableTo": "credit_user",
+          "columnsFrom": [
+            "requester_id"
+          ],
+          "columnsTo": [
+            "user_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "credit_order_reserved_positive": {
+          "name": "credit_order_reserved_positive",
+          "value": "\"credit_order\".\"reserved_credits\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.credit_user": {
+      "name": "credit_user",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "balance": {
+          "name": "balance",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 20
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "credit_user_balance_nonneg": {
+          "name": "credit_user_balance_nonneg",
+          "value": "\"credit_user\".\"balance\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.credit_operation": {
+      "name": "credit_operation",
+      "schema": "public",
+      "values": [
+        "ONBOARDING",
+        "RESERVATION",
+        "CANCELLATION",
+        "EXPIRY",
+        "COMPLETION",
+        "RETURN"
+      ]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

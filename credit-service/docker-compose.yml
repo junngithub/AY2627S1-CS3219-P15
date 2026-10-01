@@ -1,0 +1,31 @@
+# Service-local dev dependencies for credit-service.
+# The app itself runs on the host (`npm run dev`); this brings up only Postgres.
+#
+#   docker compose up -d        # start Postgres
+#   docker compose down         # stop (keep data)
+#   docker compose down -v      # stop and wipe the volume
+#
+# Defaults below match the service's dev DATABASE_URL; override via a .env file
+# in this folder or shell env if needed.
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: credit-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-credit}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-credit}
+      POSTGRES_DB: ${POSTGRES_DB:-credit_db}
+    ports:
+      - "${CREDIT_DB_PORT:-5432}:5432"
+    volumes:
+      - credit-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-credit} -d ${POSTGRES_DB:-credit_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  credit-postgres-data:
