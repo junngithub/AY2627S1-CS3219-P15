@@ -216,7 +216,7 @@ gateway() {
   cat <<EOF
   curl localhost:$GATEWAY_PORT/api/v1/supplier                                   # public
   curl localhost:$GATEWAY_PORT/api/v1/orders                                     # 401
-  curl -H 'Authorization: Bearer stub:alice@u.nus.edu' localhost:$GATEWAY_PORT/api/v1/orders
+  curl localhost:$GATEWAY_PORT/api/v1/user/me -H 'Authorization: Bearer <token from POST /api/v1/user/login>'
 EOF
   kubectl -n "$GATEWAY_NS" port-forward "svc/envoy-$NS" "$GATEWAY_PORT:80"
 }
