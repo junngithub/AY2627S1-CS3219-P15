@@ -1,0 +1,6 @@
+apiVersion: v2
+name: foc-database
+description: One FoC environment's Postgres databases on a shared instance (RDS, or Floci locally); one database and login per service.
+type: application
+version: 0.1.0
+appVersion: "16"

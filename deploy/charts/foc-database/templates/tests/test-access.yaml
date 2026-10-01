@@ -1,0 +1,67 @@
+# `helm test <release>`: each service's login can use its own database and is
+# refused by every other service's database. Argo CD ignores Helm test hooks.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: foc-database-test-access
+  labels:
+    app.kubernetes.io/part-of: foc
+    foc.io/test: database
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  restartPolicy: Never
+  {{- include "foc-database.podSecurity" . | nindent 2 }}
+  containers:
+    - name: psql
+      image: {{ .Values.image }}
+      env:
+        - name: PGSSLMODE
+          value: {{ .Values.sslMode | quote }}
+        - name: PGCONNECT_TIMEOUT
+          value: "5"
+        {{- range $service, $_ := .Values.services }}
+        - name: URL_{{ $service | upper }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ $service }}-db
+              key: DATABASE_URL
+        {{- end }}
+      command: ["sh", "-c"]
+      args:
+        - |
+          PASSED=0 FAILED=0
+          pass() { echo "PASS $1"; PASSED=$((PASSED + 1)); }
+          fail() { echo "FAIL $1"; FAILED=$((FAILED + 1)); }
+          sleep 3 # new pods are briefly blocked by the network policy
+          {{- range $service, $_ := .Values.services }}
+          {{- $own := include "foc-database.dbName" (dict "env" $.Values.env "service" $service) }}
+          if out=$(psql "$URL_{{ $service | upper }}" -XAtq -v ON_ERROR_STOP=1 \
+              -c "CREATE TEMP TABLE t (v int)" -c "INSERT INTO t VALUES (1)" -c "SELECT current_user || '@' || current_database() FROM t" 2>&1); then
+            pass "{{ $service }} uses its own database ($out)"
+          else
+            fail "{{ $service }} own database: $out"
+          fi
+          {{- range $other, $_ := $.Values.services }}
+          {{- if ne $other $service }}
+          {{- $theirs := include "foc-database.dbName" (dict "env" $.Values.env "service" $other) }}
+          url="${URL_{{ $service | upper }}%/*}/{{ $theirs }}"
+          if out=$(psql "$url" -XAtq -c "SELECT 1" 2>&1); then
+            fail "{{ $service }} could connect to {{ $theirs }}"
+          else
+            case "$out" in
+              *"permission denied"*) pass "{{ $service }} refused by {{ $theirs }}" ;;
+              *) fail "{{ $service }} → {{ $theirs }}: unexpected error: $out" ;;
+            esac
+          fi
+          {{- end }}
+          {{- end }}
+          {{- end }}
+          echo "== $PASSED passed, $FAILED failed"
+          [ "$FAILED" -eq 0 ]
+      resources:
+        requests: { cpu: 10m, memory: 32Mi }
+        limits: { cpu: 200m, memory: 64Mi }
+      securityContext:
+        allowPrivilegeEscalation: false
