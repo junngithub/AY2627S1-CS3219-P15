@@ -67,6 +67,14 @@ log "Pushing to local ECR"
 aws ecr get-login-password | docker login --username AWS --password-stdin "$REGISTRY" >/dev/null
 docker push "$ref" | tail -1
 
+# Services with a `migrate` Dockerfile stage also get a "<tag>-migrate" image,
+# which the pre-deploy migration Job runs (ADR-0011).
+if grep -qiE '^FROM .* AS migrate$' "$context/Dockerfile"; then
+  log "Building and pushing $ref-migrate"
+  docker build --target migrate -t "$ref-migrate" "$context"
+  docker push "$ref-migrate" | tail -1
+fi
+
 if [[ "${local_override:-}" == foc/connectivity-stub ]]; then
   log "Note: locally, $svc still runs the connectivity stub"
   echo "To run this image instead, edit deploy/values/envs/local/services/$svc.yaml:"
