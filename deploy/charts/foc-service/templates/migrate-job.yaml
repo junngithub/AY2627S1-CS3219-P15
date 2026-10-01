@@ -1,0 +1,55 @@
+{{- if .Values.migrate.enabled }}
+{{- if not .Values.database.enabled }}
+{{- fail "migrate.enabled needs database.enabled" }}
+{{- end }}
+# Runs the service's schema migrations before every install/upgrade (ADR-0011).
+# Helm waits for it; a failure fails the release and the old pods keep running.
+# Argo CD: PreSync. The database and login already exist: charts/foc-database
+# is a separate release that deploys first.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "foc-service.name" . }}-migrate
+  labels:
+    {{- include "foc-service.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: foc
+        foc.io/job: {{ include "foc-service.name" . }}-migrate
+    spec:
+      restartPolicy: Never
+      enableServiceLinks: false
+      containers:
+        - name: migrate
+          image: {{ include "foc-service.migrateImage" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.migrate.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            # Inline, not envFrom: a hook runs before the release's ConfigMap
+            # exists on the first install.
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | toString | quote }}
+            {{- end }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "foc-service.name" . }}-db # created by charts/foc-database
+                  key: DATABASE_URL
+          resources:
+            {{- toYaml .Values.migrate.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+{{- end }}
