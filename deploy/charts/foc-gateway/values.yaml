@@ -10,7 +10,7 @@ listenerPort: 80
 
 # Headers that carry identity from the gateway to services. Removed from every
 # client request before anything else, then set only by the auth check.
-identityHeaders: [x-user-id, x-is-admin]
+identityHeaders: [x-user-id, x-is-admin, x-permitted-action]
 
 # ADR-0007: every protected request is checked with User's authorize endpoint.
 auth:

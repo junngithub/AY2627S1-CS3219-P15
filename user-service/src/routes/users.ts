@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { NextFunction, Request, Response, Router } from "express";
+import { authorizationResult, identityHeaders } from "../authorization";
 import { config } from "../config";
 import { prisma } from "../db";
 import { DevelopmentEmailSender, EmailSender } from "../email";
@@ -345,19 +346,15 @@ export function createUsersRouter(emailSender: EmailSender = new DevelopmentEmai
     }),
   );
 
-  router.post(
+  // The API gateway checks every protected request here, using the client's
+  // method and no body, so any method is accepted. Identity goes out as
+  // headers for the gateway and as JSON for other callers. Never cached, so a
+  // suspension applies to the next request.
+  router.all(
     "/authorize",
     asyncHandler(async (request, response) => {
-      const user = await authenticatedUser(request);
-      response.json({
-        authenticated: true,
-        userId: user.id,
-        isAdmin: user.role === "ADMIN",
-        permittedAction:
-          user.accessStatus === "ACTIVE" &&
-          user.emailVerifiedAt !== null &&
-          user.telegramVerifiedAt !== null,
-      });
+      const result = authorizationResult(await authenticatedUser(request));
+      response.set(identityHeaders(result)).set("Cache-Control", "no-store").json(result);
     }),
   );
 

@@ -129,6 +129,14 @@ Authorization: Bearer <token>
 
 Successful response:
 
+```http
+HTTP/1.1 200 OK
+x-user-id: uuid
+x-is-admin: false
+x-permitted-action: false
+Cache-Control: no-store
+```
+
 ```json
 {
   "authenticated": true,
@@ -139,6 +147,12 @@ Successful response:
 ```
 
 `permittedAction` becomes true when the account is active and both email and Telegram have been verified.
+
+The API gateway calls this endpoint for every protected request (see `infra/docs/adr/0007-envoy-gateway-extauth.md`), so:
+
+- **Any method is accepted.** The gateway's check uses the client's method (`GET /api/v1/orders` is checked as `GET /authorize`) and sends no body.
+- **Identity is in the headers.** The gateway ignores the JSON body and copies `x-user-id`, `x-is-admin` and `x-permitted-action` onto the request it forwards. The JSON is for other callers.
+- **Nothing is cached**, so a suspension applies to the next request.
 
 ### Profile and status
 

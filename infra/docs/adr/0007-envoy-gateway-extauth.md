@@ -13,9 +13,9 @@ ended March 2026).
 ## Decision
 
 - Use **Envoy Gateway** (Gateway API) behind an NLB. A `SecurityPolicy` with
-  `extAuth` calls User `/api/v1/user/authorize` and forwards `X-User-Id` and
-  `X-Is-Admin` to the backends.
-- The gateway strips any client-supplied `X-User-*` headers.
+  `extAuth` calls User `/api/v1/user/authorize` and forwards the identity headers
+  (below) to the backends.
+- The gateway strips any client-supplied identity headers.
 - Public routes (signup, login, `GET /supplier`) are HTTPRoutes without the
   policy.
 - NetworkPolicy lets services accept external traffic only from the gateway.
@@ -27,6 +27,18 @@ ended March 2026).
 - **Contract change:** `/authorize` must return `200` with identity
   **headers**, or `401`. Results must not be cached for longer than about
   30s, so suspensions take effect within Admin F1.2.1's 60s.
+- **How Envoy calls it** (Envoy docs and source; tested on the local gateway
+  2026-10-01):
+  - the check request uses the **client's method**
+    (`DELETE /api/v1/orders/1` is checked as `DELETE /api/v1/user/authorize`)
+    and has **no body** (`content-length: 0`). There is no setting to fix the
+    method, so `/authorize` must accept every method;
+  - on `2xx`, only the response **headers** are used: those listed in
+    `headersToBackend` are copied onto the forwarded request, and the body is
+    dropped. Any other status (with its body) goes back to the client.
+- **Identity headers:** `x-user-id` (the user's UUID), `x-is-admin` and
+  `x-permitted-action` (`true`/`false`). Services read these to decide what
+  the user may do; they never verify tokens themselves.
 - The Admin "404 instead of 403" rule stays inside the Admin service, which
   reads `X-Is-Admin`.
 
@@ -40,13 +52,13 @@ ended March 2026).
     `LoadBalancer`. Locally k3s ServiceLB fulfils it; on EKS the AWS Load
     Balancer Controller creates the NLB.
   - `Gateway` `foc`: an HTTP listener on 80.
-  - `ClientTrafficPolicy`: `earlyRequestHeaders.remove` strips `x-user-id` and
-    `x-is-admin` from every request before anything else runs.
+  - `ClientTrafficPolicy`: `earlyRequestHeaders.remove` strips the identity
+    headers from every request before anything else runs.
   - `HTTPRoute` `foc-protected`: a path prefix per service. `SecurityPolicy`
     `foc-auth` uses `extAuth` with
     `pathOverride: /api/v1/user/authorize`. (`path` would *append* the
     request path.) It sends only the `authorization` header and forwards
-    `x-user-id` / `x-is-admin` from the auth response. It fails closed.
+    the identity headers from the auth response. It fails closed.
   - `HTTPRoute` `foc-public`: exact paths and methods for signup, login,
     email verification, password reset, and `GET /api/v1/supplier`. Exact
     matches take precedence over the protected prefixes.
@@ -61,5 +73,6 @@ ended March 2026).
   to all 7 services, 401 without or with a bad token, the admin flag,
   identity-header spoofing on protected and public routes, public routes,
   and blocked and unknown paths. All pass locally.
-- **Still owed by the User service:** the contract change above (identity
-  **headers**, `200`/`401`, short or no caching).
+- **User service** (2026-10-01): `/authorize` accepts every method and returns
+  the identity headers plus `Cache-Control: no-store`, keeping the JSON body
+  for other callers (`user-service/src/authorization.ts`).

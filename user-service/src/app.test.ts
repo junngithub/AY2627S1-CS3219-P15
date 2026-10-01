@@ -44,6 +44,13 @@ describe("HTTP foundation", () => {
     assert.ok(document.paths["/api/v1/user/authorize"]);
   });
 
+  it("answers authorize checks for any method, as the API gateway sends them", async () => {
+    for (const method of ["GET", "POST", "PATCH", "DELETE"]) {
+      const response = await fetch(`${baseUrl}/api/v1/user/authorize`, { method });
+      assert.equal(response.status, 401, `${method} /authorize without a token`);
+    }
+  });
+
   it("uses the standard error shape for unknown endpoints", async () => {
     const response = await fetch(`${baseUrl}/missing`);
     assert.equal(response.status, 404);
