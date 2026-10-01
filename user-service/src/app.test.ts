@@ -31,6 +31,19 @@ describe("HTTP foundation", () => {
     assert.deepEqual(await response.json(), { service: "user-service", status: "ok" });
   });
 
+  it("serves the OpenAPI document", async () => {
+    const response = await fetch(`${baseUrl}/api-docs.json`);
+    assert.equal(response.status, 200);
+
+    const document = await response.json() as {
+      openapi: string;
+      paths: Record<string, unknown>;
+    };
+    assert.equal(document.openapi, "3.0.3");
+    assert.ok(document.paths["/api/v1/user/signup"]);
+    assert.ok(document.paths["/api/v1/user/authorize"]);
+  });
+
   it("uses the standard error shape for unknown endpoints", async () => {
     const response = await fetch(`${baseUrl}/missing`);
     assert.equal(response.status, 404);

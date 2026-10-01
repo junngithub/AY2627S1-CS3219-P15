@@ -11,9 +11,26 @@ Owns user registration, verification, authentication, profile status, account li
 - Opaque bearer sessions (only token hashes are stored)
 - Generic login failures and lockout after a configurable number of failed attempts
 - Account status and profile retrieval
+- Interactive Swagger/OpenAPI documentation
 - Docker Compose configuration for the service and its own PostgreSQL database
 
 Telegram verification, password reset, account deletion, friendship management, real email delivery, and Kafka event publishing are later milestones.
+
+## Swagger API documentation
+
+While the User Service is running, open:
+
+```text
+http://localhost:8080/api-docs
+```
+
+The Swagger page lists every currently implemented endpoint and allows requests to be tried from the browser. After logging in, copy the returned token, select **Authorize**, and paste the token to call protected endpoints. Swagger automatically adds the `Bearer` prefix.
+
+The raw OpenAPI 3.0 document is available at:
+
+```text
+http://localhost:8080/api-docs.json
+```
 
 ## API implemented
 
