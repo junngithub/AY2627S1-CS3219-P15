@@ -5,14 +5,16 @@
 #
 #   deploy/local.sh            install / upgrade everything
 #   deploy/local.sh status     show releases, Kafka and pods
-#   deploy/local.sh check      connectivity tests (helm test): Kafka logins and
-#                              ACLs, HTTP to every service by name, and requests
+#   deploy/local.sh check      connectivity tests (helm test): database logins,
+#                              Kafka logins and ACLs, HTTP to every service by
+#                              name (and its database, if any), and requests
 #                              through the gateway (routing, auth, header spoofing)
 #   deploy/local.sh gateway    port-forward the gateway to http://localhost:8080
 #   deploy/local.sh down       uninstall everything and delete the namespaces
 #                              (deletes Kafka data)
 #
-# Needs: helm, kubectl, and the kubeconfig written by infra/local/aws.
+# Needs: helm, kubectl, terraform, and infra/local/aws applied (kubeconfig,
+# Postgres on Floci).
 set -euo pipefail
 
 DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -24,7 +26,8 @@ STRIMZI_NS=strimzi
 GATEWAY_NS=envoy-gateway-system
 VALUES="$DEPLOY_DIR/values"
 CHARTS="$DEPLOY_DIR/charts"
-PLATFORM_RELEASES=(namespace kafka gateway) # releases in $NS that are not services
+PLATFORM_RELEASES=(namespace database kafka gateway) # releases in $NS that are not services
+TF_LOCAL="$DEPLOY_DIR/../infra/local/aws"
 GATEWAY_PORT="${GATEWAY_PORT:-8080}"
 
 log() { printf '\n==> %s\n' "$*"; }
@@ -102,6 +105,21 @@ up() {
     -f "$VALUES/envs/$ENV/namespace.yaml"
   kubectl label namespace "$NS" "foc.io/env=$ENV" --overwrite >/dev/null
 
+  log "Databases on Floci's Postgres: one database, login and <svc>-db Secret per service"
+  # Terraform's JSON output is valid YAML, so it's passed as a values file.
+  # Kept in a private temp file, never on the command line.
+  local dbvalues
+  dbvalues="$(mktemp)"
+  if ! terraform -chdir="$TF_LOCAL" output -json database >"$dbvalues" 2>/dev/null; then
+    rm -f "$dbvalues"
+    echo "No database in infra/local/aws state. Run: terraform -chdir=infra/local/aws apply" >&2
+    exit 1
+  fi
+  helm upgrade --install database "$CHARTS/foc-database" -n "$NS" \
+    -f "$VALUES/envs/$ENV/database.yaml" -f "$dbvalues" --wait --timeout 5m ||
+    { rm -f "$dbvalues"; exit 1; }
+  rm -f "$dbvalues"
+
   log "Strimzi CRDs"
   apply_vendored_crds "$(ls "$CHARTS"/strimzi/charts/strimzi-kafka-operator-*.tgz)"
 
@@ -174,6 +192,8 @@ status() {
 check() {
   require_cluster
   local failed=() release
+  log "Databases: each service's login works on its own database only"
+  helm test database -n "$NS" --logs --timeout 3m || failed+=(database)
   log "Kafka: logins and ACLs for every KafkaUser (takes ~2 min)"
   helm test kafka -n "$NS" --logs --timeout 10m || failed+=(kafka)
   for release in $(helm list -n "$NS" -q); do

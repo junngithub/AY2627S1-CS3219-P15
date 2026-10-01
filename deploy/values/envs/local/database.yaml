@@ -1,0 +1,4 @@
+# Local env's databases on Floci's RDS. host, port, admin login and service
+# passwords come from `terraform output -json database` (infra/local/aws),
+# added by deploy/local.sh.
+env: local
