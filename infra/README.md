@@ -5,9 +5,11 @@ How Friend on Campus is provisioned and deployed across **local**, **dev**,
 
 > **Status:** the local environment works end to end: Floci + `infra/local/aws`
 > + `deploy/local.sh` run Strimzi, Kafka 4.3.1 (7 topics, 5 users with ACLs),
-> credit-service, a connectivity stub for each of the other 6 services, and
-> the API gateway (Envoy Gateway with auth, ADR-0007). `deploy/local.sh check`
-> passes: 23 Kafka ACL checks, 7 HTTP checks, 22 gateway checks. The cloud envs are not built; see [Build order](#build-order).
+> credit-service, a connectivity stub for each of the other 6 services,
+> the API gateway (Envoy Gateway with auth, ADR-0007), and Postgres on Floci's
+> RDS with one database per service (ADR-0010). `deploy/local.sh check`
+> passes: 9 database checks, 23 Kafka ACL checks, 7 HTTP checks (credit also
+> reaches its database), 22 gateway checks. The cloud envs are not built; see [Build order](#build-order).
 
 - New to Terraform / Kubernetes / Strimzi / Argo CD? Read
   [`docs/concepts.md`](docs/concepts.md) first.
@@ -16,7 +18,7 @@ How Friend on Campus is provisioned and deployed across **local**, **dev**,
 - Architecture diagram: [`../docs/architecture/foc-architecture.drawio`](../docs/architecture/foc-architecture.drawio).
 
 **Scope of this phase:** Kafka, service-to-service connectivity, and pulling
-images from ECR. Databases, the API gateway (Envoy), and the AWS-managed
+images from ECR, then the API gateway (ADR-0007) and Postgres (ADR-0010). The AWS-managed
 integrations (S3, SES, Bedrock, EventBridge/SQS) come later.
 
 ---
@@ -62,7 +64,7 @@ infra/                              # Terraform: AWS only
   global/ecr/                       #    shared registry for all cloud envs: ecr.tf
   local/                            # ✅ Floci
     compose.yaml                    #    Floci itself
-    aws/                            #    (own state): ecr.tf · network.tf · eks.tf · kubeconfig.tf
+    aws/                            #    (own state): ecr.tf · network.tf · eks.tf · kubeconfig.tf · rds.tf
   nonprod/{aws,bootstrap}/          #    EKS hosting foc-dev + foc-stg
   prod/{aws,bootstrap}/             #    EKS hosting foc
   docs/

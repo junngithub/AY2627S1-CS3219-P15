@@ -21,6 +21,7 @@ deploy/
     foc-namespace/                 #   ResourceQuota, LimitRange, NetworkPolicy for one env
     strimzi/                       #   wrapper: vendored strimzi-kafka-operator 1.2.0 (charts/*.tgz)
     foc-kafka/                     #   Kafka 4.3.1 + node pool + 7 topics + 5 users with ACLs
+    foc-database/                  #   one env's Postgres databases: setup Job, <svc>-db Secrets (ADR-0010)
     foc-service/                   #   generic chart for any of the 7 services
     envoy-gateway/                 #   wrapper: vendored Envoy Gateway 1.9.2 + GatewayClass (one per cluster)
     foc-gateway/                   #   one env's entry point: Gateway, routes, auth, header stripping
@@ -31,6 +32,7 @@ deploy/
       common.yaml                    #   applied to every service in the env: image registry, pull policy
       namespace.yaml                 #   resource quota for the env
       kafka.yaml                     #   brokers, replication, storage, memory
+      database.yaml                  #   env prefix for database/login names (local adds Terraform's output)
       services/<svc>.yaml            #   only what differs per env: image.tag, replicas
   argocd/                          # LEVEL 2: Argo CD objects (no Helm templating)
     projects/foc-platform.yaml     #   AppProject for Strimzi (may create cluster-wide objects)
@@ -67,7 +69,7 @@ client ─▶ Envoy (envoy-<namespace> Service, type LoadBalancer)
            │  1. strip client-sent x-user-id / x-is-admin
            │  2. public exact path?  → forward to the service, no auth
            │     /api/v1/user/authorize → 404 at the gateway
-           │  3. protected prefix?    → ask user:3000/api/v1/user/authorize
+           │  3. protected prefix?    → ask user:8080/api/v1/user/authorize
            │        401 → back to the client
            │        200 → add x-user-id / x-is-admin from the answer, forward
            ▼
@@ -96,6 +98,7 @@ a namespace:
 |---|---|
 | another service | `http://<name>:<port>`, e.g. `http://credit:3000` |
 | Kafka | `KAFKA_BROKERS=kafka-kafka-bootstrap:9093` (TLS + SCRAM-SHA-512) |
+| its database | `DATABASE_URL` from Secret `<svc>-db`, when `database.enabled: true` (database and login `<env>_<svc>`, ADR-0010) |
 
 ### Peer URLs (env vars)
 
@@ -146,20 +149,23 @@ image registry, name or tag.
 ## Local development
 
 Prerequisites: Floci running and `infra/local/aws` applied
-([`infra/docs/local-floci.md`](../infra/docs/local-floci.md)), plus `helm`
-and `kubectl`.
+([`infra/docs/local-floci.md`](../infra/docs/local-floci.md)), plus `helm`,
+`kubectl` and `terraform` (for the database output).
 
 ```bash
 deploy/local.sh           # install / upgrade everything from your working copy
 deploy/local.sh status    # releases, Kafka objects, pods
-deploy/local.sh check     # helm test: Kafka logins + every ACL, HTTP to every service, requests through the gateway
+deploy/local.sh check     # helm test: database logins, Kafka logins + every ACL, HTTP to every service, requests through the gateway
 deploy/local.sh gateway   # port-forward the gateway to http://localhost:8080 (prints example curls)
 deploy/push-local.sh credit   # rebuild credit-service, push to local ECR, restart deploy/credit
 deploy/local.sh down      # uninstall everything, delete namespaces foc + strimzi (and Kafka data)
 ```
 
 `up` runs in dependency order and waits where it matters:
-1. namespace `foc` (quota, limits, network policy);
+1. namespace `foc` (quota, limits, network policy), then databases: reads
+   `terraform output -json database` from `infra/local/aws`, installs
+   `foc-database` (Secrets `<svc>-db`, then a Job that creates each
+   database and login);
 2. Strimzi CRDs (server-side apply, so upgrades update them too), then the
    operator in `strimzi`;
 3. Kafka, waiting until the cluster, topics and users are Ready (so the user
@@ -182,14 +188,15 @@ The Argo CD files (`argocd/`) are **not** used locally. They first run in dev.
 
 ## Connectivity tests (`helm test`)
 
-Both charts include Helm tests, which `deploy/local.sh check` runs. Argo CD
+The charts include Helm tests, which `deploy/local.sh check` runs. Argo CD
 ignores them.
 
 | Chart | Test pod | Checks |
 |---|---|---|
 | `foc-kafka` | `kafka-test-acls` (Kafka CLI, same image as the brokers) | built from the `users` table: every allowed write and read works (consumer group `<user>-conntest`); per user, one forbidden write and one wrong-prefix group are denied; a wrong password is rejected |
-| `foc-service` | `<svc>-test-http` (curl) | `GET http://<svc>:<port><healthPath>` from another pod, plus `/health` on each `*_SERVICE_URL` in its `env`, retrying for ~20 s |
-| `foc-gateway` | `foc-gateway-test` (curl) | 22 requests through Envoy: every route reaches its service; 401 without or with a bad token; admin flag; spoofed `x-user-id` / `x-is-admin` replaced or stripped; public routes work without a token; `/api/v1/user/authorize` and unknown paths give 404 |
+| `foc-database` | `foc-database-test-access` (psql) | each service's login creates and reads a table in its own database, and is refused (`permission denied`) by every other service's database |
+| `foc-service` | `<svc>-test-http` (curl) | `GET http://<svc>:<port><healthPath>` from another pod, plus `database.healthPath` if set (credit: `/health/db`), plus `/health` on each `*_SERVICE_URL` in its `env`, retrying for ~20 s |
+| `foc-gateway` | `foc-gateway-test` (curl) | 18 requests through Envoy, without logging in: every protected prefix gives 401 without a token, and with a bad token or spoofed `x-user-id` / `x-is-admin`; public routes reach their service without a token; `/api/v1/user/authorize` and unknown paths give 404. It can't check which identity headers reach a backend (real services don't echo them) |
 
 Test pods are kept until the next run, so `kubectl -n foc logs kafka-test-acls`
 still shows the last result.
@@ -207,8 +214,12 @@ still shows the last result.
 - Only `credit` has a real image. Locally the other 6 run
   [`tools/connectivity-stub`](../tools/connectivity-stub/README.md) under their
   own names (overridden in `values/envs/local/services/<svc>.yaml`).
-  Ports for user, rating, badges and admin (3000) are placeholders until
-  those services exist; order assumes Spring Boot's 8080, supplier its branch's 8081.
+  Ports for rating, badges and admin (3000) are placeholders until
+  those services exist; user is 8080 (its `PORT` default); order assumes Spring Boot's 8080, supplier its branch's 8081.
+- Databases in the cloud: `rds.tf`, Secrets Manager + External Secrets
+  (`foc-database` with `createSecrets: false`), the RDS CA bundle in images,
+  and per-service migration Jobs (ADR-0010). Locally, user and supplier get
+  `DATABASE_URL` but still run the stub; no migrations run yet.
 - `dev`, `stg` and `prod` have no `common.yaml` (image registry) until the AWS
   account ID and `global/ecr` exist. Until then no services deploy there.
 - The EKS `gp3` StorageClass for prod Kafka storage, and the API gateway's
