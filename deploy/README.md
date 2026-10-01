@@ -86,8 +86,10 @@ client ─▶ Envoy (envoy-<namespace> Service, type LoadBalancer)
 | `/api/v1/badges` | badges |
 | `/api/v1/admin` | admin |
 
-Locally: `deploy/local.sh gateway`, then
-`curl -H 'Authorization: Bearer stub:alice@u.nus.edu' localhost:8080/api/v1/orders`.
+Locally: `deploy/local.sh gateway`, then `curl localhost:8080/api/v1/supplier`
+(public) or `curl localhost:8080/api/v1/orders` (401). For a token: sign up,
+verify the email with the OTP from `kubectl -n foc logs deploy/user`, and log in
+(`POST /api/v1/user/{signup,verify-email,login}`).
 
 ## How services reach each other and Kafka
 
@@ -186,6 +188,42 @@ helm template credit charts/foc-service \
 
 The Argo CD files (`argocd/`) are **not** used locally. They first run in dev.
 
+### Seed Supplier's database (local)
+
+Supplier's seed (`supplier-service/prisma/seed.ts`, data inline) ships in its
+`migrate` image, which has `ts-node`. Run it once as a Job. It **deletes all
+suppliers and categories first**, so only run it on a local database.
+
+```bash
+export KUBECONFIG=$PWD/infra/local/kubeconfig
+kubectl -n foc delete job supplier-seed --ignore-not-found
+kubectl -n foc apply -f - <<'EOF'
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: supplier-seed
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: seed
+          image: 000000000000.dkr.ecr.ap-southeast-1.localhost:4566/foc/supplier-service:dev-migrate
+          imagePullPolicy: Always
+          command: ["node_modules/.bin/ts-node", "prisma/seed.ts"]
+          env:
+            - name: DATABASE_URL
+              valueFrom: { secretKeyRef: { name: supplier-db, key: DATABASE_URL } }
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: "1", memory: 512Mi }
+EOF
+kubectl -n foc wait --for=condition=complete job/supplier-seed --timeout=5m
+kubectl -n foc logs job/supplier-seed     # "Seeded 21 suppliers with categories."
+```
+
 ## Connectivity tests (`helm test`)
 
 The charts include Helm tests, which `deploy/local.sh check` runs. Argo CD
@@ -211,15 +249,16 @@ still shows the last result.
 
 ## Not yet in place
 
-- Only `credit` has a real image. Locally the other 6 run
-  [`tools/connectivity-stub`](../tools/connectivity-stub/README.md) under their
-  own names (overridden in `values/envs/local/services/<svc>.yaml`).
+- user, supplier and credit have real images. Locally order, rating, badges
+  and admin run [`tools/connectivity-stub`](../tools/connectivity-stub/README.md)
+  under their own names (overridden in `values/envs/local/services/<svc>.yaml`).
   Ports for rating, badges and admin (3000) are placeholders until
   those services exist; user is 8080 (its `PORT` default); order assumes Spring Boot's 8080, supplier its branch's 8081.
 - Databases in the cloud: `rds.tf`, Secrets Manager + External Secrets
   (`foc-database` with `createSecrets: false`), the RDS CA bundle in images,
-  and per-service migration Jobs (ADR-0010). Locally, user and supplier get
-  `DATABASE_URL` but still run the stub; no migrations run yet.
+  and CI building each image's `migrate` stage (ADR-0010, ADR-0011).
+- Kafka clients: no service produces or consumes yet, so e.g. credit has no
+  account for a new user (it expects User's `foc.user.status` events).
 - `dev`, `stg` and `prod` have no `common.yaml` (image registry) until the AWS
   account ID and `global/ecr` exist. Until then no services deploy there.
 - The EKS `gp3` StorageClass for prod Kafka storage, and the API gateway's

@@ -40,10 +40,10 @@ docker compose -f infra/local/compose.yaml up -d
 # 2. Local "AWS": IAM user, 7 ECR repos, VPC/subnets, EKS (k3s) cluster, infra/local/kubeconfig
 terraform -chdir=infra/local/aws init && terraform -chdir=infra/local/aws apply
 
-# 3. Push images (see below): credit-service, plus the connectivity stub that
-#    stands in for the 6 services without code yet. Then deploy everything:
-deploy/local.sh            # Strimzi → Kafka (7 topics, 5 users) → 7 services
-deploy/local.sh check      # connectivity tests: Kafka logins/ACLs, HTTP to every service, the gateway
+# 3. Push images (see below): user, supplier and credit, plus the connectivity
+#    stub that stands in for the 4 services without code yet. Then deploy everything:
+deploy/local.sh            # databases → Strimzi → Kafka (7 topics, 5 users) → 7 services (migrations first)
+deploy/local.sh check      # connectivity tests: database logins, Kafka logins/ACLs, HTTP to every service, the gateway
 deploy/local.sh gateway    # the API gateway on http://localhost:8080 (port-forward)
 
 # 4. Use the cluster

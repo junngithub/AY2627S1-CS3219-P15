@@ -5,11 +5,13 @@ How Friend on Campus is provisioned and deployed across **local**, **dev**,
 
 > **Status:** the local environment works end to end: Floci + `infra/local/aws`
 > + `deploy/local.sh` run Strimzi, Kafka 4.3.1 (7 topics, 5 users with ACLs),
-> credit-service, a connectivity stub for each of the other 6 services,
-> the API gateway (Envoy Gateway with auth, ADR-0007), and Postgres on Floci's
-> RDS with one database per service (ADR-0010). `deploy/local.sh check`
-> passes: 9 database checks, 23 Kafka ACL checks, 7 HTTP checks (credit also
-> reaches its database), 22 gateway checks. The cloud envs are not built; see [Build order](#build-order).
+> the real user, supplier and credit services (each with its own database
+> and migrations, ADR-0010/0011), a connectivity stub for the 4 services
+> without code (order, rating, badges, admin), the API gateway (Envoy Gateway
+> with auth against the real User, ADR-0007), and Postgres on Floci's RDS.
+> `deploy/local.sh check` passes: 9 database checks, 23 Kafka ACL checks,
+> 7 HTTP checks plus every peer URL (credit also reaches its database),
+> 18 gateway checks. The cloud envs are not built; see [Build order](#build-order).
 
 - New to Terraform / Kubernetes / Strimzi / Argo CD? Read
   [`docs/concepts.md`](docs/concepts.md) first.
