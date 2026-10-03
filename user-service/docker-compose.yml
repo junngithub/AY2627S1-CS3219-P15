@@ -16,7 +16,9 @@ services:
       - user-db-data:/var/lib/postgresql/data
 
   user-service:
-    build: .
+    build:
+      context: .
+      target: build  # dev tooling (prisma CLI, ts-node-dev); the default image is the slim runtime
     ports:
       - "8080:8080"
     environment:
