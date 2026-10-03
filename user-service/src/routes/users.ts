@@ -76,12 +76,16 @@ export function createUsersRouter(emailSender: EmailSender = new DevelopmentEmai
       const telegramInput = requiredString(request.body?.telegramHandle);
       const nameInput = requiredString(request.body?.name);
 
-      if (!emailInput || !password || !telegramInput) {
+      if (!nameInput || !emailInput || !password || !telegramInput) {
         throw new AppError(
           400,
           "MISSING_FIELDS",
-          "email, password and telegramHandle are required",
+          "name, email, password and telegramHandle are required",
         );
+      }
+
+      if (nameInput.length < 2) {
+        throw new AppError(400, "INVALID_NAME", "Name must contain at least 2 characters");
       }
 
       const email = normalizeEmail(emailInput);
@@ -128,7 +132,7 @@ export function createUsersRouter(emailSender: EmailSender = new DevelopmentEmai
         const user = await prisma.user.create({
           data: {
             email,
-            name: nameInput ?? email.slice(0, email.lastIndexOf("@")),
+            name: nameInput,
             passwordHash,
             telegramHandle,
             emailOtps: {
@@ -368,6 +372,7 @@ export function createUsersRouter(emailSender: EmailSender = new DevelopmentEmai
         email: user.email,
         telegramHandle: user.telegramHandle,
         status: accountStatus(user),
+        isAdmin: user.role === "ADMIN",
       });
     }),
   );
