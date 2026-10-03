@@ -13,12 +13,12 @@ export function accountStatus(user: StatusUser): "Created" | "Verified" | "Suspe
 
 export function accountNextSteps(user: StatusUser): string[] {
   if (user.accessStatus === "SUSPENDED") {
-    return ["Contact an administrator about the account suspension"];
+    return ["CONTACT_ADMIN"];
   }
 
   const steps: string[] = [];
-  if (!user.emailVerifiedAt) steps.push("Verify your NUS email address");
-  if (!user.telegramVerifiedAt) steps.push("Verify your Telegram handle");
-  if (user.scheduledDeletionAt) steps.push("Log in to cancel pending account deletion");
+  if (!user.emailVerifiedAt) steps.push("VERIFY_EMAIL");
+  if (!user.telegramVerifiedAt) steps.push("VERIFY_TELEGRAM");
+  if (user.scheduledDeletionAt) steps.push("CANCEL_PENDING_DELETION");
   return steps;
 }

@@ -56,14 +56,14 @@ POST /api/v1/user/signup
 Content-Type: application/json
 
 {
-  "email": "student@u.nus.edu",
+  "name": "Joshua Tan",
+  "email": "e1234567@u.nus.edu",
   "password": "SecurePass1",
-  "telegramHandle": "student_handle",
-  "name": "Optional Display Name"
+  "telegramHandle": "joshuatan"
 }
 ```
 
-`name` is temporarily optional until the team confirms where the immutable profile name comes from. If omitted, the portion of the email before `@` is used.
+All four fields are required. The name must contain at least two characters and is stored as the user's immutable display name. Student matriculation email prefixes are not used as names. Both `u.nus.edu` and `nus.edu.sg` email domains are accepted.
 
 ### Verify email OTP
 
@@ -113,8 +113,8 @@ Successful response:
   "expiresAt": "2026-09-30T00:00:00.000Z",
   "user": {
     "id": "uuid",
-    "name": "student",
-    "email": "student@u.nus.edu",
+    "name": "Joshua Tan",
+    "email": "e1234567@u.nus.edu",
     "status": "Created"
   }
 }
@@ -165,6 +165,8 @@ Authorization: Bearer <token>
 GET /api/v1/user/me/status
 Authorization: Bearer <token>
 ```
+
+`/me` returns `{ id, name, email, telegramHandle, status, isAdmin }`. The `id` is the user's UUID. `nextSteps` in signup, email verification, and `/me/status` uses the codes `VERIFY_EMAIL`, `VERIFY_TELEGRAM`, `CONTACT_ADMIN`, and `CANCEL_PENDING_DELETION`.
 
 ## Run without Docker
 
