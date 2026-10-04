@@ -1,0 +1,59 @@
+# Protected routes: every request must pass the auth check (securitypolicy.yaml).
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: foc-protected
+spec:
+  parentRefs:
+    - name: foc
+  rules:
+    {{- range .Values.routes }}
+    - matches:
+        - path: { type: PathPrefix, value: {{ .prefix }} }
+      backendRefs:
+        - name: {{ .service }}
+          port: {{ .port }}
+    {{- end }}
+---
+# Public routes: no auth. Exact matches win over the prefixes above.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: foc-public
+spec:
+  parentRefs:
+    - name: foc
+  rules:
+    {{- range .Values.publicRoutes }}
+    - matches:
+        - path: { type: Exact, value: {{ .path }} }
+          method: {{ .method }}
+      backendRefs:
+        - name: {{ .service }}
+          port: {{ .port }}
+    {{- end }}
+    {{- if .Values.blockedPaths }}
+    # Internal-only endpoints: answered with 404 here, never forwarded.
+    - matches:
+        {{- range .Values.blockedPaths }}
+        - path: { type: Exact, value: {{ . }} }
+        {{- end }}
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.envoyproxy.io
+            kind: HTTPRouteFilter
+            name: foc-not-found
+    {{- end }}
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: HTTPRouteFilter
+metadata:
+  name: foc-not-found
+spec:
+  directResponse:
+    statusCode: 404
+    contentType: application/json
+    body:
+      type: Inline
+      inline: '{"error":"Not found"}'

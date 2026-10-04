@@ -1,7 +1,13 @@
+# Dependencies
+node_modules/
+
 # Build output
 dist/
 build/
 out/
+
+# Test coverage
+coverage/
 
 # Environment / secrets
 .env

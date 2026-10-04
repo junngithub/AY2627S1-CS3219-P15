@@ -1,0 +1,14 @@
+{
+  "name": "connectivity-stub",
+  "version": "0.2.0",
+  "description": "Placeholder HTTP service for FoC platform connectivity tests",
+  "private": true,
+  "type": "module",
+  "main": "server.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server.js"
+  }
+}

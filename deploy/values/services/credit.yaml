@@ -1,0 +1,12 @@
+# credit-service: settings that are the same in every environment.
+name: credit
+image:
+  name: foc/credit-service
+port: 3000 # CREDIT_SERVICE_PORT default in credit-service/src/config.ts
+healthPath: /health
+kafka:
+  user: credit # reads foc.user.status, foc.credit.commands (ADR-0004)
+env:
+  LOG_LEVEL: info
+  # Peers this service calls over HTTP (short names resolve within the env's namespace).
+  USER_SERVICE_URL: http://user:3000 # validate a verified user

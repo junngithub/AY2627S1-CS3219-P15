@@ -1,0 +1,6 @@
+# No rating-service image yet: run the connectivity stub under this name.
+# Delete the two image.name/tag overrides once foc/rating-service exists.
+image:
+  name: foc/connectivity-stub
+  tag: "0.2.0"
+replicas: 1
