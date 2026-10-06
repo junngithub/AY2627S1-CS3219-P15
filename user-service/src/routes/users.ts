@@ -84,8 +84,8 @@ export function createUsersRouter(emailSender: EmailSender = new DevelopmentEmai
         );
       }
 
-      if (nameInput.length < 2) {
-        throw new AppError(400, "INVALID_NAME", "Name must contain at least 2 characters");
+      if (nameInput.length < 2 || nameInput.length > 100) {
+        throw new AppError(400, "INVALID_NAME", "Name must contain between 2 and 100 characters");
       }
 
       const email = normalizeEmail(emailInput);

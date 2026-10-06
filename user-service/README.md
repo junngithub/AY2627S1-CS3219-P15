@@ -63,7 +63,7 @@ Content-Type: application/json
 }
 ```
 
-All four fields are required. The name must contain at least two characters and is stored as the user's immutable display name. Student matriculation email prefixes are not used as names. Both `u.nus.edu` and `nus.edu.sg` email domains are accepted.
+All four fields are required. The name must contain between 2 and 100 characters and is stored as the user's immutable display name. Student matriculation email prefixes are not used as names. Both `u.nus.edu` and `nus.edu.sg` email domains are accepted.
 
 ### Verify email OTP
 

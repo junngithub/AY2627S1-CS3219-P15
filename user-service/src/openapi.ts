@@ -61,6 +61,7 @@ export const openApiDocument = {
           name: {
             type: "string",
             minLength: 2,
+            maxLength: 100,
             description: "The user's immutable display name.",
             example: "Alex Tan",
           },
