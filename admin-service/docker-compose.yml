@@ -1,0 +1,62 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: admin_service
+    ports:
+      - "5434:5432"
+    volumes:
+      - admin_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d admin_service"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    ports:
+      - "9092:9092"
+
+  # Stub for User Service so you can test Admin Service in isolation before
+  # the real User Service is ready / wired in. Swap USER_SERVICE_BASE_URL
+  # back to the real thing once it exists.
+  mock-user-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock-user-service
+    ports:
+      - "8090:8000"  # not 8080 — that's reserved for the real User Service
+
+  admin-service:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql+asyncpg://admin:admin@db:5432/admin_service
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      USER_SERVICE_BASE_URL: http://mock-user-service:8000
+      SERVICE_API_KEY: dev-service-token
+      AI_PROVIDER_API_KEY: dummy-key-for-local-dev
+    ports:
+      - "8084:8084"
+
+volumes:
+  admin_db_data:
