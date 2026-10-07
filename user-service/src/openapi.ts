@@ -41,7 +41,7 @@ export const openApiDocument = {
       },
       NextStep: {
         type: "string",
-        enum: ["VERIFY_EMAIL", "VERIFY_TELEGRAM"],
+        enum: ["VERIFY_EMAIL", "VERIFY_TELEGRAM", "CONTACT_ADMIN", "CANCEL_PENDING_DELETION"],
       },
       StatusResponse: {
         type: "object",
@@ -56,11 +56,13 @@ export const openApiDocument = {
       },
       SignupRequest: {
         type: "object",
-        required: ["email", "password", "telegramHandle"],
+        required: ["name", "email", "password", "telegramHandle"],
         properties: {
           name: {
             type: "string",
-            description: "Optional until the team finalizes how immutable names are collected.",
+            minLength: 2,
+            maxLength: 100,
+            description: "The user's immutable display name.",
             example: "Alex Tan",
           },
           email: { type: "string", format: "email", example: "e1234567@u.nus.edu" },
@@ -126,13 +128,14 @@ export const openApiDocument = {
       },
       Profile: {
         type: "object",
-        required: ["id", "name", "email", "telegramHandle", "status"],
+        required: ["id", "name", "email", "telegramHandle", "status", "isAdmin"],
         properties: {
           id: { type: "string", format: "uuid" },
           name: { type: "string", example: "Alex Tan" },
           email: { type: "string", format: "email", example: "e1234567@u.nus.edu" },
           telegramHandle: { type: "string", example: "alex_tan" },
           status: { $ref: "#/components/schemas/AccountStatus" },
+          isAdmin: { type: "boolean", example: false },
         },
       },
       AuthorizationResponse: {

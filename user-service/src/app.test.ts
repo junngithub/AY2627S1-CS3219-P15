@@ -72,11 +72,71 @@ describe("request validation before database access", () => {
     assert.equal((await response.json() as { code: string }).code, "MISSING_FIELDS");
   });
 
+  it("requires a real name instead of deriving one from the NUS email", async () => {
+    const response = await fetch(`${baseUrl}/api/v1/user/signup`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: "e1234567@u.nus.edu",
+        password: "SecurePass1",
+        telegramHandle: "student_handle",
+      }),
+    });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json() as { code: string }).code, "MISSING_FIELDS");
+  });
+
+  it("rejects names shorter than two characters", async () => {
+    const response = await fetch(`${baseUrl}/api/v1/user/signup`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "A",
+        email: "e1234567@u.nus.edu",
+        password: "SecurePass1",
+        telegramHandle: "student_handle",
+      }),
+    });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json() as { code: string }).code, "INVALID_NAME");
+  });
+
+  it("rejects names longer than 100 characters", async () => {
+    const response = await fetch(`${baseUrl}/api/v1/user/signup`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "A".repeat(101),
+        email: "e1234567@u.nus.edu",
+        password: "SecurePass1",
+        telegramHandle: "student_handle",
+      }),
+    });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json() as { code: string }).code, "INVALID_NAME");
+  });
+
+  it("accepts a 100-character name at the validation boundary", async () => {
+    const response = await fetch(`${baseUrl}/api/v1/user/signup`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "A".repeat(100),
+        email: "student@gmail.com",
+        password: "SecurePass1",
+        telegramHandle: "student_handle",
+      }),
+    });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json() as { code: string }).code, "INVALID_EMAIL_DOMAIN");
+  });
+
   it("rejects non-NUS domains", async () => {
     const response = await fetch(`${baseUrl}/api/v1/user/signup`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        name: "Student User",
         email: "student@gmail.com",
         password: "SecurePass1",
         telegramHandle: "student_handle",
