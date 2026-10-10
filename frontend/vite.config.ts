@@ -13,11 +13,11 @@ const SUPPLIER_SERVICE = 'http://localhost:8081';
 const BADGES_SERVICE = 'http://localhost:4006';
 
 export default defineConfig(({ mode }) => {
-  // TODO(team): no port is agreed for the User or Admin Service yet. These
-  // defaults are placeholders; override them in frontend/.env.local once the
-  // services pick one, and update nginx.conf to match.
+  // TODO(team): no port is agreed for the Admin Service yet. Its default is a
+  // placeholder; override it in frontend/.env.local once the service picks
+  // one, and update nginx.conf to match.
   const env = loadEnv(mode, '.', '');
-  const userService = env.USER_SERVICE_URL || 'http://localhost:8082';
+  const userService = env.USER_SERVICE_URL || 'http://localhost:8080';
   const adminService = env.ADMIN_SERVICE_URL || 'http://localhost:8083';
 
   return {

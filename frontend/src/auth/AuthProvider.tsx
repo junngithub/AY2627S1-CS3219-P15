@@ -11,16 +11,22 @@ import { api, UNAUTHORIZED_EVENT } from '../lib/api';
 import { AUTH_ENABLED, clearToken, setToken } from '../lib/session';
 import { DEMO_USER } from '../samples/account';
 
-/** Shape of User F3 (`GET /api/v1/user/me`), plus the admin flag from F4. */
+/** The signed-in user, as the pages see it. */
 export interface CurrentUser {
   userId: string;
-  /**
-   * UI FR1.1.1 collects a name at sign-up and the contract's /user/me returns
-   * one, but the contract's signup body does not accept it currently.
-   */
   name: string;
   email: string;
   status: 'Created' | 'Verified' | 'Suspended';
+  isAdmin: boolean;
+}
+
+/** User F3: `GET /api/v1/user/me` as the service returns it. */
+interface MeResponse {
+  id: string;
+  name: string;
+  email: string;
+  telegramHandle: string;
+  status: CurrentUser['status'];
   isAdmin: boolean;
 }
 
@@ -43,8 +49,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     if (!AUTH_ENABLED) return;
     try {
-      const me = await api.get<CurrentUser>('/user/me');
-      setUser(me);
+      const me = await api.get<MeResponse>('/user/me');
+      // The service calls it id; every page, and the admin user rows, call it
+      // userId. Without this, "is this row me?" checks never match.
+      setUser({
+        userId: me.id,
+        name: me.name,
+        email: me.email,
+        status: me.status,
+        isAdmin: me.isAdmin,
+      });
       setStatus('authenticated');
     } catch {
       // Any failure here means "not signed in". The reason is deliberately not

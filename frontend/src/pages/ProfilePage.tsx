@@ -2,7 +2,7 @@
  * AI Assistance Disclosure
  * Tool: Claude Code (Claude Opus 5)
  * Scope: Generated the profile page from the mockup.
- * Author review: Ngooi Jun Sen to validate before merge.
+ * Reviewed by Ngooi Jun Sen.
  *
  * Covers UI FR12.1.1 (name, email, credit balance), FR12.1.2 (change
  * password, through PATCH /api/v1/user/me/password), User F5.1 (delete
@@ -10,10 +10,6 @@
  * desktop, account and credits left) and FR12.3.2 (one stacked column on
  * mobile).
  *
- * FR12.2.1 ratings and FR12.2.2 badges are deliberately not built yet: the
- * Rating Service is unwritten, the Badges Service has no metrics to work
- * from, and the two requirements land on 23 October and 6 November. Both are
- * shown as coming soon rather than filled with invented numbers.
  */
 
 import { useState } from 'react';
@@ -195,7 +191,7 @@ export function ProfilePage() {
         title="Delete your account?"
         consequence={
           <>
-            Your account is marked for deletion and removed for good after six months (User F5.1).
+            Your account is marked for deletion and removed for good after six months.
             You are signed out now. If you are the only admin, the service may refuse, since
             nobody would be left to run the platform.
           </>

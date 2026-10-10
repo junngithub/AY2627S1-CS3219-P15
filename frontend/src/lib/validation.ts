@@ -8,13 +8,15 @@
  * everything; this only drives the inline feedback (UI FR1.2, NFR3.1.1).
  */
 
+/** Domains accepted at sign-up (User F1.1.1): students and staff. */
+export const ALLOWED_EMAIL_DOMAINS = ['u.nus.edu', 'nus.edu.sg'];
+
 /**
- * Domains accepted at sign-up (User F1.1.1).
- * OPEN QUESTION: the backlog targets students *and* staff, but the mockup error
- * says "Use your @u.nus.edu address". Staff addresses are @nus.edu.sg. Confirm
- * with the User Service owner and add the domain here if staff are in scope.
+ * User F1: at least 2 characters. The upper bound is ours, proposed on PR #10;
+ * the name is permanent and shown across the app, so it cannot be unbounded.
  */
-export const ALLOWED_EMAIL_DOMAINS = ['u.nus.edu'];
+export const NAME_MIN_LENGTH = 2;
+export const NAME_MAX_LENGTH = 100;
 
 export interface PasswordRule {
   id: 'case' | 'number' | 'length';
@@ -23,7 +25,8 @@ export interface PasswordRule {
 }
 
 export function isValidName(name: string): boolean {
-  return name.trim().length >= 2;
+  const length = name.trim().length;
+  return length >= NAME_MIN_LENGTH && length <= NAME_MAX_LENGTH;
 }
 
 export function isNusEmail(email: string): boolean {

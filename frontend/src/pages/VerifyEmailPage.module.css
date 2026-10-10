@@ -47,6 +47,19 @@
   color: var(--color-text-muted);
 }
 
+/* The code form stretches like the buttons around it; text stays centered. */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: 100%;
+  text-align: left;
+}
+
+.fullWidth {
+  width: 100%;
+}
+
 .separator {
   color: var(--color-text-subtle);
 }

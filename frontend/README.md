@@ -14,8 +14,19 @@ npm run build      # type-check, then production build into dist/
 With Docker, from the repo root:
 
 ```
-docker compose up frontend   # http://localhost:8080
+docker network create foc    # once
+docker compose -f supplier-service/docker-compose.yml up -d --build
+docker compose -f user-service/docker-compose.yml up -d --build
+docker network connect --alias supplier-service foc supplier-service-supplier-service-1
+docker network connect --alias user-service foc user-service-user-service-1
+docker build -t foc-frontend --build-arg VITE_AUTH_ENABLED=true ./frontend
+docker run -d --rm --name foc-frontend -p 3000:80 --network foc foc-frontend   # http://localhost:3000
 ```
+
+Host port 3000, because the User Service publishes 8080. nginx reaches each
+backend by service name on the `foc` network, so the connect step is repeated
+whenever a backend's containers are recreated. In development the verification
+code is printed by `docker logs user-service-user-service-1`.
 
 ## Layout
 
@@ -34,8 +45,8 @@ variables cannot be used inside media queries, so `767px` is written literally.
 
 ## Routes
 
-- Signed out: `/login`, `/signup`, `/verify-email`, `/verify-email/confirm?token=`
-  (where the verification email should link), `/forgot-password`,
+- Signed out: `/login`, `/signup`, `/verify-email` (enter the six-digit code;
+  in development the User Service prints it in its log), `/forgot-password`,
   `/reset-password?token=`
 - Signed in: `/browse`, `/my-requests`, `/my-deliveries`, `/requests/new`,
   `/orders/:orderId`, `/suppliers`, `/suppliers/new`, `/profile`, `/account-status`
@@ -52,8 +63,8 @@ To use the real services, create `frontend/.env.local`:
 
 ```
 VITE_AUTH_ENABLED=true
-# Placeholders until the team agrees ports; see vite.config.ts.
-USER_SERVICE_URL=http://localhost:8082
+USER_SERVICE_URL=http://localhost:8080
+# Placeholder until the team agrees a port; see vite.config.ts.
 ADMIN_SERVICE_URL=http://localhost:8083
 ```
 
