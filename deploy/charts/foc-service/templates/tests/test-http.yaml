@@ -1,0 +1,44 @@
+{{- if .Values.healthPath }}
+# `helm test <release>`: from another pod in the namespace,
+#   1. this service answers on its Service name, and
+#   2. every peer URL it's configured with (env *_SERVICE_URL) answers /health,
+#      so a wrong name or port in the values fails here, not in app code.
+# Argo CD ignores Helm test hooks.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "foc-service.name" . }}-test-http
+  labels:
+    app.kubernetes.io/part-of: foc
+    foc.io/test: http
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  restartPolicy: Never
+  containers:
+    - name: curl
+      image: {{ .Values.tests.curlImage }}
+      command: ["sh", "-c"]
+      args:
+        - |
+          FAIL=0
+          check() { # label url
+            # New pods can be refused for ~1s while the network policy catches up.
+            for attempt in 1 2 3 4 5 6 7 8 9 10; do
+              if body=$(curl -fsS -m 3 "$2"); then echo "PASS $1: GET $2 -> $body"; return; fi
+              sleep 2
+            done
+            echo "FAIL $1: GET $2"; FAIL=1
+          }
+          check "self" "http://{{ include "foc-service.name" . }}:{{ .Values.port }}{{ .Values.healthPath }}"
+          {{- range $key, $url := .Values.env }}
+          {{- if hasSuffix "_SERVICE_URL" $key }}
+          check "{{ $key }}" "{{ trimSuffix "/" (toString $url) }}/health"
+          {{- end }}
+          {{- end }}
+          exit $FAIL
+      resources:
+        requests: { cpu: 10m, memory: 16Mi }
+        limits: { cpu: 100m, memory: 32Mi }
+{{- end }}

@@ -1,0 +1,7 @@
+# Cluster-wide: "Gateways of this class are implemented by Envoy Gateway".
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: {{ .Values.gatewayClassName }}
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller

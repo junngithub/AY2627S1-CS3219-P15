@@ -1,0 +1,74 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum AccessStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+model User {
+  id                  String                 @id @default(uuid()) @db.Uuid
+  email               String                 @unique
+  name                String
+  passwordHash        String
+  telegramHandle      String                 @unique
+  emailVerifiedAt     DateTime?
+  telegramVerifiedAt  DateTime?
+  role                UserRole               @default(USER)
+  accessStatus        AccessStatus           @default(ACTIVE)
+  failedLoginAttempts Int                    @default(0)
+  lockedAt            DateTime?
+  lastLoginAt         DateTime?
+  deletionRequestedAt DateTime?
+  scheduledDeletionAt DateTime?
+  suspendedAt         DateTime?
+  suspensionReason    String?
+  authVersion         Int                    @default(0)
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  emailOtps           EmailVerificationOtp[]
+  sessions            AuthSession[]
+
+  @@index([accessStatus])
+  @@index([scheduledDeletionAt])
+}
+
+model EmailVerificationOtp {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @db.Uuid
+  otpHash      String
+  expiresAt    DateTime
+  attemptCount Int       @default(0)
+  usedAt       DateTime?
+  revokedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+}
+
+model AuthSession {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @db.Uuid
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}

@@ -1,0 +1,11 @@
+# admin-service: settings that are the same in every environment.
+name: admin
+image:
+  name: foc/admin-service
+port: 3000 # placeholder until admin-service exists
+healthPath: /health
+kafka:
+  user: admin # reads foc.admin.commands, writes foc.admin.events (ADR-0004)
+env:
+  # Peers this service calls over HTTP (short names resolve within the env's namespace).
+  USER_SERVICE_URL: http://user:3000 # list / promote / suspend / reinstate users

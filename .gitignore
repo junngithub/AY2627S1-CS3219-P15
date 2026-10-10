@@ -1,3 +1,6 @@
+# Dependencies
+node_modules/
+
 # Build output
 dist/
 build/
@@ -13,6 +16,9 @@ order-service/data/
 application-local.yml
 application-local.yaml
 application-local.properties
+
+# Test coverage
+coverage/
 
 # Environment / secrets
 .env

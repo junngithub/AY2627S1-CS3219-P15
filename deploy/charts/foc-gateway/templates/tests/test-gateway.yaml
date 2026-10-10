@@ -1,0 +1,95 @@
+{{- /*
+`helm test <release>`: real requests through this env's Envoy proxy:
+routing to every service, auth (no token / bad token / user / admin),
+identity-header spoofing, public routes, blocked internal paths.
+Stub services echo the identity headers they received, which lets the test
+see exactly what reached the backend. Argo CD ignores Helm test hooks.
+*/ -}}
+{{- $gw := printf "http://%s.%s:%d" (include "foc-gateway.envoyServiceName" .) .Values.envoyNamespace (int .Values.listenerPort) }}
+{{- $user := trimPrefix "stub:" .Values.tests.userToken }}
+{{- $public := first .Values.publicRoutes }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: foc-gateway-test
+  labels:
+    app.kubernetes.io/part-of: foc
+    foc.io/test: gateway
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  restartPolicy: Never
+  containers:
+    - name: curl
+      image: {{ .Values.tests.curlImage }}
+      command: ["sh", "-c"]
+      args:
+        - |
+          GW={{ $gw }}
+          USER_TOKEN="Bearer {{ .Values.tests.userToken }}"
+          ADMIN_TOKEN="Bearer {{ .Values.tests.adminToken }}"
+          PASS=0; FAIL=0
+          pass() { echo "PASS $*"; PASS=$((PASS + 1)); }
+          fail() { echo "FAIL $*"; FAIL=$((FAIL + 1)); }
+          req() { curl -s -m 5 -o /tmp/body -w '%{http_code}' "$@"; }
+          has() { grep -q -F "$1" /tmp/body; }
+
+          echo "== waiting for the gateway at $GW"
+          for i in $(seq 1 30); do
+            [ "$(req -H "Authorization: $USER_TOKEN" "$GW{{ (first .Values.routes).prefix }}/conntest")" = 200 ] && break
+            sleep 2
+          done
+
+          echo "== 1. routing: each protected prefix reaches its service (valid token)"
+          {{- range .Values.routes }}
+          code=$(req -H "Authorization: $USER_TOKEN" "$GW{{ .prefix }}/conntest")
+          if has '"stub":true'; then
+            if [ "$code" = 200 ] && has '"service":"{{ .service }}"' && has '"userId":"{{ $user }}"'; then
+              pass "{{ .prefix }} → {{ .service }} as {{ $user }}"
+            else fail "{{ .prefix }}: HTTP $code $(cat /tmp/body)"; fi
+          else
+            case "$code" in
+              401|403|5*|000) fail "{{ .prefix }}: HTTP $code $(cat /tmp/body)" ;;
+              *) pass "{{ .prefix }} → {{ .service }} (real service answered HTTP $code)" ;;
+            esac
+          fi
+          {{- end }}
+
+          echo "== 2. auth"
+          code=$(req "$GW{{ (first .Values.routes).prefix }}/conntest")
+          [ "$code" = 401 ] && pass "no token → 401" || fail "no token → HTTP $code"
+          code=$(req -H "Authorization: Bearer not-a-valid-token" "$GW{{ (first .Values.routes).prefix }}/conntest")
+          [ "$code" = 401 ] && pass "invalid token → 401" || fail "invalid token → HTTP $code"
+          code=$(req -H "Authorization: $ADMIN_TOKEN" "$GW{{ (first .Values.routes).prefix }}/conntest")
+          [ "$code" = 200 ] && has '"isAdmin":"true"' && pass "admin token → x-is-admin: true" || fail "admin token → HTTP $code $(cat /tmp/body)"
+          code=$(req -H "Authorization: $USER_TOKEN" "$GW{{ (first .Values.routes).prefix }}/conntest")
+          [ "$code" = 200 ] && has '"isAdmin":"false"' && pass "user token → x-is-admin: false" || fail "user token → HTTP $code $(cat /tmp/body)"
+
+          echo "== 3. identity headers can't be spoofed"
+          code=$(req -H "Authorization: $USER_TOKEN" -H "x-user-id: mallory@u.nus.edu" -H "x-is-admin: true" "$GW{{ (first .Values.routes).prefix }}/conntest")
+          has '"userId":"{{ $user }}"' && has '"isAdmin":"false"' && pass "protected route: client x-user-id/x-is-admin replaced by auth result" || fail "protected spoof: HTTP $code $(cat /tmp/body)"
+          code=$(req -H "x-user-id: mallory@u.nus.edu" -H "x-is-admin: true" "$GW{{ (first .Values.routes).prefix }}/conntest")
+          [ "$code" = 401 ] && pass "spoofed headers without a token → 401" || fail "spoof without token → HTTP $code"
+
+          echo "== 4. public routes (no token)"
+          {{- range .Values.publicRoutes }}
+          code=$(req -X {{ .method }} -H "x-user-id: mallory@u.nus.edu" "$GW{{ .path }}")
+          if [ "$code" = 200 ] && { ! has '"stub":true' || has '"userId":null'; }; then
+            pass "{{ .method }} {{ .path }} → {{ .service }} without auth, identity header stripped"
+          else fail "{{ .method }} {{ .path }}: HTTP $code $(cat /tmp/body)"; fi
+          {{- end }}
+
+          echo "== 5. blocked and unknown paths"
+          {{- range .Values.blockedPaths }}
+          code=$(req -X POST -H "Authorization: $USER_TOKEN" "$GW{{ . }}")
+          [ "$code" = 404 ] && pass "{{ . }} (internal) → 404 at the gateway" || fail "{{ . }} → HTTP $code"
+          {{- end }}
+          code=$(req -H "Authorization: $USER_TOKEN" "$GW/not-a-route")
+          [ "$code" = 404 ] && pass "unknown path → 404" || fail "unknown path → HTTP $code"
+
+          echo "== $PASS passed, $FAIL failed"
+          [ "$FAIL" -eq 0 ]
+      resources:
+        requests: { cpu: 10m, memory: 16Mi }
+        limits: { cpu: 100m, memory: 32Mi }

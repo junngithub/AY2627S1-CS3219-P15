@@ -1,0 +1,11 @@
+brokers:
+  replicas: 3
+  storage:
+    size: 20Gi
+    class: "" # set to the EKS gp3 StorageClass once modules/eks defines it
+  resources:
+    requests: { cpu: 500m, memory: 2Gi }
+    limits: { cpu: "2", memory: 3Gi }
+replication:
+  factor: 3
+  minInsync: 2

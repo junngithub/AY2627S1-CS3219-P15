@@ -1,0 +1,22 @@
+# Everything FoC runs per environment: namespace guard rails, Kafka, services.
+# May only deploy into FoC namespaces, and may create nothing cluster-wide
+# except the namespace itself.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: foc
+  namespace: argocd
+spec:
+  description: FoC environments (namespaced resources only)
+  sourceRepos:
+    - https://github.com/junngithub/AY2627S1-CS3219-P15.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: foc
+    - server: https://kubernetes.default.svc
+      namespace: foc-dev
+    - server: https://kubernetes.default.svc
+      namespace: foc-stg
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace

@@ -1,0 +1,6 @@
+# Values passed to the vendored strimzi-kafka-operator chart.
+strimzi-kafka-operator:
+  # Env namespaces the operator manages. Set per cluster in
+  # values/clusters/<cluster>/strimzi.yaml.
+  watchNamespaces: []
+  watchAnyNamespace: false
