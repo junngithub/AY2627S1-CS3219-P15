@@ -1,0 +1,28 @@
+meta {
+  name: Deliver bad dispute photo
+  type: http
+  seq: 33
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/deliver
+  body: multipart-form
+  auth: none
+}
+headers {
+  X-User-Id: 702cd6fc-978a-35c4-b143-2ed17a4e52b9
+  X-User-Telegram: esc-badphoto-courier
+}
+
+
+
+body:multipart-form {
+  photo: @file(../fixtures/proof.png)
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().status).to.equal("DELIVERED");
+  });
+}

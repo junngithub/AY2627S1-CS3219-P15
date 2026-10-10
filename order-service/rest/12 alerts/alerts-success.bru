@@ -1,0 +1,25 @@
+meta {
+  name: List alerts
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/v1/orders/alerts
+  body: none
+  auth: none
+}
+headers {
+  X-User-Id: ecb16930-ec95-30f7-9ee6-6475d5dc46c3
+  X-User-Telegram: alerts-req
+}
+
+
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().content.length).to.be.at.least(1);
+  });
+}
+

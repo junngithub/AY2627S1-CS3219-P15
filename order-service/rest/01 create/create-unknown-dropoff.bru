@@ -1,0 +1,36 @@
+meta {
+  name: Unknown dropoff location
+  type: http
+  seq: 20
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders
+  body: json
+  auth: none
+}
+headers {
+  X-User-Id: 5e669259-f8fb-3dea-ae4d-c3a32c070485
+  X-User-Telegram: create-baddrop
+}
+
+
+
+body:json {
+  {
+    "itemDescription": "Print notes",
+    "credits": 1,
+    "expiryTime": "{{acceptanceExpiry}}",
+    "deliveryTime": "{{deliveryDeadline}}",
+    "fromLocation": "2",
+    "toLocation": "nowhere"
+  }
+}
+
+tests {
+  test("status is 400", function() {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().error).to.include("approved supplier");
+  });
+}
+

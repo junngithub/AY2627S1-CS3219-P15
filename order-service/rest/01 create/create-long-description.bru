@@ -1,0 +1,36 @@
+meta {
+  name: Item description over 500 characters
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders
+  body: json
+  auth: none
+}
+headers {
+  X-User-Id: cf6d2d26-f5cd-3964-8140-10c047f75910
+  X-User-Telegram: create-long
+}
+
+
+
+body:json {
+  {
+    "itemDescription": "{{longText}}",
+    "credits": 1,
+    "expiryTime": "{{acceptanceExpiry}}",
+    "deliveryTime": "{{deliveryDeadline}}",
+    "fromLocation": "2",
+    "toLocation": "4"
+  }
+}
+
+tests {
+  test("status is 400", function() {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().error).to.include("itemDescription");
+  });
+}
+

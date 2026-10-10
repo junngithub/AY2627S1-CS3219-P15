@@ -1,0 +1,31 @@
+meta {
+  name: Escalate an open order
+  type: http
+  seq: 17
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/escalate
+  body: json
+  auth: none
+}
+headers {
+  X-User-Id: b31d82f2-6349-3cc6-90e3-cff2ecf3d6f7
+  X-User-Telegram: esc-open-req
+}
+
+
+
+body:json {
+  {
+    "disputeText": "The courier collected the wrong item"
+  }
+}
+
+tests {
+  test("status is 409", function() {
+    expect(res.getStatus()).to.equal(409);
+    expect(res.getBody().error).to.include("cannot be escalated");
+  });
+}
+

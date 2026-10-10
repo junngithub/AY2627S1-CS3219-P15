@@ -1,0 +1,24 @@
+meta {
+  name: Pool
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/v1/orders?latitude=1.2968&longitude=103.7733
+  body: none
+  auth: none
+}
+headers {
+  X-User-Id: 5f5ce989-a038-3f69-9aa4-54b24d8cfa63
+  X-User-Telegram: flow-courier
+}
+
+
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+}
+

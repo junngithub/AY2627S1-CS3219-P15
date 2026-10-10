@@ -1,0 +1,35 @@
+meta {
+  name: create missing user id
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders
+  body: json
+  auth: none
+}
+
+
+body:json {
+  {
+    "itemDescription": "Print notes",
+    "credits": 1,
+    "expiryTime": "{{acceptanceExpiry}}",
+    "deliveryTime": "{{deliveryDeadline}}",
+    "fromLocation": "2",
+    "toLocation": "4"
+  }
+}
+
+vars:pre-request {
+  acceptanceExpiry: 2026-09-30T00:00:00Z
+  deliveryDeadline: 2026-09-31T00:00:00Z
+}
+
+tests {
+  test("status is 401", function() {
+    expect(res.getStatus()).to.equal(401);
+    expect(res.getBody().error).to.include("Sign in is required");
+  });
+}

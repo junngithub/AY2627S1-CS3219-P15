@@ -1,0 +1,31 @@
+meta {
+  name: Escalate a collected order
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/escalate
+  body: json
+  auth: none
+}
+headers {
+  X-User-Id: 9bb76361-adcf-3246-abf5-3928d3ad1eb3
+  X-User-Telegram: esc-req
+}
+
+
+
+body:json {
+  {
+    "disputeText": "The courier collected the wrong item"
+  }
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().status).to.equal("ESCALATED");
+  });
+}
+

@@ -1,0 +1,25 @@
+meta {
+  name: Accept blank dispute
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/accept
+  body: none
+  auth: none
+}
+headers {
+  X-User-Id: 783d8a4c-d93f-354a-ab49-8f8023d3d678
+  X-User-Telegram: esc-blank-courier
+}
+
+
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().status).to.equal("ACCEPTED");
+  });
+}
+

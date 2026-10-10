@@ -1,0 +1,23 @@
+meta {
+  name: deliver missing auth
+  type: http
+  seq: 24
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/deliver
+  body: multipart-form
+  auth: none
+}
+
+body:multipart-form {
+  photo: @file(../fixtures/proof.png)
+}
+
+tests {
+  test("status is 401", function() {
+    expect(res.getStatus()).to.equal(401);
+    expect(res.getBody().error).to.include("Sign in is required");
+  });
+}
+

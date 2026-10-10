@@ -1,0 +1,20 @@
+meta {
+  name: search missing user id
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/api/v1/orders/search?pickupLocationId=2
+  body: none
+  auth: none
+}
+
+
+tests {
+  test("status is 401", function() {
+    expect(res.getStatus()).to.equal(401);
+    expect(res.getBody().error).to.include("Sign in is required");
+  });
+}
+

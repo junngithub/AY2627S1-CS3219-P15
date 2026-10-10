@@ -13,8 +13,8 @@ describe("account status", () => {
   it("starts as Created and lists both verification steps", () => {
     assert.equal(accountStatus(baseUser), "Created");
     assert.deepEqual(accountNextSteps(baseUser), [
-      "Verify your NUS email address",
-      "Verify your Telegram handle",
+      "VERIFY_EMAIL",
+      "VERIFY_TELEGRAM",
     ]);
   });
 
@@ -36,5 +36,17 @@ describe("account status", () => {
       telegramVerifiedAt: new Date(),
     };
     assert.equal(accountStatus(suspendedUser), "Suspended");
+    assert.deepEqual(accountNextSteps(suspendedUser), ["CONTACT_ADMIN"]);
+  });
+
+  it("signals a pending deletion without changing verification status", () => {
+    const deletingUser = {
+      ...baseUser,
+      emailVerifiedAt: new Date(),
+      telegramVerifiedAt: new Date(),
+      scheduledDeletionAt: new Date(),
+    };
+    assert.equal(accountStatus(deletingUser), "Verified");
+    assert.deepEqual(accountNextSteps(deletingUser), ["CANCEL_PENDING_DELETION"]);
   });
 });

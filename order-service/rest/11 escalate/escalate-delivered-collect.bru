@@ -1,0 +1,29 @@
+meta {
+  name: Collect delivered dispute
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/collect
+  body: multipart-form
+  auth: none
+}
+headers {
+  X-User-Id: eac13f80-a7ca-3bf6-a7b5-f1fe9a6588c0
+  X-User-Telegram: esc-del-courier
+}
+
+
+
+body:multipart-form {
+  photo: @file(../fixtures/proof.png)
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().status).to.equal("COLLECTED");
+  });
+}
+

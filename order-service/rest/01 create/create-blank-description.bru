@@ -1,0 +1,36 @@
+meta {
+  name: Blank item description
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders
+  body: json
+  auth: none
+}
+headers {
+  X-User-Id: ea4d279a-e350-336e-b98b-aef5a175703f
+  X-User-Telegram: create-blank
+}
+
+
+
+body:json {
+  {
+    "itemDescription": "",
+    "credits": 1,
+    "expiryTime": "{{acceptanceExpiry}}",
+    "deliveryTime": "{{deliveryDeadline}}",
+    "fromLocation": "2",
+    "toLocation": "4"
+  }
+}
+
+tests {
+  test("status is 400", function() {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().error).to.include("itemDescription");
+  });
+}
+

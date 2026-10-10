@@ -1,0 +1,25 @@
+meta {
+  name: Accept before requester cancel
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/accept
+  body: none
+  auth: none
+}
+headers {
+  X-User-Id: 34ff0d3b-0bfb-357e-808f-f04fbea003a1
+  X-User-Telegram: cancel-late-courier
+}
+
+
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().status).to.equal("ACCEPTED");
+  });
+}
+
