@@ -13,25 +13,17 @@ class StubClientsTest {
     private final StubClients clients = new StubClients();
 
     @Test
-    void acceptsCampusEmailsAndRejectsAnythingElse() {
-        UserAccount ada = clients.authenticate("Bearer stub:ada@u.nus.edu");
-        assertEquals("ada@u.nus.edu", ada.userId());
-        assertEquals("ada", ada.telegramHandle());
-        assertEquals("bob@nus.edu.sg", clients.authenticate("Bearer stub:bob@nus.edu.sg").email());
-        assertThrows(ApiException.class, () -> clients.authenticate(null));
-        assertThrows(ApiException.class, () -> clients.authenticate("Bearer ada@u.nus.edu"));
-        assertThrows(ApiException.class, () -> clients.authenticate("Bearer stub:ada@gmail.com"));
-    }
-
-    @Test
     void reservesAndReturnsCredits() {
         UUID orderId = UUID.randomUUID();
         clients.reserve(orderId, "ada@u.nus.edu", 8, null);
         clients.returnReserved(orderId, null);
         clients.reserve(orderId, "ada@u.nus.edu", 20, null);
-        assertThrows(ApiException.class, () -> clients.reserve(UUID.randomUUID(), "ada@u.nus.edu", 1, null));
-        assertThrows(ApiException.class, () -> clients.reserve(UUID.randomUUID(), "ada@u.nus.edu", 0, null));
-        assertThrows(ApiException.class, () -> clients.returnReserved(UUID.randomUUID(), null));
+        UUID overdrawn = UUID.randomUUID();
+        UUID free = UUID.randomUUID();
+        UUID unknown = UUID.randomUUID();
+        assertThrows(ApiException.class, () -> clients.reserve(overdrawn, "ada@u.nus.edu", 1, null));
+        assertThrows(ApiException.class, () -> clients.reserve(free, "ada@u.nus.edu", 0, null));
+        assertThrows(ApiException.class, () -> clients.returnReserved(unknown, null));
     }
 
     @Test
@@ -41,7 +33,8 @@ class StubClientsTest {
         clients.escalate(context(UUID.randomUUID(), "wrong item"), null);
         assertThrows(ApiException.class, () -> clients.requirePlace("nowhere", null));
         assertThrows(ApiException.class, () -> clients.escalate(null, null));
-        assertThrows(ApiException.class, () -> clients.escalate(context(UUID.randomUUID(), " "), null));
+        OrderContext blank = context(UUID.randomUUID(), " ");
+        assertThrows(ApiException.class, () -> clients.escalate(blank, null));
     }
 
     private static OrderContext context(UUID orderId, String comment) {

@@ -7,12 +7,15 @@ meta {
 post {
   url: {{baseUrl}}/api/v1/orders/{{orderId}}/collect
   body: multipart-form
-  auth: bearer
+  auth: none
+}
+headers {
+  X-User-Id: esc-del-courier@u.nus.edu
+  X-User-Email: esc-del-courier@u.nus.edu
+  X-User-Telegram: esc-del-courier
 }
 
-auth:bearer {
-  token: stub:esc-del-courier@u.nus.edu
-}
+
 
 body:multipart-form {
   photo: @file(../fixtures/proof.png)

@@ -13,6 +13,11 @@ import java.util.UUID;
 @Component
 public class OrderMessageFactory {
 
+    private static final String REQUESTER_EMAIL = "requesterEmail";
+    private static final String COURIER_EMAIL = "courierEmail";
+    private static final String AMOUNT = "amount";
+    private static final String REASON = "reason";
+
     private final ObjectMapper mapper;
 
     public OrderMessageFactory(ObjectMapper mapper) {
@@ -21,11 +26,11 @@ public class OrderMessageFactory {
 
     public String statusChanged(OrderEntity order, OrderStatus from, OrderStatus to, boolean notify, Instant occurredAt) {
         ObjectNode node = envelope("order.status.changed", order.getId(), occurredAt);
-        node.put("requesterEmail", order.getRequesterEmail());
+        node.put(REQUESTER_EMAIL, order.getRequesterEmail());
         if (order.getCourierEmail() == null) {
-            node.putNull("courierEmail");
+            node.putNull(COURIER_EMAIL);
         } else {
-            node.put("courierEmail", order.getCourierEmail());
+            node.put(COURIER_EMAIL, order.getCourierEmail());
         }
         if (from == null) {
             node.putNull("fromStatus");
@@ -39,18 +44,18 @@ public class OrderMessageFactory {
 
     public String creditReturn(OrderEntity order, Instant occurredAt) {
         ObjectNode node = envelope("credit.reservation.return", order.getId(), occurredAt);
-        node.put("requesterEmail", order.getRequesterEmail());
-        node.put("amount", order.getAmount());
-        node.put("reason", "EXPIRED");
+        node.put(REQUESTER_EMAIL, order.getRequesterEmail());
+        node.put(AMOUNT, order.getAmount());
+        node.put(REASON, "EXPIRED");
         return write(node);
     }
 
     public String creditRelease(OrderEntity order, String reason, Instant occurredAt) {
         ObjectNode node = envelope("credit.reservation.release", order.getId(), occurredAt);
-        node.put("requesterEmail", order.getRequesterEmail());
-        node.put("courierEmail", order.getCourierEmail());
-        node.put("amount", order.getAmount());
-        node.put("reason", reason);
+        node.put(REQUESTER_EMAIL, order.getRequesterEmail());
+        node.put(COURIER_EMAIL, order.getCourierEmail());
+        node.put(AMOUNT, order.getAmount());
+        node.put(REASON, reason);
         return write(node);
     }
 
@@ -65,12 +70,12 @@ public class OrderMessageFactory {
 
     public String escalationOpened(OrderEntity order, Instant occurredAt) {
         ObjectNode node = envelope("admin.escalation.opened", order.getId(), occurredAt);
-        node.put("requesterEmail", order.getRequesterEmail());
-        node.put("courierEmail", order.getCourierEmail());
-        node.put("reason", "DELIVERY_DEADLINE_MISSED");
+        node.put(REQUESTER_EMAIL, order.getRequesterEmail());
+        node.put(COURIER_EMAIL, order.getCourierEmail());
+        node.put(REASON, "DELIVERY_DEADLINE_MISSED");
         node.put("status", OrderStatus.COLLECTED.name());
         node.put("itemDescription", order.getItemDescription());
-        node.put("amount", order.getAmount());
+        node.put(AMOUNT, order.getAmount());
         if (order.getCollectionPhotoRef() == null) {
             node.putNull("collectionPhotoRef");
         } else {

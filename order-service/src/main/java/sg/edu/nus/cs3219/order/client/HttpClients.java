@@ -1,13 +1,16 @@
 package sg.edu.nus.cs3219.order.client;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
-import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
+import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import sg.edu.nus.cs3219.order.rest.CallerHeaders;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.json.JsonMapper;
 import sg.edu.nus.cs3219.order.config.OrderProperties;
 import sg.edu.nus.cs3219.order.rest.ApiException;
 
@@ -16,9 +19,8 @@ import java.util.UUID;
 
 @Component
 @ConditionalOnProperty(name = "order.clients.mode", havingValue = "http")
-public class HttpClients implements UserClient, CreditClient, SupplierClient, RatingClient, AdminClient {
+public class HttpClients implements CreditClient, SupplierClient, RatingClient, AdminClient {
 
-    private final RestClient users;
     private final RestClient credits;
     private final RestClient suppliers;
     private final RestClient ratings;
@@ -26,7 +28,6 @@ public class HttpClients implements UserClient, CreditClient, SupplierClient, Ra
 
     public HttpClients(OrderProperties properties) {
         Duration timeout = properties.getClients().getTimeout();
-        this.users = client(properties.getClients().getUserBaseUrl(), timeout);
         this.credits = client(properties.getClients().getCreditBaseUrl(), timeout);
         this.suppliers = client(properties.getClients().getSupplierBaseUrl(), timeout);
         this.ratings = client(properties.getClients().getRatingBaseUrl(), timeout);
@@ -34,51 +35,11 @@ public class HttpClients implements UserClient, CreditClient, SupplierClient, Ra
     }
 
     @Override
-    public UserAccount authenticate(String authorizationHeader) {
-        if (authorizationHeader == null || authorizationHeader.isBlank()) {
-            throw ApiException.unauthorized("Sign in is required");
-        }
-        try {
-            AuthorizeResponse authorized = users.post()
-                    .uri("/api/v1/user/authorize")
-                    .header("Authorization", authorizationHeader)
-                    .retrieve()
-                    .body(AuthorizeResponse.class);
-            if (authorized == null || !authorized.authenticated() || authorized.userId() == null || authorized.userId().isBlank()) {
-                throw ApiException.unauthorized("Sign in is required");
-            }
-            ProfileResponse profile = users.get()
-                    .uri("/api/v1/user/me")
-                    .header("Authorization", authorizationHeader)
-                    .retrieve()
-                    .body(ProfileResponse.class);
-            if (profile == null || profile.email() == null || profile.email().isBlank()) {
-                throw ApiException.unauthorized("Sign in is required");
-            }
-            String handle = profile.telegramHandle();
-            if (handle == null || handle.isBlank()) {
-                handle = profile.name();
-            }
-            if (handle == null || handle.isBlank()) {
-                handle = profile.email().substring(0, profile.email().indexOf('@'));
-            }
-            return new UserAccount(authorized.userId(), profile.email(), handle);
-        } catch (RestClientResponseException exception) {
-            if (exception.getStatusCode().value() == 401 || exception.getStatusCode().value() == 403) {
-                throw ApiException.unauthorized("Sign in is required");
-            }
-            throw ApiException.unavailable("User service did not respond in time");
-        } catch (ResourceAccessException exception) {
-            throw ApiException.unavailable("User service did not respond in time");
-        }
-    }
-
-    @Override
-    public void reserve(UUID orderId, String requesterId, int amount, String authorization) {
+    public void reserve(UUID orderId, String requesterId, int amount, UserAccount caller) {
         try {
             credits.post()
                     .uri("/api/v1/credit/reserve")
-                    .header("Authorization", authorization)
+                    .headers(headers -> identify(headers, caller))
                     .body(new ReserveRequest(orderId, requesterId, amount))
                     .retrieve()
                     .toBodilessEntity();
@@ -88,11 +49,11 @@ public class HttpClients implements UserClient, CreditClient, SupplierClient, Ra
     }
 
     @Override
-    public void returnReserved(UUID orderId, String authorization) {
+    public void returnReserved(UUID orderId, UserAccount caller) {
         try {
             credits.post()
                     .uri("/api/v1/credit/release")
-                    .header("Authorization", authorization)
+                    .headers(headers -> identify(headers, caller))
                     .body(new ReleaseRequest(orderId))
                     .retrieve()
                     .toBodilessEntity();
@@ -102,11 +63,11 @@ public class HttpClients implements UserClient, CreditClient, SupplierClient, Ra
     }
 
     @Override
-    public Place requirePlace(String locationId, String authorization) {
+    public Place requirePlace(String locationId, UserAccount caller) {
         try {
             SupplierResponse supplier = suppliers.get()
                     .uri("/api/v1/supplier/{id}", locationId)
-                    .header("Authorization", authorization)
+                    .headers(headers -> identify(headers, caller))
                     .retrieve()
                     .body(SupplierResponse.class);
             if (supplier == null || supplier.name() == null || supplier.name().isBlank()) {
@@ -125,11 +86,11 @@ public class HttpClients implements UserClient, CreditClient, SupplierClient, Ra
     }
 
     @Override
-    public double ratingFor(String userId, String authorization) {
+    public double ratingFor(String userId, UserAccount caller) {
         try {
             RatingResponse response = ratings.get()
                     .uri("/api/v1/rating/{userId}", userId)
-                    .header("Authorization", authorization)
+                    .headers(headers -> identify(headers, caller))
                     .retrieve()
                     .body(RatingResponse.class);
             if (response == null) {
@@ -142,11 +103,11 @@ public class HttpClients implements UserClient, CreditClient, SupplierClient, Ra
     }
 
     @Override
-    public void escalate(OrderContext order, String authorization) {
+    public void escalate(OrderContext order, UserAccount caller) {
         try {
             admins.post()
                     .uri("/escalations")
-                    .header("Authorization", authorization)
+                    .headers(headers -> identify(headers, caller))
                     .body(order)
                     .retrieve()
                     .toBodilessEntity();
@@ -155,22 +116,26 @@ public class HttpClients implements UserClient, CreditClient, SupplierClient, Ra
         }
     }
 
+    private static void identify(HttpHeaders headers, UserAccount caller) {
+        headers.set(CallerHeaders.USER_ID, caller.userId());
+        headers.set(CallerHeaders.EMAIL, caller.email());
+        if (caller.telegramHandle() != null && !caller.telegramHandle().isBlank()) {
+            headers.set(CallerHeaders.TELEGRAM, caller.telegramHandle());
+        }
+    }
+
     private static RestClient client(String baseUrl, Duration timeout) {
-        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory();
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(timeout);
         factory.setReadTimeout(timeout);
+        JsonMapper json = JsonMapper.builder()
+                .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                .build();
         return RestClient.builder()
                 .baseUrl(baseUrl)
                 .requestFactory(factory)
-                .messageConverters(converters -> converters.add(new MappingJackson2HttpMessageConverter()))
+                .configureMessageConverters(converters -> converters.withJsonConverter(new JacksonJsonHttpMessageConverter(json)))
                 .build();
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    private record AuthorizeResponse(boolean authenticated, String userId, boolean isAdmin, String permittedAction) {
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    private record ProfileResponse(String email, String name, String telegramHandle) {
     }
 
     private record ReserveRequest(UUID orderId, String requesterId, int amount) {
@@ -179,11 +144,9 @@ public class HttpClients implements UserClient, CreditClient, SupplierClient, Ra
     private record ReleaseRequest(UUID orderId) {
     }
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
     private record SupplierResponse(String id, String name, double latitude, double longitude) {
     }
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
     private record RatingResponse(double average) {
     }
 

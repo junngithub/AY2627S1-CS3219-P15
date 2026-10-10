@@ -10,7 +10,6 @@ import org.springframework.data.domain.PageRequest;
 import sg.edu.nus.cs3219.order.client.Place;
 import sg.edu.nus.cs3219.order.client.SupplierClient;
 import sg.edu.nus.cs3219.order.client.UserAccount;
-import sg.edu.nus.cs3219.order.client.UserClient;
 import sg.edu.nus.cs3219.order.config.OrderProperties;
 import sg.edu.nus.cs3219.order.domain.OrderStatus;
 import sg.edu.nus.cs3219.order.persistence.AlertEntity;
@@ -39,19 +38,20 @@ import static org.mockito.Mockito.when;
 class OrderQueryServiceTest {
 
     private final UUID id = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+    private final UserAccount requester = new UserAccount("requester@u.nus.edu", "requester@u.nus.edu", "requester");
+    private final UserAccount courier = new UserAccount("courier@u.nus.edu", "courier@u.nus.edu", "courier");
+    private final UserAccount other = new UserAccount("other@u.nus.edu", "other@u.nus.edu", "other");
     private final Instant now = Instant.parse("2026-10-02T04:00:00Z");
 
     @Mock private OrderRepository orders;
     @Mock private AlertRepository alerts;
-    @Mock private UserClient users;
     @Mock private SupplierClient suppliers;
 
     private OrderQueryService service;
 
     @BeforeEach
     void setUp() {
-        service = new OrderQueryService(orders, alerts, users, suppliers, new OrderProperties());
-        when(users.authenticate(any())).thenReturn(new UserAccount("courier@u.nus.edu", "courier@u.nus.edu", "courier"));
+        service = new OrderQueryService(orders, alerts, suppliers, new OrderProperties());
     }
 
     @Test
@@ -59,41 +59,38 @@ class OrderQueryServiceTest {
         OrderEntity order = order();
         order.setCourierEmail("courier@u.nus.edu");
         when(orders.findById(id)).thenReturn(Optional.of(order));
-        assertEquals(id, service.get("auth", id).getId());
+        assertEquals(id, service.get(courier, id).getId());
 
-        when(users.authenticate(any())).thenReturn(new UserAccount("requester@u.nus.edu", "requester@u.nus.edu", "requester"));
-        assertEquals("requester@u.nus.edu", service.get("auth", id).getRequesterEmail());
+        assertEquals("requester@u.nus.edu", service.get(requester, id).getRequesterEmail());
 
-        when(users.authenticate(any())).thenReturn(new UserAccount("other@u.nus.edu", "other@u.nus.edu", "other"));
-        assertThrows(ApiException.class, () -> service.get("auth", id));
+        assertThrows(ApiException.class, () -> service.get(other, id));
 
         when(orders.findById(id)).thenReturn(Optional.empty());
-        assertThrows(ApiException.class, () -> service.get("auth", id));
+        assertThrows(ApiException.class, () -> service.get(other, id));
     }
 
     @Test
     void poolRanksNearbyOrdersAndFallsBackToReward() {
         when(orders.findOpenInBox(eq(OrderStatus.CREATED), eq("courier@u.nus.edu"), anyDouble(), anyDouble(), anyDouble(), anyDouble()))
                 .thenReturn(List.of(order()));
-        PageResponse<OrderEntity> nearby = service.pool("auth", 1.2968, 103.7733, 0, 20);
+        PageResponse<OrderEntity> nearby = service.pool(courier, 1.2968, 103.7733, 0, 20);
         assertEquals(1, nearby.content().size());
-        assertTrue(service.pool("auth", 1.2968, 103.7733, 1, 20).content().isEmpty());
+        assertTrue(service.pool(courier, 1.2968, 103.7733, 1, 20).content().isEmpty());
 
         when(orders.searchOpen(eq(OrderStatus.CREATED), eq("courier@u.nus.edu"), isNull(), isNull(), any()))
                 .thenReturn(new PageImpl<>(List.of(order()), PageRequest.of(0, 20), 1));
-        assertEquals(1, service.pool("auth", null, 1.0, 0, 20).totalElements());
-        assertTrue(service.pool("auth", null, null, 0, 0).content().isEmpty());
-        assertThrows(ApiException.class, () -> service.pool("auth", null, null, -1, 20));
-        assertThrows(ApiException.class, () -> service.pool("auth", null, null, 0, 1001));
+        assertEquals(1, service.pool(courier, null, 1.0, 0, 20).totalElements());
+        assertTrue(service.pool(courier, null, null, 0, 0).content().isEmpty());
+        assertThrows(ApiException.class, () -> service.pool(courier, null, null, -1, 20));
+        assertThrows(ApiException.class, () -> service.pool(courier, null, null, 0, 1001));
     }
 
     @Test
     void mineSearchAndAlertsPageTheCallersRows() {
-        when(users.authenticate(any())).thenReturn(new UserAccount("requester@u.nus.edu", "requester@u.nus.edu", "requester"));
         when(orders.findByRequesterEmailOrderByRequestTimeDesc(eq("requester@u.nus.edu"), any()))
                 .thenReturn(new PageImpl<>(List.of(order())));
-        assertEquals(1, service.mine("auth", 0, 20).content().size());
-        assertTrue(service.mine("auth", 0, 0).content().isEmpty());
+        assertEquals(1, service.mine(requester, 0, 20).content().size());
+        assertTrue(service.mine(requester, 0, 0).content().isEmpty());
 
         when(suppliers.requirePlace(eq("nus-coop"), any())).thenReturn(new Place("nus-coop", "NUS Co-op", 1.0, 103.0));
         when(suppliers.requirePlace(eq("cool-spot"), any())).thenReturn(new Place("cool-spot", "Cool Spot", 1.0, 103.0));
@@ -101,11 +98,11 @@ class OrderQueryServiceTest {
                 .thenReturn(new PageImpl<>(List.of(order())));
         when(orders.searchOpen(eq(OrderStatus.CREATED), eq("requester@u.nus.edu"), isNull(), eq("cool-spot"), any()))
                 .thenReturn(new PageImpl<>(List.of()));
-        assertEquals(1, service.search("auth", "nus-coop", "cool-spot", 0, 20).content().size());
-        assertTrue(service.search("auth", " ", "cool-spot", 0, 20).content().isEmpty());
-        assertTrue(service.search("auth", "nus-coop", "cool-spot", 0, 0).content().isEmpty());
-        assertThrows(ApiException.class, () -> service.search("auth", " ", null, 0, 20));
-        assertThrows(ApiException.class, () -> service.search("auth", "nus-coop", "cool-spot", 0, -1));
+        assertEquals(1, service.search(requester, "nus-coop", "cool-spot", 0, 20).content().size());
+        assertTrue(service.search(requester, " ", "cool-spot", 0, 20).content().isEmpty());
+        assertTrue(service.search(requester, "nus-coop", "cool-spot", 0, 0).content().isEmpty());
+        assertThrows(ApiException.class, () -> service.search(requester, " ", null, 0, 20));
+        assertThrows(ApiException.class, () -> service.search(requester, "nus-coop", "cool-spot", 0, -1));
 
         AlertEntity alert = new AlertEntity();
         alert.setId(UUID.randomUUID());
@@ -117,12 +114,12 @@ class OrderQueryServiceTest {
         alert.setCreatedAt(now);
         when(alerts.findByRequesterEmailAndNotifyRequesterTrueOrderByCreatedAtDesc(eq("requester@u.nus.edu"), any()))
                 .thenReturn(new PageImpl<>(List.of(alert)));
-        PageResponse<AlertEntity> page = service.alerts("auth", 0, 20);
+        PageResponse<AlertEntity> page = service.alerts(requester, 0, 20);
         AlertResponse response = AlertResponse.from(page.content().getFirst());
         assertEquals("ACCEPTED", response.toStatus());
         assertEquals("requester@u.nus.edu", alert.getRequesterEmail());
         assertTrue(alert.isNotifyRequester());
-        assertTrue(service.alerts("auth", 0, 0).content().isEmpty());
+        assertTrue(service.alerts(requester, 0, 0).content().isEmpty());
     }
 
     private OrderEntity order() {

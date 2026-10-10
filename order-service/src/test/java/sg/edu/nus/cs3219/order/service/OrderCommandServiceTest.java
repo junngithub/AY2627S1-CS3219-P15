@@ -15,10 +15,8 @@ import sg.edu.nus.cs3219.order.client.Place;
 import sg.edu.nus.cs3219.order.client.RatingClient;
 import sg.edu.nus.cs3219.order.client.SupplierClient;
 import sg.edu.nus.cs3219.order.client.UserAccount;
-import sg.edu.nus.cs3219.order.client.UserClient;
 import sg.edu.nus.cs3219.order.config.OrderProperties;
 import sg.edu.nus.cs3219.order.domain.OrderStatus;
-import sg.edu.nus.cs3219.order.messaging.KafkaTopics;
 import sg.edu.nus.cs3219.order.messaging.OrderMessageFactory;
 import sg.edu.nus.cs3219.order.messaging.OutboxWriter;
 import sg.edu.nus.cs3219.order.persistence.AlertEntity;
@@ -46,8 +44,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -57,11 +56,13 @@ class OrderCommandServiceTest {
 
     private final Instant now = Instant.parse("2026-10-02T04:00:00Z");
     private final UUID id = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+    private final UserAccount requester = new UserAccount("requester@u.nus.edu", "requester@u.nus.edu", "requester");
+    private final UserAccount courier = new UserAccount("courier@u.nus.edu", "courier@u.nus.edu", "courier");
+    private final UserAccount other = new UserAccount("other@u.nus.edu", "other@u.nus.edu", "other");
 
     @Mock private OrderRepository orders;
     @Mock private AlertRepository alerts;
     @Mock private ProcessedEventRepository processedEvents;
-    @Mock private UserClient users;
     @Mock private CreditClient credits;
     @Mock private SupplierClient suppliers;
     @Mock private RatingClient ratings;
@@ -77,7 +78,6 @@ class OrderCommandServiceTest {
                 orders,
                 alerts,
                 processedEvents,
-                users,
                 credits,
                 suppliers,
                 ratings,
@@ -92,14 +92,12 @@ class OrderCommandServiceTest {
 
     @Test
     void createReservesCreditsAndStoresTheOrder() {
-        when(users.authenticate("Bearer stub:requester@u.nus.edu"))
-                .thenReturn(new UserAccount("requester@u.nus.edu", "requester@u.nus.edu", "requester"));
         when(suppliers.requirePlace(eq("nus-coop"), any())).thenReturn(new Place("nus-coop", "NUS Co-op", 1.29, 103.77));
         when(suppliers.requirePlace(eq("cool-spot"), any())).thenReturn(new Place("cool-spot", "Cool Spot", 1.30, 103.78));
         when(ratings.ratingFor(eq("requester@u.nus.edu"), any())).thenReturn(4.5);
         when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        OrderEntity created = service.create("Bearer stub:requester@u.nus.edu", new CreateOrderRequest(
+        OrderEntity created = service.create(requester, new CreateOrderRequest(
                 "  Print notes  ",
                 8,
                 now.plusSeconds(3600),
@@ -116,47 +114,48 @@ class OrderCommandServiceTest {
         OrderResponse response = OrderResponse.from(created);
         assertEquals("NUS Co-op", response.pickupName());
         assertEquals("Cool Spot", response.dropoffName());
-        verify(credits).reserve(created.getId(), "requester@u.nus.edu", 8, "Bearer stub:requester@u.nus.edu");
+        verify(credits).reserve(created.getId(), "requester@u.nus.edu", 8, requester);
         verify(alerts).save(any(AlertEntity.class));
         verify(outboxRepository).save(any(OutboxEntity.class));
     }
 
     @Test
     void createRejectsDeadlinesThatAreNotInTheFuture() {
-        assertThrows(ApiException.class, () -> service.create("auth", request(now.minusSeconds(1), now.plusSeconds(10))));
-        assertThrows(ApiException.class, () -> service.create("auth", request(now.plusSeconds(10), now.plusSeconds(10))));
+        CreateOrderRequest expired = request(now.minusSeconds(1), now.plusSeconds(10));
+        CreateOrderRequest notAfterExpiry = request(now.plusSeconds(10), now.plusSeconds(10));
+        assertThrows(ApiException.class, () -> service.create(requester, expired));
+        assertThrows(ApiException.class, () -> service.create(requester, notAfterExpiry));
         verify(credits, never()).reserve(any(), any(), anyInt(), any());
     }
 
     @Test
     void createReturnsCreditsWhenSavingFails() {
-        when(users.authenticate(any())).thenReturn(new UserAccount("requester@u.nus.edu", "requester@u.nus.edu", "requester"));
         when(suppliers.requirePlace(any(), any())).thenReturn(new Place("nus-coop", "NUS Co-op", 1.0, 103.0));
         when(ratings.ratingFor(any(), any())).thenReturn(5.0);
         when(orders.save(any())).thenThrow(new IllegalStateException("db down"));
 
-        assertThrows(IllegalStateException.class, () -> service.create("auth", request(now.plusSeconds(60), now.plusSeconds(120))));
+        CreateOrderRequest body = request(now.plusSeconds(60), now.plusSeconds(120));
+        assertThrows(IllegalStateException.class, () -> service.create(requester, body));
         verify(credits).returnReserved(any(), any());
     }
 
     @Test
     void createKeepsTheOriginalFailureWhenCompensationAlsoFails() {
-        when(users.authenticate(any())).thenReturn(new UserAccount("requester@u.nus.edu", "requester@u.nus.edu", "requester"));
         when(suppliers.requirePlace(any(), any())).thenReturn(new Place("nus-coop", "NUS Co-op", 1.0, 103.0));
         when(ratings.ratingFor(any(), any())).thenReturn(5.0);
         when(orders.save(any())).thenThrow(new IllegalStateException("db down"));
-        org.mockito.Mockito.doThrow(new IllegalStateException("credit down")).when(credits).returnReserved(any(), any());
+        doThrow(new IllegalStateException("credit down")).when(credits).returnReserved(any(), any());
 
+        CreateOrderRequest body = request(now.plusSeconds(60), now.plusSeconds(120));
         IllegalStateException failure = assertThrows(IllegalStateException.class,
-                () -> service.create("auth", request(now.plusSeconds(60), now.plusSeconds(120))));
+                () -> service.create(requester, body));
         assertEquals(1, failure.getSuppressed().length);
     }
 
     @Test
     void acceptClaimsAnOpenOrder() {
-        when(users.authenticate(any())).thenReturn(new UserAccount("courier@u.nus.edu", "courier@u.nus.edu", "courier"));
         when(ratings.ratingFor(eq("courier@u.nus.edu"), any())).thenReturn(4.0);
-        when(orders.acceptIfOpen(eq(id), eq(OrderStatus.CREATED), eq(OrderStatus.ACCEPTED), eq("courier@u.nus.edu"), eq("courier"), eq(4.0), any(), eq(now)))
+        when(orders.acceptIfOpen(eq(id), eq("courier@u.nus.edu"), eq("courier"), eq(4.0), any(), eq(now)))
                 .thenReturn(1);
         OrderEntity order = openOrder();
         order.setStatus(OrderStatus.ACCEPTED);
@@ -164,7 +163,7 @@ class OrderCommandServiceTest {
         order.setCourierRating(4.0);
         when(orders.findById(id)).thenReturn(Optional.of(order));
 
-        OrderEntity accepted = service.accept("auth", id);
+        OrderEntity accepted = service.accept(courier, id);
 
         assertEquals(OrderStatus.ACCEPTED, accepted.getStatus());
         assertEquals(4.0, accepted.getCourierRating());
@@ -172,41 +171,37 @@ class OrderCommandServiceTest {
 
     @Test
     void acceptReportsAMissingOrderAndAClaimedOrder() {
-        when(users.authenticate(any())).thenReturn(new UserAccount("courier@u.nus.edu", "courier@u.nus.edu", "courier"));
         when(ratings.ratingFor(any(), any())).thenReturn(5.0);
-        when(orders.acceptIfOpen(any(), any(), any(), any(), any(), anyDouble(), any(), any())).thenReturn(0);
+        when(orders.acceptIfOpen(any(), any(), any(), anyDouble(), any(), any())).thenReturn(0);
         when(orders.existsById(id)).thenReturn(false);
-        assertThrows(ApiException.class, () -> service.accept("auth", id));
+        assertThrows(ApiException.class, () -> service.accept(courier, id));
 
         when(orders.existsById(id)).thenReturn(true);
-        assertThrows(ApiException.class, () -> service.accept("auth", id));
+        assertThrows(ApiException.class, () -> service.accept(courier, id));
     }
 
     @Test
     void acceptFailsWhenTheRowDisappearsAfterTheClaim() {
-        when(users.authenticate(any())).thenReturn(new UserAccount("courier@u.nus.edu", "courier@u.nus.edu", "courier"));
         when(ratings.ratingFor(any(), any())).thenReturn(5.0);
-        when(orders.acceptIfOpen(any(), any(), any(), any(), any(), anyDouble(), any(), any())).thenReturn(1);
+        when(orders.acceptIfOpen(any(), any(), any(), anyDouble(), any(), any())).thenReturn(1);
         when(orders.findById(id)).thenReturn(Optional.empty());
-        assertThrows(ApiException.class, () -> service.accept("auth", id));
+        assertThrows(ApiException.class, () -> service.accept(courier, id));
     }
 
     @Test
     void requesterCancelsAnOpenOrderAndCourierReturnsAnAcceptedOne() {
-        when(users.authenticate("requester")).thenReturn(new UserAccount("requester@u.nus.edu", "requester@u.nus.edu", "requester"));
         OrderEntity open = openOrder();
         when(orders.lockById(id)).thenReturn(Optional.of(open));
-        assertEquals(OrderStatus.CANCELLED, service.cancel("requester", id).getStatus());
-        verify(credits).returnReserved(id, "requester");
+        assertEquals(OrderStatus.CANCELLED, service.cancel(requester, id).getStatus());
+        verify(credits).returnReserved(id, requester);
 
-        when(users.authenticate("courier")).thenReturn(new UserAccount("courier@u.nus.edu", "courier@u.nus.edu", "courier"));
         OrderEntity accepted = openOrder();
         accepted.setStatus(OrderStatus.ACCEPTED);
         accepted.setCourierEmail("courier@u.nus.edu");
         accepted.setCourierRating(5.0);
         accepted.setCollectionDeadline(now.plusSeconds(60));
         when(orders.lockById(id)).thenReturn(Optional.of(accepted));
-        OrderEntity returned = service.cancel("courier", id);
+        OrderEntity returned = service.cancel(courier, id);
         assertEquals(OrderStatus.CREATED, returned.getStatus());
         assertNull(returned.getCourierEmail());
         assertNull(returned.getCourierRating());
@@ -215,24 +210,22 @@ class OrderCommandServiceTest {
 
     @Test
     void cancelRejectsTheWrongActorAClosedWindowAndAMissingOrder() {
-        when(users.authenticate(any())).thenReturn(new UserAccount("other@u.nus.edu", "other@u.nus.edu", "other"));
         when(orders.lockById(id)).thenReturn(Optional.of(openOrder()));
-        assertThrows(ApiException.class, () -> service.cancel("auth", id));
+        assertThrows(ApiException.class, () -> service.cancel(other, id));
 
         OrderEntity late = openOrder();
         late.setStatus(OrderStatus.ACCEPTED);
         late.setCourierEmail("other@u.nus.edu");
         late.setCollectionDeadline(now.minusSeconds(1));
         when(orders.lockById(id)).thenReturn(Optional.of(late));
-        assertThrows(ApiException.class, () -> service.cancel("auth", id));
+        assertThrows(ApiException.class, () -> service.cancel(other, id));
 
         when(orders.lockById(id)).thenReturn(Optional.empty());
-        assertThrows(ApiException.class, () -> service.cancel("auth", id));
+        assertThrows(ApiException.class, () -> service.cancel(other, id));
     }
 
     @Test
     void collectAndDeliverStorePhotosForTheAssignedCourier() {
-        when(users.authenticate(any())).thenReturn(new UserAccount("courier@u.nus.edu", "courier@u.nus.edu", "courier"));
         OrderEntity accepted = openOrder();
         accepted.setStatus(OrderStatus.ACCEPTED);
         accepted.setCourierEmail("courier@u.nus.edu");
@@ -240,13 +233,13 @@ class OrderCommandServiceTest {
         when(orders.lockById(id)).thenReturn(Optional.of(accepted));
         when(photos.store(id, "collection", null)).thenReturn(id + "/collection.png");
 
-        OrderEntity collected = service.collect("auth", id, null);
+        OrderEntity collected = service.collect(courier, id, null);
         assertEquals(OrderStatus.COLLECTED, collected.getStatus());
         assertEquals(id + "/collection.png", collected.getCollectionPhotoRef());
         assertEquals(accepted.getDeliveryDeadline().plusSeconds(86_400), collected.getAcknowledgementDeadline());
 
         when(photos.store(id, "delivery", null)).thenReturn(id + "/delivery.png");
-        OrderEntity delivered = service.deliver("auth", id, null);
+        OrderEntity delivered = service.deliver(courier, id, null);
         assertEquals(OrderStatus.DELIVERED, delivered.getStatus());
         assertEquals(id + "/delivery.png", delivered.getDeliveryPhotoRef());
         verify(outboxRepository, org.mockito.Mockito.atLeastOnce()).save(any(OutboxEntity.class));
@@ -254,25 +247,24 @@ class OrderCommandServiceTest {
 
     @Test
     void collectRejectsTheWrongCourier() {
-        when(users.authenticate(any())).thenReturn(new UserAccount("other@u.nus.edu", "other@u.nus.edu", "other"));
         OrderEntity accepted = openOrder();
         accepted.setStatus(OrderStatus.ACCEPTED);
         accepted.setCourierEmail("courier@u.nus.edu");
         accepted.setCollectionDeadline(now.plusSeconds(30));
         when(orders.lockById(id)).thenReturn(Optional.of(accepted));
-        assertThrows(ApiException.class, () -> service.collect("auth", id, org.mockito.Mockito.mock(MultipartFile.class)));
+        MultipartFile photo = mock(MultipartFile.class);
+        assertThrows(ApiException.class, () -> service.collect(other, id, photo));
     }
 
     @Test
     void requesterAcknowledgesAndEscalates() {
-        when(users.authenticate(any())).thenReturn(new UserAccount("requester@u.nus.edu", "requester@u.nus.edu", "requester"));
         OrderEntity collected = openOrder();
         collected.setStatus(OrderStatus.COLLECTED);
         collected.setCourierEmail("courier@u.nus.edu");
         collected.setAcknowledgementDeadline(now.plusSeconds(60));
         when(orders.lockById(id)).thenReturn(Optional.of(collected));
 
-        OrderEntity acknowledged = service.acknowledge("auth", id);
+        OrderEntity acknowledged = service.acknowledge(requester, id);
         assertEquals(OrderStatus.ACKNOWLEDGED, acknowledged.getStatus());
         assertEquals(now, acknowledged.getSettledAt());
 
@@ -281,7 +273,7 @@ class OrderCommandServiceTest {
         delivered.setCourierEmail("courier@u.nus.edu");
         delivered.setAcknowledgementDeadline(now.plusSeconds(60));
         when(orders.lockById(id)).thenReturn(Optional.of(delivered));
-        OrderEntity withoutPhoto = service.escalate("auth", id, "  wrong item  ", new MockMultipartFile("photo", new byte[0]));
+        OrderEntity withoutPhoto = service.escalate(requester, id, "  wrong item  ", new MockMultipartFile("photo", new byte[0]));
         assertEquals(OrderStatus.ESCALATED, withoutPhoto.getStatus());
         assertEquals("wrong item", withoutPhoto.getDisputeText());
         assertNull(withoutPhoto.getDisputePhotoRef());
@@ -293,25 +285,24 @@ class OrderCommandServiceTest {
         when(orders.lockById(id)).thenReturn(Optional.of(pictured));
         MultipartFile photo = new MockMultipartFile("photo", "a.png", "image/png", new byte[]{1});
         when(photos.store(id, "dispute", photo)).thenReturn(id + "/dispute.png");
-        OrderEntity escalated = service.escalate("auth", id, "wrong item", photo);
+        OrderEntity escalated = service.escalate(requester, id, "wrong item", photo);
         assertEquals(id + "/dispute.png", escalated.getDisputePhotoRef());
         verify(admins).escalate(org.mockito.ArgumentMatchers.argThat(context ->
                 context.orderId().equals(id)
                         && "wrong item".equals(context.comment())
                         && "DELIVERED".equals(context.status())
                         && "courier@u.nus.edu".equals(context.courierEmail())
-                        && (id + "/dispute.png").equals(context.disputePhotoRef())), eq("auth"));
+                        && (id + "/dispute.png").equals(context.disputePhotoRef())), eq(requester));
     }
 
     @Test
     void acknowledgeAndEscalateRejectTheWrongPerson() {
-        when(users.authenticate(any())).thenReturn(new UserAccount("courier@u.nus.edu", "courier@u.nus.edu", "courier"));
         OrderEntity delivered = openOrder();
         delivered.setStatus(OrderStatus.DELIVERED);
         delivered.setAcknowledgementDeadline(now.plusSeconds(60));
         when(orders.lockById(id)).thenReturn(Optional.of(delivered));
-        assertThrows(ApiException.class, () -> service.acknowledge("auth", id));
-        assertThrows(ApiException.class, () -> service.escalate("auth", id, "dispute", null));
+        assertThrows(ApiException.class, () -> service.acknowledge(courier, id));
+        assertThrows(ApiException.class, () -> service.escalate(courier, id, "dispute", null));
     }
 
     @Test
@@ -362,6 +353,13 @@ class OrderCommandServiceTest {
         when(orders.lockById(id)).thenReturn(Optional.of(quiet));
         service.unacknowledge(id, now);
         assertEquals(OrderStatus.COLLECTED, quiet.getStatus());
+
+        OrderEntity collectedPastAck = openOrder();
+        collectedPastAck.setStatus(OrderStatus.COLLECTED);
+        collectedPastAck.setAcknowledgementDeadline(now.minusSeconds(1));
+        when(orders.lockById(id)).thenReturn(Optional.of(collectedPastAck));
+        service.unacknowledge(id, now);
+        assertEquals(OrderStatus.COLLECTED, collectedPastAck.getStatus());
 
         OrderEntity waiting = openOrder();
         waiting.setStatus(OrderStatus.DELIVERED);

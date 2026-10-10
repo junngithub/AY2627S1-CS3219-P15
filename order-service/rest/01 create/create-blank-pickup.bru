@@ -7,12 +7,15 @@ meta {
 post {
   url: {{baseUrl}}/api/v1/orders
   body: json
-  auth: bearer
+  auth: none
+}
+headers {
+  X-User-Id: create-blankpick@u.nus.edu
+  X-User-Email: create-blankpick@u.nus.edu
+  X-User-Telegram: create-blankpick
 }
 
-auth:bearer {
-  token: stub:create-blankpick@u.nus.edu
-}
+
 
 body:json {
   {

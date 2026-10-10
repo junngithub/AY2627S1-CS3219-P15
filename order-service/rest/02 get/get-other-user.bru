@@ -7,12 +7,15 @@ meta {
 get {
   url: {{baseUrl}}/api/v1/orders/{{orderId}}
   body: none
-  auth: bearer
+  auth: none
+}
+headers {
+  X-User-Id: get-stranger@u.nus.edu
+  X-User-Email: get-stranger@u.nus.edu
+  X-User-Telegram: get-stranger
 }
 
-auth:bearer {
-  token: stub:get-stranger@u.nus.edu
-}
+
 
 tests {
   test("status is 404", function() {

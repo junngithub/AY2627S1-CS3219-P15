@@ -7,12 +7,15 @@ meta {
 post {
   url: {{baseUrl}}/api/v1/orders/{{orderId}}/accept
   body: none
-  auth: bearer
+  auth: none
+}
+headers {
+  X-User-Id: ack-courier@u.nus.edu
+  X-User-Email: ack-courier@u.nus.edu
+  X-User-Telegram: ack-courier
 }
 
-auth:bearer {
-  token: stub:ack-courier@u.nus.edu
-}
+
 
 tests {
   test("status is 200", function() {

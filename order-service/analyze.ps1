@@ -19,6 +19,7 @@ docker run --rm `
     -v "order-service-m2:/root/.m2" `
     -w /usr/src/app `
     --add-host=host.docker.internal:host-gateway `
+    -e "JAVA_TOOL_OPTIONS=-Djava.net.preferIPv4Stack=true" `
     maven:3.9.11-eclipse-temurin-21 `
     mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:5.1.0.4751:sonar `
     "-Dsonar.host.url=http://host.docker.internal:9000" `

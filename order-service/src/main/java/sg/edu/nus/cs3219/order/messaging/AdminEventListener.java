@@ -38,8 +38,7 @@ public class AdminEventListener {
         } catch (IllegalArgumentException exception) {
             log.warn("Admin event was ignored because the order id was not a UUID");
         } catch (RuntimeException exception) {
-            log.warn("Admin event was not applied and will be retried", exception);
-            throw exception;
+            throw new IllegalStateException("Admin event was not applied and will be retried", exception);
         } catch (Exception exception) {
             log.warn("Admin event was ignored because it could not be read", exception);
         }

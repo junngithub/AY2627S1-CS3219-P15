@@ -2,8 +2,12 @@ package sg.edu.nus.cs3219.order.config;
 
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.method.HandlerTypePredicate;
+import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.servlet.config.annotation.PathMatchConfigurer;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+import sg.edu.nus.cs3219.order.rest.CallerArgumentResolver;
+
+import java.util.List;
 
 @Configuration
 public class ApiPathConfig implements WebMvcConfigurer {
@@ -19,5 +23,10 @@ public class ApiPathConfig implements WebMvcConfigurer {
         configurer.addPathPrefix(
                 properties.getApi().getBasePath(),
                 HandlerTypePredicate.forBasePackage("sg.edu.nus.cs3219.order.rest"));
+    }
+
+    @Override
+    public void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
+        resolvers.add(new CallerArgumentResolver());
     }
 }

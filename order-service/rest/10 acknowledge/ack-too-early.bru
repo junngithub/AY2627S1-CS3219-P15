@@ -7,12 +7,15 @@ meta {
 post {
   url: {{baseUrl}}/api/v1/orders/{{orderId}}/acknowledge
   body: none
-  auth: bearer
+  auth: none
+}
+headers {
+  X-User-Id: ack-open-req@u.nus.edu
+  X-User-Email: ack-open-req@u.nus.edu
+  X-User-Telegram: ack-open-req
 }
 
-auth:bearer {
-  token: stub:ack-open-req@u.nus.edu
-}
+
 
 tests {
   test("status is 409", function() {

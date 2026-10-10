@@ -10,7 +10,6 @@ import sg.edu.nus.cs3219.order.client.Place;
 import sg.edu.nus.cs3219.order.client.RatingClient;
 import sg.edu.nus.cs3219.order.client.SupplierClient;
 import sg.edu.nus.cs3219.order.client.UserAccount;
-import sg.edu.nus.cs3219.order.client.UserClient;
 import sg.edu.nus.cs3219.order.config.OrderProperties;
 import sg.edu.nus.cs3219.order.domain.OrderStateMachine;
 import sg.edu.nus.cs3219.order.domain.OrderStatus;
@@ -34,10 +33,11 @@ import java.util.UUID;
 @Service
 public class OrderCommandService {
 
+    private static final String ORDER_NOT_FOUND = "Order not found";
+
     private final OrderRepository orders;
     private final AlertRepository alerts;
     private final ProcessedEventRepository processedEvents;
-    private final UserClient users;
     private final CreditClient credits;
     private final SupplierClient suppliers;
     private final RatingClient ratings;
@@ -52,7 +52,6 @@ public class OrderCommandService {
             OrderRepository orders,
             AlertRepository alerts,
             ProcessedEventRepository processedEvents,
-            UserClient users,
             CreditClient credits,
             SupplierClient suppliers,
             RatingClient ratings,
@@ -66,7 +65,6 @@ public class OrderCommandService {
         this.orders = orders;
         this.alerts = alerts;
         this.processedEvents = processedEvents;
-        this.users = users;
         this.credits = credits;
         this.suppliers = suppliers;
         this.ratings = ratings;
@@ -79,7 +77,7 @@ public class OrderCommandService {
     }
 
     @Transactional
-    public OrderEntity create(String authorization, CreateOrderRequest request) {
+    public OrderEntity create(UserAccount requester, CreateOrderRequest request) {
         Instant now = clock.instant();
         if (!request.expiryTime().isAfter(now)) {
             throw ApiException.badRequest("Acceptance expiry must be after the current time");
@@ -87,13 +85,12 @@ public class OrderCommandService {
         if (!request.deliveryTime().isAfter(now) || !request.deliveryTime().isAfter(request.expiryTime())) {
             throw ApiException.badRequest("Delivery deadline must be after the current time and after acceptance expiry");
         }
-        UserAccount requester = users.authenticate(authorization);
-        Place pickup = suppliers.requirePlace(request.fromLocation(), authorization);
-        Place dropoff = suppliers.requirePlace(request.toLocation(), authorization);
-        double requesterRating = ratings.ratingFor(requester.userId(), authorization);
+        Place pickup = suppliers.requirePlace(request.fromLocation(), requester);
+        Place dropoff = suppliers.requirePlace(request.toLocation(), requester);
+        double requesterRating = ratings.ratingFor(requester.userId(), requester);
 
         UUID id = UUID.randomUUID();
-        credits.reserve(id, requester.userId(), request.credits(), authorization);
+        credits.reserve(id, requester.userId(), request.credits(), requester);
         try {
             OrderEntity order = new OrderEntity();
             order.setId(id);
@@ -121,7 +118,7 @@ public class OrderCommandService {
             return order;
         } catch (RuntimeException exception) {
             try {
-                credits.returnReserved(id, authorization);
+                credits.returnReserved(id, requester);
             } catch (RuntimeException compensate) {
                 exception.addSuppressed(compensate);
             }
@@ -130,15 +127,12 @@ public class OrderCommandService {
     }
 
     @Transactional
-    public OrderEntity accept(String authorization, UUID orderId) {
-        UserAccount courier = users.authenticate(authorization);
-        double courierRating = ratings.ratingFor(courier.userId(), authorization);
+    public OrderEntity accept(UserAccount courier, UUID orderId) {
+        double courierRating = ratings.ratingFor(courier.userId(), courier);
         Instant now = clock.instant();
         Instant collectionDeadline = now.plus(properties.getDeadlines().getCollectionWindow());
         int updated = orders.acceptIfOpen(
                 orderId,
-                OrderStatus.CREATED,
-                OrderStatus.ACCEPTED,
                 courier.email(),
                 courier.telegramHandle(),
                 courierRating,
@@ -147,7 +141,7 @@ public class OrderCommandService {
         );
         if (updated == 0) {
             if (!orders.existsById(orderId)) {
-                throw ApiException.notFound("Order not found");
+                throw ApiException.notFound(ORDER_NOT_FOUND);
             }
             throw ApiException.conflict("This task was already claimed");
         }
@@ -157,12 +151,11 @@ public class OrderCommandService {
     }
 
     @Transactional
-    public OrderEntity cancel(String authorization, UUID orderId) {
-        UserAccount actor = users.authenticate(authorization);
+    public OrderEntity cancel(UserAccount actor, UUID orderId) {
         Instant now = clock.instant();
         OrderEntity order = lock(orderId);
         if (order.getRequesterEmail().equalsIgnoreCase(actor.email()) && order.getStatus() == OrderStatus.CREATED) {
-            credits.returnReserved(orderId, authorization);
+            credits.returnReserved(orderId, actor);
             transition(order, OrderStatus.CANCELLED, true, now);
             return order;
         }
@@ -176,8 +169,7 @@ public class OrderCommandService {
     }
 
     @Transactional
-    public OrderEntity collect(String authorization, UUID orderId, MultipartFile photo) {
-        UserAccount courier = users.authenticate(authorization);
+    public OrderEntity collect(UserAccount courier, UUID orderId, MultipartFile photo) {
         Instant now = clock.instant();
         OrderEntity order = lock(orderId);
         OrderStateMachine.requireAccepted(order.snapshot());
@@ -190,8 +182,7 @@ public class OrderCommandService {
     }
 
     @Transactional
-    public OrderEntity deliver(String authorization, UUID orderId, MultipartFile photo) {
-        UserAccount courier = users.authenticate(authorization);
+    public OrderEntity deliver(UserAccount courier, UUID orderId, MultipartFile photo) {
         Instant now = clock.instant();
         OrderEntity order = lock(orderId);
         OrderStateMachine.requireCollected(order.snapshot());
@@ -209,8 +200,7 @@ public class OrderCommandService {
     }
 
     @Transactional
-    public OrderEntity acknowledge(String authorization, UUID orderId) {
-        UserAccount requester = users.authenticate(authorization);
+    public OrderEntity acknowledge(UserAccount requester, UUID orderId) {
         Instant now = clock.instant();
         OrderEntity order = lock(orderId);
         OrderStateMachine.requireRequester(order.snapshot(), requester.email());
@@ -222,8 +212,7 @@ public class OrderCommandService {
     }
 
     @Transactional
-    public OrderEntity escalate(String authorization, UUID orderId, String disputeText, MultipartFile photo) {
-        UserAccount requester = users.authenticate(authorization);
+    public OrderEntity escalate(UserAccount requester, UUID orderId, String disputeText, MultipartFile photo) {
         Instant now = clock.instant();
         OrderEntity order = lock(orderId);
         OrderStateMachine.requireRequester(order.snapshot(), requester.email());
@@ -232,7 +221,7 @@ public class OrderCommandService {
         if (photo != null && !photo.isEmpty()) {
             order.setDisputePhotoRef(photos.store(orderId, "dispute", photo));
         }
-        admins.escalate(orderContext(order, comment), authorization);
+        admins.escalate(orderContext(order, comment), requester);
         order.setDisputeText(comment);
         transition(order, OrderStatus.ESCALATED, true, now);
         return order;
@@ -271,9 +260,6 @@ public class OrderCommandService {
     @Transactional
     public void unacknowledge(UUID orderId, Instant now) {
         OrderEntity order = lock(orderId);
-        if (OrderStateMachine.deliveryMissed(order.snapshot(), now)) {
-            return;
-        }
         if (!OrderStateMachine.acknowledgementExpired(order.snapshot(), now)) {
             return;
         }
@@ -417,10 +403,10 @@ public class OrderCommandService {
     }
 
     private OrderEntity lock(UUID orderId) {
-        return orders.lockById(orderId).orElseThrow(() -> ApiException.notFound("Order not found"));
+        return orders.lockById(orderId).orElseThrow(() -> ApiException.notFound(ORDER_NOT_FOUND));
     }
 
     private OrderEntity require(UUID orderId) {
-        return orders.findById(orderId).orElseThrow(() -> ApiException.notFound("Order not found"));
+        return orders.findById(orderId).orElseThrow(() -> ApiException.notFound(ORDER_NOT_FOUND));
     }
 }

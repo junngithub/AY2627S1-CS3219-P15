@@ -7,12 +7,15 @@ meta {
 post {
   url: {{baseUrl}}/api/v1/orders
   body: json
-  auth: bearer
+  auth: none
+}
+headers {
+  X-User-Id: create-pastdel@u.nus.edu
+  X-User-Email: create-pastdel@u.nus.edu
+  X-User-Telegram: create-pastdel
 }
 
-auth:bearer {
-  token: stub:create-pastdel@u.nus.edu
-}
+
 
 body:json {
   {

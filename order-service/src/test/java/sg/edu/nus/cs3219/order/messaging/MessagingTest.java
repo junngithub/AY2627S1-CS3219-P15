@@ -23,7 +23,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -95,6 +98,38 @@ class MessagingTest {
     }
 
     @Test
+    void publishStopsWhenInterrupted() throws Exception {
+        OutboxRepository repository = mock(OutboxRepository.class);
+        @SuppressWarnings("unchecked")
+        KafkaTemplate<String, String> kafka = mock(KafkaTemplate.class);
+        KafkaOutboxPublisher publisher = new KafkaOutboxPublisher(repository, kafka, Clock.fixed(now, ZoneOffset.UTC));
+        OutboxEntity first = new OutboxEntity();
+        first.setId(UUID.randomUUID());
+        first.setTopic(KafkaTopics.ORDER_STATUS);
+        first.setMessageKey("one");
+        first.setPayload("{}");
+        OutboxEntity second = new OutboxEntity();
+        second.setId(UUID.randomUUID());
+        second.setTopic(KafkaTopics.ORDER_STATUS);
+        second.setMessageKey("two");
+        second.setPayload("{}");
+        when(repository.findTop50ByPublishedAtIsNullOrderByCreatedAtAsc()).thenReturn(List.of(first, second));
+        @SuppressWarnings("unchecked")
+        CompletableFuture<SendResult<String, String>> pending = mock(CompletableFuture.class);
+        when(pending.get(anyLong(), any())).thenThrow(new InterruptedException("stop"));
+        when(kafka.send(any(), any(), any())).thenReturn(pending);
+
+        try {
+            publisher.publishPending();
+            assertTrue(Thread.currentThread().isInterrupted());
+            verify(kafka, times(1)).send(any(), any(), any());
+            assertEquals(null, first.getPublishedAt());
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    @Test
     void adminListenerAppliesReadableEventsAndDropsTheRest() {
         OrderCommandService commands = mock(OrderCommandService.class);
         AdminEventListener listener = new AdminEventListener(mapper, commands);
@@ -105,7 +140,7 @@ class MessagingTest {
         listener.onMessage("{");
         listener.onMessage("{\"eventId\":\"e2\",\"eventType\":\"admin.review.started\",\"orderId\":\"not-a-uuid\",\"caseId\":\"case-1\"}");
         listener.onMessage("{\"eventId\":\" \",\"eventType\":\"admin.review.started\",\"orderId\":\"" + orderId + "\",\"caseId\":null}");
-        org.mockito.Mockito.doThrow(new IllegalStateException("retry")).when(commands)
+        doThrow(new IllegalStateException("retry")).when(commands)
                 .applyAdminEvent("e3", "admin.case.resolved", orderId, "case-2");
         assertThrows(IllegalStateException.class, () -> listener.onMessage(
                 "{\"eventId\":\"e3\",\"eventType\":\"admin.case.resolved\",\"orderId\":\"" + orderId + "\",\"caseId\":\"case-2\"}"));
@@ -122,7 +157,7 @@ class MessagingTest {
         assertEquals(KafkaTopics.ADMIN_COMMANDS, config.adminCommandTopic(properties).name());
         assertEquals(KafkaTopics.ORDER_STATUS, config.orderStatusTopic(properties).name());
         assertEquals(3, config.adminEventTopic(properties).numPartitions());
-        assertEquals(KafkaTopics.ADMIN_EVENTS, KafkaTopics.ADMIN_EVENTS);
+        assertEquals(KafkaTopics.ADMIN_EVENTS, config.adminEventTopic(properties).name());
     }
 
     private OrderEntity order() {

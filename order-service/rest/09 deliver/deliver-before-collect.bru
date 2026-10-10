@@ -6,16 +6,19 @@ meta {
 
 post {
   url: {{baseUrl}}/api/v1/orders/{{orderId}}/deliver
-  body: multipart-form
-  auth: bearer
+  body: multipartForm
+  auth: none
+}
+headers {
+  X-User-Id: deliver-courier@u.nus.edu
+  X-User-Email: deliver-courier@u.nus.edu
+  X-User-Telegram: deliver-courier
 }
 
-auth:bearer {
-  token: stub:deliver-courier@u.nus.edu
-}
+
 
 body:multipart-form {
-  photo: @file(../fixtures/proof.png)
+  photo: @file(C:\Users\varun\Downloads\My Timetable (5).png) @contentType(image/png)
 }
 
 tests {
@@ -24,4 +27,3 @@ tests {
     expect(res.getBody().error).to.include("has not been collected");
   });
 }
-

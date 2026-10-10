@@ -52,7 +52,7 @@ public class DeadlineSweeper implements SchedulingConfigurer {
         runEach(orders.findCollectionWindowExpired(OrderStatus.ACCEPTED, now), id -> commands.revertCollectionWindow(id, now));
         runEach(orders.findAcceptanceExpired(OrderStatus.CREATED, now), id -> commands.expire(id, now));
         runEach(orders.findDeliveryMissed(OrderStatus.COLLECTED, now), id -> commands.escalateMissedDelivery(id, now));
-        runEach(orders.findAcknowledgementExpired(List.of(OrderStatus.COLLECTED, OrderStatus.DELIVERED), now), id -> commands.unacknowledge(id, now));
+        runEach(orders.findAcknowledgementExpired(List.of(OrderStatus.DELIVERED), now), id -> commands.unacknowledge(id, now));
         Instant settledBefore = now.minus(properties.getDeadlines().getCompletionWindow());
         runEach(orders.findReadyToComplete(List.of(OrderStatus.ACKNOWLEDGED, OrderStatus.UNACKNOWLEDGED), settledBefore), id -> commands.completeSettled(id, now));
         try {

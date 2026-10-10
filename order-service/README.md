@@ -35,7 +35,7 @@ docker compose exec kafka-tools bash /defaults/send.sh admin.case.resolved <orde
 
 `kafka/messages/` holds the default payloads. `send.sh` fills a new `eventId` and replaces the sample order id when you pass one.
 
-Until the other services exist, `order.clients.mode` is `stub`. Sign in with `Authorization: Bearer stub:you@u.nus.edu`. Approved pickup and dropoff ids are `annas`, `nus-coop`, `printer-com2`, `cool-spot`, `instachef`, and `robot-cafe`.
+Until the other services exist, `order.clients.mode` is `stub`. The API gateway is expected to decode the JWT and send `X-User-Id`, `X-User-Email`, and `X-User-Telegram`. Bruno sends those headers directly. Approved pickup and dropoff ids are `annas`, `nus-coop`, `printer-com2`, `cool-spot`, `instachef`, and `robot-cafe`.
 
 ## Images
 

@@ -13,7 +13,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -49,6 +49,6 @@ class DeadlineSweeperTest {
         verify(commands).escalateMissedDelivery(fine, now);
         verify(commands).unacknowledge(fine, now);
         verify(commands).completeSettled(fine, now);
-        assertFalse(OrderStatus.values().length == 0);
+        assertNotEquals(0, OrderStatus.values().length);
     }
 }

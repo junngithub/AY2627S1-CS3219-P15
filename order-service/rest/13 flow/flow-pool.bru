@@ -7,12 +7,15 @@ meta {
 get {
   url: {{baseUrl}}/api/v1/orders?latitude=1.2968&longitude=103.7733
   body: none
-  auth: bearer
+  auth: none
+}
+headers {
+  X-User-Id: flow-courier@u.nus.edu
+  X-User-Email: flow-courier@u.nus.edu
+  X-User-Telegram: flow-courier
 }
 
-auth:bearer {
-  token: stub:flow-courier@u.nus.edu
-}
+
 
 tests {
   test("status is 200", function() {

@@ -7,12 +7,15 @@ meta {
 post {
   url: {{baseUrl}}/api/v1/orders
   body: json
-  auth: bearer
+  auth: none
+}
+headers {
+  X-User-Id: create-ok@u.nus.edu
+  X-User-Email: create-ok@u.nus.edu
+  X-User-Telegram: create-ok
 }
 
-auth:bearer {
-  token: stub:create-ok@u.nus.edu
-}
+
 
 body:json {
   {
@@ -25,6 +28,11 @@ body:json {
   }
 }
 
+vars:pre-request {
+  acceptanceExpiry: 2026-09-30T00:00:00Z
+  deliveryDeadline: 2026-09-31T00:00:00Z
+}
+
 script:post-response {
   bru.setVar("orderId", res.getBody().id);
 }
@@ -35,4 +43,3 @@ tests {
     expect(res.getBody().status).to.equal("CREATED");
   });
 }
-

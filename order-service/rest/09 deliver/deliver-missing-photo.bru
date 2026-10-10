@@ -6,13 +6,16 @@ meta {
 
 post {
   url: {{baseUrl}}/api/v1/orders/{{orderId}}/deliver
-  body: multipart-form
-  auth: bearer
+  body: multipartForm
+  auth: none
+}
+headers {
+  X-User-Id: deliver-nophoto-courier@u.nus.edu
+  X-User-Email: deliver-nophoto-courier@u.nus.edu
+  X-User-Telegram: deliver-nophoto-courier
 }
 
-auth:bearer {
-  token: stub:deliver-nophoto-courier@u.nus.edu
-}
+
 
 body:multipart-form {
   note: missing
@@ -24,4 +27,3 @@ tests {
     expect(res.getBody().error).to.include("photo is required");
   });
 }
-

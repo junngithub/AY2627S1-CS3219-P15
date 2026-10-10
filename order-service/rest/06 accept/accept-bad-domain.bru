@@ -7,12 +7,9 @@ meta {
 post {
   url: {{baseUrl}}/api/v1/orders/{{orderId}}/accept
   body: none
-  auth: bearer
+  auth: none
 }
 
-auth:bearer {
-  token: stub:not-a-student
-}
 
 tests {
   test("status is 401", function() {

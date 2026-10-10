@@ -7,12 +7,15 @@ meta {
 post {
   url: {{baseUrl}}/api/v1/orders/{{orderId}}/escalate
   body: multipart-form
-  auth: bearer
+  auth: none
+}
+headers {
+  X-User-Id: esc-photo-req@u.nus.edu
+  X-User-Email: esc-photo-req@u.nus.edu
+  X-User-Telegram: esc-photo-req
 }
 
-auth:bearer {
-  token: stub:esc-photo-req@u.nus.edu
-}
+
 
 body:multipart-form {
   disputeText: The courier delivered the wrong item

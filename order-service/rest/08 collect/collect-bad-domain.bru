@@ -6,16 +6,13 @@ meta {
 
 post {
   url: {{baseUrl}}/api/v1/orders/{{orderId}}/collect
-  body: multipart-form
-  auth: bearer
+  body: multipartForm
+  auth: none
 }
 
-auth:bearer {
-  token: stub:not-a-student
-}
 
 body:multipart-form {
-  photo: @file(../fixtures/proof.png)
+  photo: @file(C:\Users\varun\Downloads\My Timetable (5).png) @contentType(image/png)
 }
 
 tests {
@@ -24,4 +21,3 @@ tests {
     expect(res.getBody().error).to.include("Sign in is required");
   });
 }
-

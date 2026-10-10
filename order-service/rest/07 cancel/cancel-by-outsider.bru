@@ -7,12 +7,15 @@ meta {
 post {
   url: {{baseUrl}}/api/v1/orders/{{orderId}}/cancel
   body: none
-  auth: bearer
+  auth: none
+}
+headers {
+  X-User-Id: cancel-outsider@u.nus.edu
+  X-User-Email: cancel-outsider@u.nus.edu
+  X-User-Telegram: cancel-outsider
 }
 
-auth:bearer {
-  token: stub:cancel-outsider@u.nus.edu
-}
+
 
 tests {
   test("status is 409", function() {

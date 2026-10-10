@@ -6,16 +6,23 @@ meta {
 
 post {
   url: {{baseUrl}}/api/v1/orders/{{orderId}}/collect
-  body: multipart-form
-  auth: bearer
+  body: multipartForm
+  auth: none
+}
+headers {
+  X-User-Id: collect-courier@u.nus.edu
+  X-User-Email: collect-courier@u.nus.edu
+  X-User-Telegram: collect-courier
 }
 
-auth:bearer {
-  token: stub:collect-courier@u.nus.edu
-}
+
 
 body:multipart-form {
-  photo: @file(../fixtures/proof.png)
+  photo: @file(C:\Users\varun\Pictures\Screenshots\Screenshot 2023-07-26 180036.png) @contentType(image/png)
+}
+
+body:file {
+  file: @file(C:\Users\varun\Pictures\Screenshots\Screenshot 2023-08-01 094225.png) @contentType(image/png)
 }
 
 tests {
@@ -24,4 +31,3 @@ tests {
     expect(res.getBody().status).to.equal("COLLECTED");
   });
 }
-

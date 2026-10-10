@@ -11,7 +11,10 @@ WORKDIR /app
 COPY --from=build /app/target/app.jar /app/app.jar
 RUN groupadd --system app && useradd --system --gid app app \
     && mkdir -p /app/photos \
-    && chown app:app /app/app.jar /app/photos
+    && chown app:app /app/app.jar /app/photos \
+    && rm -f /usr/bin/pebble
 USER app
 EXPOSE 8083
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+  CMD ["curl", "-fsS", "http://127.0.0.1:8083/actuator/health"]
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

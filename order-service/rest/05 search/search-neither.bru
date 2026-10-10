@@ -7,12 +7,15 @@ meta {
 get {
   url: {{baseUrl}}/api/v1/orders/search
   body: none
-  auth: bearer
+  auth: none
+}
+headers {
+  X-User-Id: search-courier@u.nus.edu
+  X-User-Email: search-courier@u.nus.edu
+  X-User-Telegram: search-courier
 }
 
-auth:bearer {
-  token: stub:search-courier@u.nus.edu
-}
+
 
 tests {
   test("status is 400", function() {

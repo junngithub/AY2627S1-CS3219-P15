@@ -24,18 +24,18 @@ public interface OrderRepository extends JpaRepository<OrderEntity, UUID> {
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             update OrderEntity o
-            set o.status = :accepted,
+            set o.status = sg.edu.nus.cs3219.order.domain.OrderStatus.ACCEPTED,
                 o.courierEmail = :courierEmail,
                 o.courierTelegramHandle = :courierTelegramHandle,
                 o.courierRating = :courierRating,
                 o.collectionDeadline = :collectionDeadline,
                 o.updatedAt = :updatedAt
-            where o.id = :id and o.status = :created and o.courierEmail is null
+            where o.id = :id
+              and o.status = sg.edu.nus.cs3219.order.domain.OrderStatus.CREATED
+              and o.courierEmail is null
             """)
     int acceptIfOpen(
             @Param("id") UUID id,
-            @Param("created") OrderStatus created,
-            @Param("accepted") OrderStatus accepted,
             @Param("courierEmail") String courierEmail,
             @Param("courierTelegramHandle") String courierTelegramHandle,
             @Param("courierRating") Double courierRating,

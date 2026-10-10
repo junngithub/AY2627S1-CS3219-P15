@@ -15,6 +15,10 @@ public class ApiException extends RuntimeException {
         return status;
     }
 
+    public String getCode() {
+        return status.name();
+    }
+
     public static ApiException unauthorized(String message) {
         return new ApiException(HttpStatus.UNAUTHORIZED, message);
     }

@@ -4,7 +4,7 @@ import java.util.UUID;
 
 public interface CreditClient {
 
-    void reserve(UUID orderId, String requesterId, int amount, String authorization);
+    void reserve(UUID orderId, String requesterId, int amount, UserAccount caller);
 
-    void returnReserved(UUID orderId, String authorization);
+    void returnReserved(UUID orderId, UserAccount caller);
 }

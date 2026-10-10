@@ -31,6 +31,10 @@ public class KafkaOutboxPublisher {
                 kafka.send(row.getTopic(), row.getMessageKey(), row.getPayload()).get(5, TimeUnit.SECONDS);
                 row.setPublishedAt(clock.instant());
                 outbox.save(row);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                log.warn("Kafka publish was interrupted for outbox {}; it will be retried", row.getId(), exception);
+                return;
             } catch (Exception exception) {
                 log.warn("Kafka publish failed for outbox {}; it will be retried", row.getId(), exception);
             }

@@ -16,14 +16,20 @@ public class OpenApiConfig {
         return new OpenAPI()
                 .info(new Info()
                         .title("Order Service")
-                        .description("Friend on Campus errand orders. Local sign-in is a bearer token of the form stub:you@u.nus.edu.")
+                        .description("Friend on Campus errand orders. The API gateway decodes the JWT and sends X-User-Id, X-User-Email, and X-User-Telegram.")
                         .version("v1"))
-                .addSecurityItem(new SecurityRequirement().addList("bearer"))
-                .components(new Components().addSecuritySchemes("bearer", new SecurityScheme()
-                        .name("bearer")
-                        .type(SecurityScheme.Type.HTTP)
-                        .scheme("bearer")
-                        .bearerFormat("stub")
-                        .description("Bearer stub:you@u.nus.edu")));
+                .addSecurityItem(new SecurityRequirement().addList(CallerHeaders.USER_ID).addList(CallerHeaders.EMAIL))
+                .components(new Components()
+                        .addSecuritySchemes(CallerHeaders.USER_ID, header(CallerHeaders.USER_ID, "User id taken from the JWT."))
+                        .addSecuritySchemes(CallerHeaders.EMAIL, header(CallerHeaders.EMAIL, "Email taken from the JWT."))
+                        .addSecuritySchemes(CallerHeaders.TELEGRAM, header(CallerHeaders.TELEGRAM, "Telegram handle taken from the JWT. Optional.")));
+    }
+
+    private static SecurityScheme header(String name, String description) {
+        return new SecurityScheme()
+                .name(name)
+                .type(SecurityScheme.Type.APIKEY)
+                .in(SecurityScheme.In.HEADER)
+                .description(description);
     }
 }

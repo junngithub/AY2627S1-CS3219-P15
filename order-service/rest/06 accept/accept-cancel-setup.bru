@@ -7,12 +7,15 @@ meta {
 post {
   url: {{baseUrl}}/api/v1/orders
   body: json
-  auth: bearer
+  auth: none
+}
+headers {
+  X-User-Id: accept-cancel-req@u.nus.edu
+  X-User-Email: accept-cancel-req@u.nus.edu
+  X-User-Telegram: accept-cancel-req
 }
 
-auth:bearer {
-  token: stub:accept-cancel-req@u.nus.edu
-}
+
 
 body:json {
   {

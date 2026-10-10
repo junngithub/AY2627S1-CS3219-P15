@@ -41,17 +41,22 @@ class PhotoStoreTest {
         store.delete(null);
         store.delete(" ");
 
+        MockMultipartFile empty = file("image/jpeg", new byte[0]);
+        MockMultipartFile untyped = file(null, new byte[]{1});
+        MockMultipartFile gif = file("image/gif", new byte[]{1});
         assertThrows(ApiException.class, () -> store.store(orderId, "collection", null));
-        assertThrows(ApiException.class, () -> store.store(orderId, "collection", file("image/jpeg", new byte[0])));
-        assertThrows(ApiException.class, () -> store.store(orderId, "collection", file(null, new byte[]{1})));
-        assertThrows(ApiException.class, () -> store.store(orderId, "collection", file("image/gif", new byte[]{1})));
+        assertThrows(ApiException.class, () -> store.store(orderId, "collection", empty));
+        assertThrows(ApiException.class, () -> store.store(orderId, "collection", untyped));
+        assertThrows(ApiException.class, () -> store.store(orderId, "collection", gif));
     }
 
     @Test
     void fileStoreReportsStorageFailures() throws Exception {
         Path file = Files.createTempFile("not-a-directory", ".bin");
         FilePhotoStore blocked = new FilePhotoStore(properties(file.toString()));
-        assertThrows(ApiException.class, () -> blocked.store(UUID.randomUUID(), "collection", file("image/jpeg", new byte[]{1})));
+        UUID blockedOrder = UUID.randomUUID();
+        MockMultipartFile photo = file("image/jpeg", new byte[]{1});
+        assertThrows(ApiException.class, () -> blocked.store(blockedOrder, "collection", photo));
 
         Path root = Files.createTempDirectory("order-photos");
         Path nested = root.resolve("nested");
@@ -75,7 +80,8 @@ class PhotoStoreTest {
 
         doThrow(S3Exception.builder().message("down").statusCode(500).build())
                 .when(s3).putObject(any(PutObjectRequest.class), any(RequestBody.class));
-        assertThrows(ApiException.class, () -> store.store(orderId, "collection", file("image/jpeg", new byte[]{1})));
+        MockMultipartFile photo = file("image/jpeg", new byte[]{1});
+        assertThrows(ApiException.class, () -> store.store(orderId, "collection", photo));
         doThrow(S3Exception.builder().message("down").statusCode(500).build())
                 .when(s3).deleteObject(any(DeleteObjectRequest.class));
         assertThrows(ApiException.class, () -> store.delete("ref"));

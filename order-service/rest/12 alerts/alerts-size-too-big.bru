@@ -7,12 +7,15 @@ meta {
 get {
   url: {{baseUrl}}/api/v1/orders/alerts?size=1001
   body: none
-  auth: bearer
+  auth: none
+}
+headers {
+  X-User-Id: alerts-req@u.nus.edu
+  X-User-Email: alerts-req@u.nus.edu
+  X-User-Telegram: alerts-req
 }
 
-auth:bearer {
-  token: stub:alerts-req@u.nus.edu
-}
+
 
 tests {
   test("status is 400", function() {

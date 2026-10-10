@@ -6,16 +6,19 @@ meta {
 
 post {
   url: {{baseUrl}}/api/v1/orders/{{orderId}}/collect
-  body: multipart-form
-  auth: bearer
+  body: multipartForm
+  auth: none
+}
+headers {
+  X-User-Id: collect-type-courier@u.nus.edu
+  X-User-Email: collect-type-courier@u.nus.edu
+  X-User-Telegram: collect-type-courier
 }
 
-auth:bearer {
-  token: stub:collect-type-courier@u.nus.edu
-}
+
 
 body:multipart-form {
-  photo: @file(../fixtures/notes.txt)
+  photo: @file(C:\Users\varun\Downloads\FoC_API_Contract.md) @contentType(text/markdown; charset=utf-8)
 }
 
 tests {
@@ -24,4 +27,3 @@ tests {
     expect(res.getBody().error).to.include("JPEG, PNG, or WebP");
   });
 }
-

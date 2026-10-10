@@ -7,12 +7,9 @@ meta {
 post {
   url: {{baseUrl}}/api/v1/orders
   body: json
-  auth: bearer
+  auth: none
 }
 
-auth:bearer {
-  token: stub:not-a-student
-}
 
 body:json {
   {
@@ -25,10 +22,14 @@ body:json {
   }
 }
 
+vars:pre-request {
+  acceptanceExpiry: 2026-09-30T00:00:00Z
+  deliveryDeadline: 2026-09-31T00:00:00Z
+}
+
 tests {
   test("status is 401", function() {
     expect(res.getStatus()).to.equal(401);
     expect(res.getBody().error).to.include("Sign in is required");
   });
 }
-

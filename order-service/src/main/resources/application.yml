@@ -14,8 +14,9 @@ spring:
       max-file-size: 10MB
       max-request-size: 12MB
   jackson:
-    serialization:
-      write-dates-as-timestamps: false
+    datatype:
+      datetime:
+        write-dates-as-timestamps: false
   kafka:
     consumer:
       group-id: order-service

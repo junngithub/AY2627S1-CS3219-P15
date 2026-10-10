@@ -7,12 +7,15 @@ meta {
 post {
   url: {{baseUrl}}/api/v1/orders/{{orderId}}/cancel
   body: none
-  auth: bearer
+  auth: none
+}
+headers {
+  X-User-Id: cancel-late-req@u.nus.edu
+  X-User-Email: cancel-late-req@u.nus.edu
+  X-User-Telegram: cancel-late-req
 }
 
-auth:bearer {
-  token: stub:cancel-late-req@u.nus.edu
-}
+
 
 tests {
   test("status is 409", function() {

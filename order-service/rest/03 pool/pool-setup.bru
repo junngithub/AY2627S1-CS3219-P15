@@ -7,12 +7,15 @@ meta {
 post {
   url: {{baseUrl}}/api/v1/orders
   body: json
-  auth: bearer
+  auth: none
+}
+headers {
+  X-User-Id: pool-req@u.nus.edu
+  X-User-Email: pool-req@u.nus.edu
+  X-User-Telegram: pool-req
 }
 
-auth:bearer {
-  token: stub:pool-req@u.nus.edu
-}
+
 
 body:json {
   {
@@ -35,4 +38,3 @@ tests {
     expect(res.getBody().status).to.equal("CREATED");
   });
 }
-

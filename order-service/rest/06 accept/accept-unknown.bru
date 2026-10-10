@@ -7,12 +7,15 @@ meta {
 post {
   url: {{baseUrl}}/api/v1/orders/00000000-0000-0000-0000-000000000001/accept
   body: none
-  auth: bearer
+  auth: none
+}
+headers {
+  X-User-Id: accept-courier@u.nus.edu
+  X-User-Email: accept-courier@u.nus.edu
+  X-User-Telegram: accept-courier
 }
 
-auth:bearer {
-  token: stub:accept-courier@u.nus.edu
-}
+
 
 tests {
   test("status is 404", function() {

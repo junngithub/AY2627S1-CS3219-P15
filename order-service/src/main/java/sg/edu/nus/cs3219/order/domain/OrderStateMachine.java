@@ -74,7 +74,7 @@ public final class OrderStateMachine {
     }
 
     public static boolean acknowledgementExpired(OrderSnapshot order, Instant now) {
-        return (order.status() == OrderStatus.COLLECTED || order.status() == OrderStatus.DELIVERED)
+        return order.status() == OrderStatus.DELIVERED
                 && order.acknowledgementDeadline() != null
                 && !now.isBefore(order.acknowledgementDeadline());
     }

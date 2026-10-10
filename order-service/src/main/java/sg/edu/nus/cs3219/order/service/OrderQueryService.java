@@ -7,7 +7,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import sg.edu.nus.cs3219.order.client.SupplierClient;
 import sg.edu.nus.cs3219.order.client.UserAccount;
-import sg.edu.nus.cs3219.order.client.UserClient;
 import sg.edu.nus.cs3219.order.config.OrderProperties;
 import sg.edu.nus.cs3219.order.domain.OrderStatus;
 import sg.edu.nus.cs3219.order.domain.ProximityRanker;
@@ -26,27 +25,23 @@ public class OrderQueryService {
 
     private final OrderRepository orders;
     private final AlertRepository alerts;
-    private final UserClient users;
     private final SupplierClient suppliers;
     private final OrderProperties properties;
 
     public OrderQueryService(
             OrderRepository orders,
             AlertRepository alerts,
-            UserClient users,
             SupplierClient suppliers,
             OrderProperties properties
     ) {
         this.orders = orders;
         this.alerts = alerts;
-        this.users = users;
         this.suppliers = suppliers;
         this.properties = properties;
     }
 
     @Transactional(readOnly = true)
-    public OrderEntity get(String authorization, UUID orderId) {
-        UserAccount actor = users.authenticate(authorization);
+    public OrderEntity get(UserAccount actor, UUID orderId) {
         OrderEntity order = orders.findById(orderId).orElseThrow(() -> ApiException.notFound("Order not found"));
         boolean requester = order.getRequesterEmail().equalsIgnoreCase(actor.email());
         boolean courier = order.getCourierEmail() != null && order.getCourierEmail().equalsIgnoreCase(actor.email());
@@ -57,8 +52,7 @@ public class OrderQueryService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<OrderEntity> pool(String authorization, Double latitude, Double longitude, int page, int size) {
-        UserAccount actor = users.authenticate(authorization);
+    public PageResponse<OrderEntity> pool(UserAccount actor, Double latitude, Double longitude, int page, int size) {
         requirePage(page, size);
         if (size == 0) {
             return PageResponse.empty(page, size);
@@ -94,8 +88,7 @@ public class OrderQueryService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<OrderEntity> mine(String authorization, int page, int size) {
-        UserAccount actor = users.authenticate(authorization);
+    public PageResponse<OrderEntity> mine(UserAccount actor, int page, int size) {
         requirePage(page, size);
         if (size == 0) {
             return PageResponse.empty(page, size);
@@ -108,17 +101,16 @@ public class OrderQueryService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<OrderEntity> search(String authorization, String pickupLocationId, String dropoffLocationId, int page, int size) {
-        UserAccount actor = users.authenticate(authorization);
+    public PageResponse<OrderEntity> search(UserAccount actor, String pickupLocationId, String dropoffLocationId, int page, int size) {
         requirePage(page, size);
         if ((pickupLocationId == null || pickupLocationId.isBlank()) && (dropoffLocationId == null || dropoffLocationId.isBlank())) {
             throw ApiException.badRequest("Provide a pickup location or a dropoff location");
         }
         if (pickupLocationId != null && !pickupLocationId.isBlank()) {
-            suppliers.requirePlace(pickupLocationId, authorization);
+            suppliers.requirePlace(pickupLocationId, actor);
         }
         if (dropoffLocationId != null && !dropoffLocationId.isBlank()) {
-            suppliers.requirePlace(dropoffLocationId, authorization);
+            suppliers.requirePlace(dropoffLocationId, actor);
         }
         if (size == 0) {
             return PageResponse.empty(page, size);
@@ -134,8 +126,7 @@ public class OrderQueryService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<AlertEntity> alerts(String authorization, int page, int size) {
-        UserAccount actor = users.authenticate(authorization);
+    public PageResponse<AlertEntity> alerts(UserAccount actor, int page, int size) {
         requirePage(page, size);
         if (size == 0) {
             return PageResponse.empty(page, size);

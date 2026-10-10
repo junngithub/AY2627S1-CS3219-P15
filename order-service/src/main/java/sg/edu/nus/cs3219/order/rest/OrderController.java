@@ -8,11 +8,11 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import sg.edu.nus.cs3219.order.client.UserAccount;
 import sg.edu.nus.cs3219.order.service.OrderCommandService;
 import sg.edu.nus.cs3219.order.service.OrderQueryService;
 
@@ -32,110 +32,83 @@ public class OrderController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public OrderResponse create(
-            @RequestHeader(value = "Authorization", required = false) String authorization,
-            @Valid @RequestBody CreateOrderRequest request
-    ) {
-        return OrderResponse.from(commands.create(authorization, request));
+    public OrderResponse create(UserAccount caller, @Valid @RequestBody CreateOrderRequest request) {
+        return OrderResponse.from(commands.create(caller, request));
     }
 
     @GetMapping("/{orderId}")
-    public OrderResponse get(
-            @RequestHeader(value = "Authorization", required = false) String authorization,
-            @PathVariable UUID orderId
-    ) {
-        return OrderResponse.from(queries.get(authorization, orderId));
+    public OrderResponse get(UserAccount caller, @PathVariable UUID orderId) {
+        return OrderResponse.from(queries.get(caller, orderId));
     }
 
     @PostMapping("/{orderId}/accept")
-    public OrderResponse accept(
-            @RequestHeader(value = "Authorization", required = false) String authorization,
-            @PathVariable UUID orderId
-    ) {
-        return OrderResponse.from(commands.accept(authorization, orderId));
+    public OrderResponse accept(UserAccount caller, @PathVariable UUID orderId) {
+        return OrderResponse.from(commands.accept(caller, orderId));
     }
 
     @PostMapping("/{orderId}/cancel")
-    public OrderResponse cancel(
-            @RequestHeader(value = "Authorization", required = false) String authorization,
-            @PathVariable UUID orderId
-    ) {
-        return OrderResponse.from(commands.cancel(authorization, orderId));
+    public OrderResponse cancel(UserAccount caller, @PathVariable UUID orderId) {
+        return OrderResponse.from(commands.cancel(caller, orderId));
     }
 
     @PostMapping(value = "/{orderId}/collect", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public OrderResponse collect(
-            @RequestHeader(value = "Authorization", required = false) String authorization,
-            @PathVariable UUID orderId,
-            @RequestParam("photo") MultipartFile photo
-    ) {
-        return OrderResponse.from(commands.collect(authorization, orderId, photo));
+    public OrderResponse collect(UserAccount caller, @PathVariable UUID orderId, @RequestParam("photo") MultipartFile photo) {
+        return OrderResponse.from(commands.collect(caller, orderId, photo));
     }
 
     @PostMapping(value = "/{orderId}/deliver", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public OrderResponse deliver(
-            @RequestHeader(value = "Authorization", required = false) String authorization,
-            @PathVariable UUID orderId,
-            @RequestParam("photo") MultipartFile photo
-    ) {
-        return OrderResponse.from(commands.deliver(authorization, orderId, photo));
+    public OrderResponse deliver(UserAccount caller, @PathVariable UUID orderId, @RequestParam("photo") MultipartFile photo) {
+        return OrderResponse.from(commands.deliver(caller, orderId, photo));
     }
 
     @PostMapping("/{orderId}/acknowledge")
-    public OrderResponse acknowledge(
-            @RequestHeader(value = "Authorization", required = false) String authorization,
-            @PathVariable UUID orderId
-    ) {
-        return OrderResponse.from(commands.acknowledge(authorization, orderId));
+    public OrderResponse acknowledge(UserAccount caller, @PathVariable UUID orderId) {
+        return OrderResponse.from(commands.acknowledge(caller, orderId));
     }
 
     @PostMapping(value = "/{orderId}/escalate", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public OrderResponse escalate(
-            @RequestHeader(value = "Authorization", required = false) String authorization,
-            @PathVariable UUID orderId,
-            @Valid @RequestBody EscalateRequest request
-    ) {
-        return OrderResponse.from(commands.escalate(authorization, orderId, request.disputeText(), null));
+    public OrderResponse escalate(UserAccount caller, @PathVariable UUID orderId, @Valid @RequestBody EscalateRequest request) {
+        return OrderResponse.from(commands.escalate(caller, orderId, request.disputeText(), null));
     }
 
     @PostMapping(value = "/{orderId}/escalate", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public OrderResponse escalateWithPhoto(
-            @RequestHeader(value = "Authorization", required = false) String authorization,
+            UserAccount caller,
             @PathVariable UUID orderId,
             @RequestParam("disputeText") String disputeText,
             @RequestParam(value = "photo", required = false) MultipartFile photo
     ) {
-        return OrderResponse.from(commands.escalate(authorization, orderId, disputeText, photo));
+        return OrderResponse.from(commands.escalate(caller, orderId, disputeText, photo));
     }
 
     @GetMapping
     public PageResponse<OrderResponse> pool(
-            @RequestHeader(value = "Authorization", required = false) String authorization,
+            UserAccount caller,
             @RequestParam(required = false) Double latitude,
             @RequestParam(required = false) Double longitude,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
-        return queries.pool(authorization, latitude, longitude, page, size).map(OrderResponse::from);
+        return queries.pool(caller, latitude, longitude, page, size).map(OrderResponse::from);
     }
 
     @GetMapping("/mine")
     public PageResponse<OrderResponse> mine(
-            @RequestHeader(value = "Authorization", required = false) String authorization,
+            UserAccount caller,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
-        return queries.mine(authorization, page, size).map(OrderResponse::from);
+        return queries.mine(caller, page, size).map(OrderResponse::from);
     }
 
     @GetMapping("/search")
     public PageResponse<OrderResponse> search(
-            @RequestHeader(value = "Authorization", required = false) String authorization,
+            UserAccount caller,
             @RequestParam(required = false) String pickupLocationId,
             @RequestParam(required = false) String dropoffLocationId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
-        return queries.search(authorization, pickupLocationId, dropoffLocationId, page, size).map(OrderResponse::from);
+        return queries.search(caller, pickupLocationId, dropoffLocationId, page, size).map(OrderResponse::from);
     }
 }

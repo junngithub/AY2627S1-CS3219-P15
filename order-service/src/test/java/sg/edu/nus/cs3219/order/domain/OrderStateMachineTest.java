@@ -6,6 +6,7 @@ import sg.edu.nus.cs3219.order.rest.ApiException;
 import java.time.Instant;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -18,9 +19,9 @@ class OrderStateMachineTest {
     @Test
     void collectIsOnlyAllowedFromAcceptedByTheAssignedCourier() {
         OrderSnapshot order = snapshot(OrderStatus.ACCEPTED, "courier@u.nus.edu", now.plusSeconds(60), now.plusSeconds(3600));
-        OrderStateMachine.requireAccepted(order);
-        OrderStateMachine.requireCourier(order, "courier@u.nus.edu");
-        OrderStateMachine.requireBefore(order.collectionDeadline(), now, "closed");
+        assertDoesNotThrow(() -> OrderStateMachine.requireAccepted(order));
+        assertDoesNotThrow(() -> OrderStateMachine.requireCourier(order, "courier@u.nus.edu"));
+        assertDoesNotThrow(() -> OrderStateMachine.requireBefore(order.collectionDeadline(), now, "closed"));
     }
 
     @Test
@@ -79,7 +80,8 @@ class OrderStateMachineTest {
     void everyGuardRejectsTheWrongState() {
         OrderSnapshot created = snapshot(OrderStatus.CREATED, null, now.plusSeconds(60), now.plusSeconds(3600));
         OrderStateMachine.requireCreated(created);
-        assertThrows(ApiException.class, () -> OrderStateMachine.requireCreated(snapshot(OrderStatus.ACCEPTED, "c@u.nus.edu", now, now)));
+        OrderSnapshot accepted = snapshot(OrderStatus.ACCEPTED, "c@u.nus.edu", now, now);
+        assertThrows(ApiException.class, () -> OrderStateMachine.requireCreated(accepted));
         assertThrows(ApiException.class, () -> OrderStateMachine.requireAccepted(created));
         assertThrows(ApiException.class, () -> OrderStateMachine.requireCollected(created));
         assertThrows(ApiException.class, () -> OrderStateMachine.requireCourier(created, "c@u.nus.edu"));
@@ -96,7 +98,8 @@ class OrderStateMachineTest {
         OrderSnapshot expired = new OrderSnapshot(created.id(), OrderStatus.CREATED, created.requesterEmail(), null, now.minusSeconds(1), now, now, now, null);
         assertTrue(OrderStateMachine.acceptanceExpired(expired, now));
         assertFalse(OrderStateMachine.acceptanceExpired(created, now));
-        assertTrue(OrderStateMachine.acknowledgementExpired(snapshot(OrderStatus.COLLECTED, "c@u.nus.edu", now, now.minusSeconds(1)), now.plusSeconds(90_000)));
+        assertFalse(OrderStateMachine.acknowledgementExpired(snapshot(OrderStatus.COLLECTED, "c@u.nus.edu", now, now.minusSeconds(1)), now.plusSeconds(90_000)));
+        assertTrue(OrderStateMachine.acknowledgementExpired(snapshot(OrderStatus.DELIVERED, "c@u.nus.edu", now, now.minusSeconds(1)), now.plusSeconds(90_000)));
         assertFalse(OrderStateMachine.acknowledgementExpired(created, now));
     }
 
