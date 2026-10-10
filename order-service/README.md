@@ -49,4 +49,4 @@ docker compose -f compose.local.yaml up -d
 .\analyze.ps1
 ```
 
-Start SonarQube with Docker. `analyze.ps1` only reruns the scan, and it reads the token already saved in `.sonar/token`. SonarQube is at [http://localhost:9000](http://localhost:9000). Log in as `admin` / `admin`.
+Start SonarQube with Docker. `analyze.ps1` only reruns the scan, and it reads the token already saved in `.sonar/token`. SonarQube is at [http://localhost:9000](http://localhost:9000).
