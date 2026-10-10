@@ -1,0 +1,25 @@
+meta {
+  name: Page size zero
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/v1/orders?size=0
+  body: none
+  auth: none
+}
+headers {
+  X-User-Id: 55e91d50-3a78-3c3e-b310-e45f09a6b4e7
+  X-User-Telegram: pool-courier
+}
+
+
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().content.length).to.equal(0);
+  });
+}
+

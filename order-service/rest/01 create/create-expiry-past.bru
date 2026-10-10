@@ -1,0 +1,36 @@
+meta {
+  name: Acceptance expiry in the past
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders
+  body: json
+  auth: none
+}
+headers {
+  X-User-Id: 500168c2-fddf-3a47-9b09-ac2894ffc67d
+  X-User-Telegram: create-pastexp
+}
+
+
+
+body:json {
+  {
+    "itemDescription": "Print notes",
+    "credits": 1,
+    "expiryTime": "{{past}}",
+    "deliveryTime": "{{deliveryDeadline}}",
+    "fromLocation": "2",
+    "toLocation": "4"
+  }
+}
+
+tests {
+  test("status is 400", function() {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().error).to.include("Acceptance expiry");
+  });
+}
+

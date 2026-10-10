@@ -1,0 +1,36 @@
+meta {
+  name: Amount is not a number
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders
+  body: json
+  auth: none
+}
+headers {
+  X-User-Id: 0bcd20b7-1811-3efd-be69-7c68b356434c
+  X-User-Telegram: create-nan
+}
+
+
+
+body:json {
+  {
+    "itemDescription": "Print notes",
+    "credits": "abc",
+    "expiryTime": "{{acceptanceExpiry}}",
+    "deliveryTime": "{{deliveryDeadline}}",
+    "fromLocation": "2",
+    "toLocation": "4"
+  }
+}
+
+tests {
+  test("status is 400", function() {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().error).to.include("could not be read");
+  });
+}
+

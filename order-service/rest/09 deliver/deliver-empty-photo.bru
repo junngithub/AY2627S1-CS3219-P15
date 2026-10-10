@@ -1,0 +1,29 @@
+meta {
+  name: Empty photo
+  type: http
+  seq: 18
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/deliver
+  body: multipart-form
+  auth: none
+}
+headers {
+  X-User-Id: 5990f59f-83d1-3d7b-8a36-ab852cea17f4
+  X-User-Telegram: deliver-empty-courier
+}
+
+
+
+body:multipart-form {
+  photo: @file(../fixtures/empty.png)
+}
+
+tests {
+  test("status is 400", function() {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().error).to.include("photo is required");
+  });
+}
+

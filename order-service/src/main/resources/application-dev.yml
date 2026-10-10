@@ -1,0 +1,21 @@
+# App container on the compose network. Activate with SPRING_PROFILES_ACTIVE=dev.
+# Values come from the environment. Local Compose reads them from order-service/.env.
+spring:
+  datasource:
+    url: ${ORDER_DB_URL}
+    username: ${ORDER_DB_USERNAME}
+    password: ${ORDER_DB_PASSWORD}
+  kafka:
+    bootstrap-servers: ${ORDER_KAFKA_BOOTSTRAP_SERVERS}
+
+order:
+  api:
+    base-path: /api/v1/orders
+  photos:
+    mode: s3
+    endpoint: ${ORDER_PHOTOS_ENDPOINT}
+    bucket: ${ORDER_PHOTOS_BUCKET}
+    region: ${ORDER_PHOTOS_REGION}
+    access-key: ${ORDER_PHOTOS_ACCESS_KEY}
+    secret-key: ${ORDER_PHOTOS_SECRET_KEY}
+    path-style: ${ORDER_PHOTOS_PATH_STYLE}

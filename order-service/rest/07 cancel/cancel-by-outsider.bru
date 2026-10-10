@@ -1,0 +1,25 @@
+meta {
+  name: Someone else cannot cancel
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/cancel
+  body: none
+  auth: none
+}
+headers {
+  X-User-Id: 24b1f21b-d994-35e8-8a4c-b4fecb5a463e
+  X-User-Telegram: cancel-outsider
+}
+
+
+
+tests {
+  test("status is 409", function() {
+    expect(res.getStatus()).to.equal(409);
+    expect(res.getBody().error).to.include("cannot be cancelled");
+  });
+}
+

@@ -1,0 +1,36 @@
+meta {
+  name: Unknown pickup location
+  type: http
+  seq: 17
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders
+  body: json
+  auth: none
+}
+headers {
+  X-User-Id: 7e22afb1-c1e7-33fe-a8cf-f53d04986f88
+  X-User-Telegram: create-badpick
+}
+
+
+
+body:json {
+  {
+    "itemDescription": "Print notes",
+    "credits": 1,
+    "expiryTime": "{{acceptanceExpiry}}",
+    "deliveryTime": "{{deliveryDeadline}}",
+    "fromLocation": "nowhere",
+    "toLocation": "4"
+  }
+}
+
+tests {
+  test("status is 400", function() {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().error).to.include("approved supplier");
+  });
+}
+

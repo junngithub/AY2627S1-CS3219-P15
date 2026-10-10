@@ -1,0 +1,25 @@
+meta {
+  name: Accept wrong courier
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/accept
+  body: none
+  auth: none
+}
+headers {
+  X-User-Id: c7b4e605-509d-34a4-843e-8cfcb10342bf
+  X-User-Telegram: deliver-owner
+}
+
+
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().status).to.equal("ACCEPTED");
+  });
+}
+

@@ -1,0 +1,19 @@
+meta {
+  name: pool missing auth
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/api/v1/orders
+  body: none
+  auth: none
+}
+
+tests {
+  test("status is 401", function() {
+    expect(res.getStatus()).to.equal(401);
+    expect(res.getBody().error).to.include("Sign in is required");
+  });
+}
+

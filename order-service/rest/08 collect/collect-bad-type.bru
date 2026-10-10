@@ -1,0 +1,28 @@
+meta {
+  name: Photo is not an image
+  type: http
+  seq: 17
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/collect
+  body: multipartForm
+  auth: none
+}
+headers {
+  X-User-Id: 521fca70-3948-3f5f-9f72-3b255428d701
+  X-User-Telegram: collect-type-courier
+}
+
+
+
+body:multipart-form {
+  photo: @file(C:\Users\varun\Downloads\FoC_API_Contract.md) @contentType(text/markdown; charset=utf-8)
+}
+
+tests {
+  test("status is 400", function() {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().error).to.include("JPEG, PNG, or WebP");
+  });
+}

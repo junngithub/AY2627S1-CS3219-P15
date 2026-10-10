@@ -1,0 +1,12 @@
+meta {
+  name: Order Service
+}
+
+script:pre-request {
+  const now = Date.now();
+  bru.setVar("acceptanceExpiry", new Date(now + 2 * 60 * 60 * 1000).toISOString());
+  bru.setVar("deliveryDeadline", new Date(now + 5 * 60 * 60 * 1000).toISOString());
+  bru.setVar("past", new Date(now - 60 * 60 * 1000).toISOString());
+  bru.setVar("longText", "a".repeat(501));
+  bru.setVar("longDispute", "d".repeat(2001));
+}

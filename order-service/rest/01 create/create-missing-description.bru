@@ -1,0 +1,35 @@
+meta {
+  name: Missing item description
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders
+  body: json
+  auth: none
+}
+headers {
+  X-User-Id: 436edaee-6eb6-31f1-a4ad-1ed62c27dc20
+  X-User-Telegram: create-nodesc
+}
+
+
+
+body:json {
+  {
+    "credits": 1,
+    "expiryTime": "{{acceptanceExpiry}}",
+    "deliveryTime": "{{deliveryDeadline}}",
+    "fromLocation": "2",
+    "toLocation": "4"
+  }
+}
+
+tests {
+  test("status is 400", function() {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().error).to.include("itemDescription");
+  });
+}
+

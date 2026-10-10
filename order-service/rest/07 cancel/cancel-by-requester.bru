@@ -1,0 +1,25 @@
+meta {
+  name: Requester cancels an open order
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/cancel
+  body: none
+  auth: none
+}
+headers {
+  X-User-Id: d1faee64-e1d8-3395-b337-b80d72e6524c
+  X-User-Telegram: cancel-req
+}
+
+
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().status).to.equal("CANCELLED");
+  });
+}
+

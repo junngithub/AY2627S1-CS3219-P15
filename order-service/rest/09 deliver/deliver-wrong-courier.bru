@@ -1,0 +1,28 @@
+meta {
+  name: Another courier delivers
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/deliver
+  body: multipartForm
+  auth: none
+}
+headers {
+  X-User-Id: 0af191d7-bce1-31d0-8cde-6e77f939896d
+  X-User-Telegram: deliver-stranger
+}
+
+
+
+body:multipart-form {
+  photo: @file(C:\Users\varun\Downloads\My Timetable (5).png) @contentType(image/png)
+}
+
+tests {
+  test("status is 409", function() {
+    expect(res.getStatus()).to.equal(409);
+    expect(res.getBody().error).to.include("assigned courier");
+  });
+}

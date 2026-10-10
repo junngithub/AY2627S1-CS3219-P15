@@ -1,0 +1,28 @@
+meta {
+  name: Collect missing photo
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/collect
+  body: multipartForm
+  auth: none
+}
+headers {
+  X-User-Id: 2d5665ff-4e77-35d5-aa22-abc4cdb9ba99
+  X-User-Telegram: deliver-nophoto-courier
+}
+
+
+
+body:multipart-form {
+  photo: @file(C:\Users\varun\Downloads\My Timetable (5).png) @contentType(image/png)
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().status).to.equal("COLLECTED");
+  });
+}

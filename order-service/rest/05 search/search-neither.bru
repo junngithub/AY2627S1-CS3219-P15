@@ -1,0 +1,25 @@
+meta {
+  name: Search without a location
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/v1/orders/search
+  body: none
+  auth: none
+}
+headers {
+  X-User-Id: 9b0a5f6e-d310-3b6f-b835-2e728c774dab
+  X-User-Telegram: search-courier
+}
+
+
+
+tests {
+  test("status is 400", function() {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().error).to.include("pickup location or a dropoff");
+  });
+}
+

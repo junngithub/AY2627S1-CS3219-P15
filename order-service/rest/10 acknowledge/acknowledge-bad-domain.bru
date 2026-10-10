@@ -1,0 +1,20 @@
+meta {
+  name: acknowledge missing user id
+  type: http
+  seq: 18
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/acknowledge
+  body: none
+  auth: none
+}
+
+
+tests {
+  test("status is 401", function() {
+    expect(res.getStatus()).to.equal(401);
+    expect(res.getBody().error).to.include("Sign in is required");
+  });
+}
+

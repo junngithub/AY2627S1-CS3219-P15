@@ -1,0 +1,28 @@
+meta {
+  name: Photo part is missing
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/collect
+  body: multipartForm
+  auth: none
+}
+headers {
+  X-User-Id: 6ed0c42b-6a7d-33cc-84a6-f0560694469e
+  X-User-Telegram: collect-nophoto-courier
+}
+
+
+
+body:multipart-form {
+  note: missing
+}
+
+tests {
+  test("status is 400", function() {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().error).to.include("photo is required");
+  });
+}
