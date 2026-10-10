@@ -19,14 +19,14 @@ public class OrderEntity {
     @Id
     private UUID id;
 
-    @Column(name = "requester_email", nullable = false)
-    private String requesterEmail;
+    @Column(name = "requester_id", nullable = false)
+    private String requesterId;
 
     @Column(name = "requester_telegram_handle")
     private String requesterTelegramHandle;
 
-    @Column(name = "courier_email")
-    private String courierEmail;
+    @Column(name = "courier_id")
+    private String courierId;
 
     @Column(name = "courier_telegram_handle")
     private String courierTelegramHandle;
@@ -114,8 +114,8 @@ public class OrderEntity {
         return new OrderSnapshot(
                 id,
                 status,
-                requesterEmail,
-                courierEmail,
+                requesterId,
+                courierId,
                 acceptanceExpiry,
                 deliveryDeadline,
                 collectionDeadline,
@@ -132,12 +132,12 @@ public class OrderEntity {
         this.id = id;
     }
 
-    public String getRequesterEmail() {
-        return requesterEmail;
+    public String getRequesterId() {
+        return requesterId;
     }
 
-    public void setRequesterEmail(String requesterEmail) {
-        this.requesterEmail = requesterEmail;
+    public void setRequesterId(String requesterId) {
+        this.requesterId = requesterId;
     }
 
     public String getRequesterTelegramHandle() {
@@ -148,12 +148,12 @@ public class OrderEntity {
         this.requesterTelegramHandle = requesterTelegramHandle;
     }
 
-    public String getCourierEmail() {
-        return courierEmail;
+    public String getCourierId() {
+        return courierId;
     }
 
-    public void setCourierEmail(String courierEmail) {
-        this.courierEmail = courierEmail;
+    public void setCourierId(String courierId) {
+        this.courierId = courierId;
     }
 
     public String getCourierTelegramHandle() {

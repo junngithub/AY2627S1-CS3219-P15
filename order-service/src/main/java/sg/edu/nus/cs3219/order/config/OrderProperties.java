@@ -183,21 +183,12 @@ public class OrderProperties {
     }
 
     public static class Clients {
-        private String mode = "stub";
         private Duration timeout = Duration.ofSeconds(2);
         private String userBaseUrl = "http://user-service:8080";
         private String creditBaseUrl = "http://credit-service:8080";
         private String supplierBaseUrl = "http://supplier-service:8080";
         private String ratingBaseUrl = "http://rating-service:8080";
         private String adminBaseUrl = "http://admin-service:8080";
-
-        public String getMode() {
-            return mode;
-        }
-
-        public void setMode(String mode) {
-            this.mode = mode;
-        }
 
         public Duration getTimeout() {
             return timeout;

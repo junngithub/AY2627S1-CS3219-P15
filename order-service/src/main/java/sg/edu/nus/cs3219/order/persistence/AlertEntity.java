@@ -18,8 +18,8 @@ public class AlertEntity {
     @Column(name = "order_id", nullable = false)
     private UUID orderId;
 
-    @Column(name = "requester_email", nullable = false)
-    private String requesterEmail;
+    @Column(name = "requester_id", nullable = false)
+    private String requesterId;
 
     @Column(name = "from_status")
     private String fromStatus;
@@ -49,12 +49,12 @@ public class AlertEntity {
         this.orderId = orderId;
     }
 
-    public String getRequesterEmail() {
-        return requesterEmail;
+    public String getRequesterId() {
+        return requesterId;
     }
 
-    public void setRequesterEmail(String requesterEmail) {
-        this.requesterEmail = requesterEmail;
+    public void setRequesterId(String requesterId) {
+        this.requesterId = requesterId;
     }
 
     public String getFromStatus() {

@@ -56,9 +56,9 @@ class OrderCommandServiceTest {
 
     private final Instant now = Instant.parse("2026-10-02T04:00:00Z");
     private final UUID id = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
-    private final UserAccount requester = new UserAccount("requester@u.nus.edu", "requester@u.nus.edu", "requester");
-    private final UserAccount courier = new UserAccount("courier@u.nus.edu", "courier@u.nus.edu", "courier");
-    private final UserAccount other = new UserAccount("other@u.nus.edu", "other@u.nus.edu", "other");
+    private final UserAccount requester = new UserAccount("11111111-1111-1111-1111-111111111111", "requester");
+    private final UserAccount courier = new UserAccount("22222222-2222-2222-2222-222222222222", "courier");
+    private final UserAccount other = new UserAccount("33333333-3333-3333-3333-333333333333", "other");
 
     @Mock private OrderRepository orders;
     @Mock private AlertRepository alerts;
@@ -94,7 +94,7 @@ class OrderCommandServiceTest {
     void createReservesCreditsAndStoresTheOrder() {
         when(suppliers.requirePlace(eq("nus-coop"), any())).thenReturn(new Place("nus-coop", "NUS Co-op", 1.29, 103.77));
         when(suppliers.requirePlace(eq("cool-spot"), any())).thenReturn(new Place("cool-spot", "Cool Spot", 1.30, 103.78));
-        when(ratings.ratingFor(eq("requester@u.nus.edu"), any())).thenReturn(4.5);
+        when(ratings.ratingFor(eq("11111111-1111-1111-1111-111111111111"), any())).thenReturn(4.5);
         when(orders.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         OrderEntity created = service.create(requester, new CreateOrderRequest(
@@ -114,7 +114,7 @@ class OrderCommandServiceTest {
         OrderResponse response = OrderResponse.from(created);
         assertEquals("NUS Co-op", response.pickupName());
         assertEquals("Cool Spot", response.dropoffName());
-        verify(credits).reserve(created.getId(), "requester@u.nus.edu", 8, requester);
+        verify(credits).reserve(created.getId(), "11111111-1111-1111-1111-111111111111", 8, requester);
         verify(alerts).save(any(AlertEntity.class));
         verify(outboxRepository).save(any(OutboxEntity.class));
     }
@@ -154,12 +154,12 @@ class OrderCommandServiceTest {
 
     @Test
     void acceptClaimsAnOpenOrder() {
-        when(ratings.ratingFor(eq("courier@u.nus.edu"), any())).thenReturn(4.0);
-        when(orders.acceptIfOpen(eq(id), eq("courier@u.nus.edu"), eq("courier"), eq(4.0), any(), eq(now)))
+        when(ratings.ratingFor(eq("22222222-2222-2222-2222-222222222222"), any())).thenReturn(4.0);
+        when(orders.acceptIfOpen(eq(id), eq("22222222-2222-2222-2222-222222222222"), eq("courier"), eq(4.0), any(), eq(now)))
                 .thenReturn(1);
         OrderEntity order = openOrder();
         order.setStatus(OrderStatus.ACCEPTED);
-        order.setCourierEmail("courier@u.nus.edu");
+        order.setCourierId("22222222-2222-2222-2222-222222222222");
         order.setCourierRating(4.0);
         when(orders.findById(id)).thenReturn(Optional.of(order));
 
@@ -197,13 +197,13 @@ class OrderCommandServiceTest {
 
         OrderEntity accepted = openOrder();
         accepted.setStatus(OrderStatus.ACCEPTED);
-        accepted.setCourierEmail("courier@u.nus.edu");
+        accepted.setCourierId("22222222-2222-2222-2222-222222222222");
         accepted.setCourierRating(5.0);
         accepted.setCollectionDeadline(now.plusSeconds(60));
         when(orders.lockById(id)).thenReturn(Optional.of(accepted));
         OrderEntity returned = service.cancel(courier, id);
         assertEquals(OrderStatus.CREATED, returned.getStatus());
-        assertNull(returned.getCourierEmail());
+        assertNull(returned.getCourierId());
         assertNull(returned.getCourierRating());
         assertNull(returned.getCollectionDeadline());
     }
@@ -215,7 +215,7 @@ class OrderCommandServiceTest {
 
         OrderEntity late = openOrder();
         late.setStatus(OrderStatus.ACCEPTED);
-        late.setCourierEmail("other@u.nus.edu");
+        late.setCourierId("33333333-3333-3333-3333-333333333333");
         late.setCollectionDeadline(now.minusSeconds(1));
         when(orders.lockById(id)).thenReturn(Optional.of(late));
         assertThrows(ApiException.class, () -> service.cancel(other, id));
@@ -228,7 +228,7 @@ class OrderCommandServiceTest {
     void collectAndDeliverStorePhotosForTheAssignedCourier() {
         OrderEntity accepted = openOrder();
         accepted.setStatus(OrderStatus.ACCEPTED);
-        accepted.setCourierEmail("courier@u.nus.edu");
+        accepted.setCourierId("22222222-2222-2222-2222-222222222222");
         accepted.setCollectionDeadline(now.plusSeconds(30));
         when(orders.lockById(id)).thenReturn(Optional.of(accepted));
         when(photos.store(id, "collection", null)).thenReturn(id + "/collection.png");
@@ -249,7 +249,7 @@ class OrderCommandServiceTest {
     void collectRejectsTheWrongCourier() {
         OrderEntity accepted = openOrder();
         accepted.setStatus(OrderStatus.ACCEPTED);
-        accepted.setCourierEmail("courier@u.nus.edu");
+        accepted.setCourierId("22222222-2222-2222-2222-222222222222");
         accepted.setCollectionDeadline(now.plusSeconds(30));
         when(orders.lockById(id)).thenReturn(Optional.of(accepted));
         MultipartFile photo = mock(MultipartFile.class);
@@ -260,7 +260,7 @@ class OrderCommandServiceTest {
     void requesterAcknowledgesAndEscalates() {
         OrderEntity collected = openOrder();
         collected.setStatus(OrderStatus.COLLECTED);
-        collected.setCourierEmail("courier@u.nus.edu");
+        collected.setCourierId("22222222-2222-2222-2222-222222222222");
         collected.setAcknowledgementDeadline(now.plusSeconds(60));
         when(orders.lockById(id)).thenReturn(Optional.of(collected));
 
@@ -270,7 +270,7 @@ class OrderCommandServiceTest {
 
         OrderEntity delivered = openOrder();
         delivered.setStatus(OrderStatus.DELIVERED);
-        delivered.setCourierEmail("courier@u.nus.edu");
+        delivered.setCourierId("22222222-2222-2222-2222-222222222222");
         delivered.setAcknowledgementDeadline(now.plusSeconds(60));
         when(orders.lockById(id)).thenReturn(Optional.of(delivered));
         OrderEntity withoutPhoto = service.escalate(requester, id, "  wrong item  ", new MockMultipartFile("photo", new byte[0]));
@@ -280,7 +280,7 @@ class OrderCommandServiceTest {
 
         OrderEntity pictured = openOrder();
         pictured.setStatus(OrderStatus.DELIVERED);
-        pictured.setCourierEmail("courier@u.nus.edu");
+        pictured.setCourierId("22222222-2222-2222-2222-222222222222");
         pictured.setAcknowledgementDeadline(now.plusSeconds(60));
         when(orders.lockById(id)).thenReturn(Optional.of(pictured));
         MultipartFile photo = new MockMultipartFile("photo", "a.png", "image/png", new byte[]{1});
@@ -291,7 +291,7 @@ class OrderCommandServiceTest {
                 context.orderId().equals(id)
                         && "wrong item".equals(context.comment())
                         && "DELIVERED".equals(context.status())
-                        && "courier@u.nus.edu".equals(context.courierEmail())
+                        && "22222222-2222-2222-2222-222222222222".equals(context.courierId())
                         && (id + "/dispute.png").equals(context.disputePhotoRef())), eq(requester));
     }
 
@@ -309,7 +309,7 @@ class OrderCommandServiceTest {
     void deadlineSweepChangesOnlyTheOrdersThatQualify() {
         OrderEntity accepted = openOrder();
         accepted.setStatus(OrderStatus.ACCEPTED);
-        accepted.setCourierEmail("courier@u.nus.edu");
+        accepted.setCourierId("22222222-2222-2222-2222-222222222222");
         accepted.setCollectionDeadline(now.minusSeconds(1));
         when(orders.lockById(id)).thenReturn(Optional.of(accepted));
         service.revertCollectionWindow(id, now);
@@ -333,7 +333,7 @@ class OrderCommandServiceTest {
 
         OrderEntity missed = openOrder();
         missed.setStatus(OrderStatus.COLLECTED);
-        missed.setCourierEmail("courier@u.nus.edu");
+        missed.setCourierId("22222222-2222-2222-2222-222222222222");
         missed.setDeliveryDeadline(now.minusSeconds(1));
         missed.setCollectionPhotoRef(id + "/collection.png");
         missed.setDeliveryPhotoRef(id + "/delivery.png");
@@ -370,7 +370,7 @@ class OrderCommandServiceTest {
 
         OrderEntity forgotten = openOrder();
         forgotten.setStatus(OrderStatus.DELIVERED);
-        forgotten.setCourierEmail("courier@u.nus.edu");
+        forgotten.setCourierId("22222222-2222-2222-2222-222222222222");
         forgotten.setAcknowledgementDeadline(now.minusSeconds(1));
         when(orders.lockById(id)).thenReturn(Optional.of(forgotten));
         service.unacknowledge(id, now);
@@ -452,7 +452,7 @@ class OrderCommandServiceTest {
     private OrderEntity openOrder() {
         OrderEntity order = new OrderEntity();
         order.setId(id);
-        order.setRequesterEmail("requester@u.nus.edu");
+        order.setRequesterId("11111111-1111-1111-1111-111111111111");
         order.setRequesterTelegramHandle("requester");
         order.setRequesterRating(5.0);
         order.setItemDescription("Print notes");

@@ -25,18 +25,18 @@ public interface OrderRepository extends JpaRepository<OrderEntity, UUID> {
     @Query("""
             update OrderEntity o
             set o.status = sg.edu.nus.cs3219.order.domain.OrderStatus.ACCEPTED,
-                o.courierEmail = :courierEmail,
+                o.courierId = :courierId,
                 o.courierTelegramHandle = :courierTelegramHandle,
                 o.courierRating = :courierRating,
                 o.collectionDeadline = :collectionDeadline,
                 o.updatedAt = :updatedAt
             where o.id = :id
               and o.status = sg.edu.nus.cs3219.order.domain.OrderStatus.CREATED
-              and o.courierEmail is null
+              and o.courierId is null
             """)
     int acceptIfOpen(
             @Param("id") UUID id,
-            @Param("courierEmail") String courierEmail,
+            @Param("courierId") String courierId,
             @Param("courierTelegramHandle") String courierTelegramHandle,
             @Param("courierRating") Double courierRating,
             @Param("collectionDeadline") Instant collectionDeadline,
@@ -46,13 +46,13 @@ public interface OrderRepository extends JpaRepository<OrderEntity, UUID> {
     @Query("""
             select o from OrderEntity o
             where o.status = :status
-              and o.requesterEmail <> :email
+              and o.requesterId <> :requesterId
               and o.pickupLat between :minLat and :maxLat
               and o.pickupLng between :minLng and :maxLng
             """)
     List<OrderEntity> findOpenInBox(
             @Param("status") OrderStatus status,
-            @Param("email") String email,
+            @Param("requesterId") String requesterId,
             @Param("minLat") double minLat,
             @Param("maxLat") double maxLat,
             @Param("minLng") double minLng,
@@ -62,19 +62,19 @@ public interface OrderRepository extends JpaRepository<OrderEntity, UUID> {
     @Query("""
             select o from OrderEntity o
             where o.status = :status
-              and o.requesterEmail <> :email
+              and o.requesterId <> :requesterId
               and (:pickupId is null or o.pickupLocationId = :pickupId)
               and (:dropoffId is null or o.dropoffLocationId = :dropoffId)
             """)
     Page<OrderEntity> searchOpen(
             @Param("status") OrderStatus status,
-            @Param("email") String email,
+            @Param("requesterId") String requesterId,
             @Param("pickupId") String pickupId,
             @Param("dropoffId") String dropoffId,
             Pageable pageable
     );
 
-    Page<OrderEntity> findByRequesterEmailOrderByRequestTimeDesc(String requesterEmail, Pageable pageable);
+    Page<OrderEntity> findByRequesterIdOrderByRequestTimeDesc(String requesterId, Pageable pageable);
 
     @Query("select o.id from OrderEntity o where o.status = :status and o.collectionDeadline <= :now")
     List<UUID> findCollectionWindowExpired(@Param("status") OrderStatus status, @Param("now") Instant now);

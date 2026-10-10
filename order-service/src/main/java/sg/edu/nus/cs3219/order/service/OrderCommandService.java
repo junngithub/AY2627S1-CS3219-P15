@@ -94,7 +94,7 @@ public class OrderCommandService {
         try {
             OrderEntity order = new OrderEntity();
             order.setId(id);
-            order.setRequesterEmail(requester.email());
+            order.setRequesterId(requester.userId());
             order.setRequesterTelegramHandle(requester.telegramHandle());
             order.setRequesterRating(requesterRating);
             order.setItemDescription(request.itemDescription().trim());
@@ -133,7 +133,7 @@ public class OrderCommandService {
         Instant collectionDeadline = now.plus(properties.getDeadlines().getCollectionWindow());
         int updated = orders.acceptIfOpen(
                 orderId,
-                courier.email(),
+                courier.userId(),
                 courier.telegramHandle(),
                 courierRating,
                 collectionDeadline,
@@ -154,12 +154,12 @@ public class OrderCommandService {
     public OrderEntity cancel(UserAccount actor, UUID orderId) {
         Instant now = clock.instant();
         OrderEntity order = lock(orderId);
-        if (order.getRequesterEmail().equalsIgnoreCase(actor.email()) && order.getStatus() == OrderStatus.CREATED) {
+        if (order.getRequesterId().equalsIgnoreCase(actor.userId()) && order.getStatus() == OrderStatus.CREATED) {
             credits.returnReserved(orderId, actor);
             transition(order, OrderStatus.CANCELLED, true, now);
             return order;
         }
-        if (order.getStatus() == OrderStatus.ACCEPTED && actor.email().equalsIgnoreCase(order.getCourierEmail())) {
+        if (order.getStatus() == OrderStatus.ACCEPTED && actor.userId().equalsIgnoreCase(order.getCourierId())) {
             OrderStateMachine.requireBefore(order.getCollectionDeadline(), now, "The 5 minute collection window has closed");
             clearCourier(order);
             transition(order, OrderStatus.CREATED, true, now);
@@ -173,7 +173,7 @@ public class OrderCommandService {
         Instant now = clock.instant();
         OrderEntity order = lock(orderId);
         OrderStateMachine.requireAccepted(order.snapshot());
-        OrderStateMachine.requireCourier(order.snapshot(), courier.email());
+        OrderStateMachine.requireCourier(order.snapshot(), courier.userId());
         OrderStateMachine.requireBefore(order.getCollectionDeadline(), now, "The 5 minute collection window has closed");
         order.setCollectionPhotoRef(photos.store(orderId, "collection", photo));
         order.setAcknowledgementDeadline(order.getDeliveryDeadline().plus(properties.getDeadlines().getAcknowledgementWindow()));
@@ -186,14 +186,14 @@ public class OrderCommandService {
         Instant now = clock.instant();
         OrderEntity order = lock(orderId);
         OrderStateMachine.requireCollected(order.snapshot());
-        OrderStateMachine.requireCourier(order.snapshot(), courier.email());
+        OrderStateMachine.requireCourier(order.snapshot(), courier.userId());
         OrderStateMachine.requireBefore(order.getDeliveryDeadline(), now, "The delivery deadline has passed");
         order.setDeliveryPhotoRef(photos.store(orderId, "delivery", photo));
         transition(order, OrderStatus.DELIVERED, true, now);
         outbox.append(
                 order.getId(),
                 KafkaTopics.RATING,
-                messages.ratingPermission(order, courier.email(), "COURIER", order.getRequesterEmail(), "REQUESTER", now),
+                messages.ratingPermission(order, courier.userId(), "COURIER", order.getRequesterId(), "REQUESTER", now),
                 now
         );
         return order;
@@ -203,7 +203,7 @@ public class OrderCommandService {
     public OrderEntity acknowledge(UserAccount requester, UUID orderId) {
         Instant now = clock.instant();
         OrderEntity order = lock(orderId);
-        OrderStateMachine.requireRequester(order.snapshot(), requester.email());
+        OrderStateMachine.requireRequester(order.snapshot(), requester.userId());
         OrderStateMachine.requireCanAcknowledge(order.snapshot(), now);
         order.setSettledAt(now);
         transition(order, OrderStatus.ACKNOWLEDGED, true, now);
@@ -215,7 +215,7 @@ public class OrderCommandService {
     public OrderEntity escalate(UserAccount requester, UUID orderId, String disputeText, MultipartFile photo) {
         Instant now = clock.instant();
         OrderEntity order = lock(orderId);
-        OrderStateMachine.requireRequester(order.snapshot(), requester.email());
+        OrderStateMachine.requireRequester(order.snapshot(), requester.userId());
         OrderStateMachine.requireCanEscalate(order.snapshot(), now);
         String comment = requireComment(disputeText);
         if (photo != null && !photo.isEmpty()) {
@@ -313,7 +313,7 @@ public class OrderCommandService {
         outbox.append(
                 order.getId(),
                 KafkaTopics.RATING,
-                messages.ratingPermission(order, order.getRequesterEmail(), "REQUESTER", order.getCourierEmail(), "COURIER", now),
+                messages.ratingPermission(order, order.getRequesterId(), "REQUESTER", order.getCourierId(), "COURIER", now),
                 now
         );
     }
@@ -329,7 +329,7 @@ public class OrderCommandService {
         AlertEntity alert = new AlertEntity();
         alert.setId(UUID.randomUUID());
         alert.setOrderId(order.getId());
-        alert.setRequesterEmail(order.getRequesterEmail());
+        alert.setRequesterId(order.getRequesterId());
         alert.setFromStatus(from == null ? null : from.name());
         alert.setToStatus(to.name());
         alert.setNotifyRequester(notifyRequester);
@@ -349,10 +349,10 @@ public class OrderCommandService {
                 order.getStatus().name(),
                 order.getItemDescription(),
                 order.getAmount(),
-                order.getRequesterEmail(),
+                order.getRequesterId(),
                 order.getRequesterTelegramHandle(),
                 order.getRequesterRating(),
-                order.getCourierEmail(),
+                order.getCourierId(),
                 order.getCourierTelegramHandle(),
                 order.getCourierRating(),
                 order.getRequestTime(),
@@ -396,7 +396,7 @@ public class OrderCommandService {
     }
 
     private void clearCourier(OrderEntity order) {
-        order.setCourierEmail(null);
+        order.setCourierId(null);
         order.setCourierTelegramHandle(null);
         order.setCourierRating(null);
         order.setCollectionDeadline(null);

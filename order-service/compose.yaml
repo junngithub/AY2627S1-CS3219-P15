@@ -106,8 +106,13 @@ services:
         condition: service_started
       minio-init:
         condition: service_completed_successfully
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       SPRING_PROFILES_ACTIVE: dev
+      CREDIT_SERVICE_URL: http://host.docker.internal:3000
+      SUPPLIER_SERVICE_URL: http://host.docker.internal:8081
+      USER_SERVICE_URL: http://host.docker.internal:8080
       ORDER_DB_URL: ${ORDER_DB_URL}
       ORDER_DB_USERNAME: ${ORDER_DB_USERNAME}
       ORDER_DB_PASSWORD: ${ORDER_DB_PASSWORD}

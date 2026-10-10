@@ -21,14 +21,14 @@ public final class OrderStateMachine {
         requireStatus(order, OrderStatus.COLLECTED, "This order has not been collected");
     }
 
-    public static void requireCourier(OrderSnapshot order, String email) {
-        if (order.courierEmail() == null || !order.courierEmail().equalsIgnoreCase(email)) {
+    public static void requireCourier(OrderSnapshot order, String userId) {
+        if (order.courierId() == null || !order.courierId().equalsIgnoreCase(userId)) {
             throw ApiException.conflict("Only the assigned courier can do that");
         }
     }
 
-    public static void requireRequester(OrderSnapshot order, String email) {
-        if (!order.requesterEmail().equalsIgnoreCase(email)) {
+    public static void requireRequester(OrderSnapshot order, String userId) {
+        if (!order.requesterId().equalsIgnoreCase(userId)) {
             throw ApiException.conflict("Only the requester can do that");
         }
     }

@@ -45,7 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class OrderApiTest {
 
     private final UUID id = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
-    private final UserAccount caller = new UserAccount("requester-id", "requester@u.nus.edu", "requester");
+    private final UserAccount caller = new UserAccount("11111111-1111-1111-1111-111111111111", "requester");
 
     @Mock private OrderCommandService commands;
     @Mock private OrderQueryService queries;
@@ -77,7 +77,7 @@ class OrderApiTest {
     void endpointsDelegateToTheServices() throws Exception {
         OrderEntity order = new OrderEntity();
         order.setId(id);
-        order.setRequesterEmail("requester@u.nus.edu");
+        order.setRequesterId("11111111-1111-1111-1111-111111111111");
         order.setItemDescription("Print notes");
         order.setAmount(8);
         order.setStatus(OrderStatus.CREATED);
@@ -137,6 +137,8 @@ class OrderApiTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error").value("Sign in is required"))
                 .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+        mvc.perform(post("/api/v1/orders").header("X-User-Id", "not-a-uuid").contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isUnauthorized());
         mvc.perform(signed(post("/api/v1/orders")).contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").exists())
@@ -165,7 +167,6 @@ class OrderApiTest {
     private <B extends AbstractMockHttpServletRequestBuilder<B>> B signed(B request) {
         return request
                 .header(CallerHeaders.USER_ID, caller.userId())
-                .header(CallerHeaders.EMAIL, caller.email())
                 .header(CallerHeaders.TELEGRAM, caller.telegramHandle());
     }
 }

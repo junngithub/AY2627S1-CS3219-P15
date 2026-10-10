@@ -33,7 +33,6 @@ class OrderPropertiesTest {
         properties.getDeadlines().setCollectionWindow(Duration.ofMinutes(5));
         properties.getDeadlines().setAcknowledgementWindow(Duration.ofDays(1));
         properties.getDeadlines().setCompletionWindow(Duration.ofDays(7));
-        properties.getClients().setMode("http");
         properties.getClients().setTimeout(Duration.ofSeconds(2));
         properties.getClients().setUserBaseUrl("http://user-service:8080");
         properties.getClients().setCreditBaseUrl("http://credit-service:8080");
@@ -56,7 +55,6 @@ class OrderPropertiesTest {
         assertEquals(Duration.ofMinutes(5), properties.getDeadlines().getCollectionWindow());
         assertEquals(Duration.ofDays(1), properties.getDeadlines().getAcknowledgementWindow());
         assertEquals(Duration.ofDays(7), properties.getDeadlines().getCompletionWindow());
-        assertEquals("http", properties.getClients().getMode());
         assertEquals(Duration.ofSeconds(2), properties.getClients().getTimeout());
         assertTrue(properties.getClients().getUserBaseUrl().contains("8080"));
         assertTrue(properties.getClients().getCreditBaseUrl().contains("8080"));

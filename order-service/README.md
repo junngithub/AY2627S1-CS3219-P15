@@ -35,7 +35,9 @@ docker compose exec kafka-tools bash /defaults/send.sh admin.case.resolved <orde
 
 `kafka/messages/` holds the default payloads. `send.sh` fills a new `eventId` and replaces the sample order id when you pass one.
 
-Until the other services exist, `order.clients.mode` is `stub`. The API gateway is expected to decode the JWT and send `X-User-Id`, `X-User-Email`, and `X-User-Telegram`. Bruno sends those headers directly. Approved pickup and dropoff ids are `annas`, `nus-coop`, `printer-com2`, `cool-spot`, `instachef`, and `robot-cafe`.
+Create and cancel call Credit Service (`POST /api/v1/credit/reserve` and `POST /api/v1/credit/release`). Pickup and dropoff ids are Supplier Service numeric ids; only `approved` suppliers are accepted (`GET /api/v1/supplier/{id}`). The `local` profile calls User Service at `http://localhost:8080`, Credit Service at `http://localhost:3000`, and Supplier Service at `http://localhost:8081`. Deployed environments override those with `USER_SERVICE_URL`, `CREDIT_SERVICE_URL`, `SUPPLIER_SERVICE_URL`, `RATING_SERVICE_URL`, and `ADMIN_SERVICE_URL`.
+
+The API gateway sends the user id in `X-User-Id`. `X-User-Telegram` is optional. Bruno sends those headers directly. Courier ratings and requester escalations still use local stand-ins, because Rating Service and Admin Service are not in this repository. User Service has no lookup by user id, so the order service does not call it yet.
 
 ## Images
 

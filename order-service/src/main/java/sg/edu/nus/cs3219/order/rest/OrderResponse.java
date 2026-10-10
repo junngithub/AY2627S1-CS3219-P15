@@ -8,9 +8,9 @@ import java.util.UUID;
 
 public record OrderResponse(
         UUID id,
-        String requesterEmail,
+        String requesterId,
         String requesterTelegramHandle,
-        String courierEmail,
+        String courierId,
         String courierTelegramHandle,
         Double requesterRating,
         Double courierRating,
@@ -38,9 +38,9 @@ public record OrderResponse(
     public static OrderResponse from(OrderEntity order) {
         return new OrderResponse(
                 order.getId(),
-                order.getRequesterEmail(),
+                order.getRequesterId(),
                 order.getRequesterTelegramHandle(),
-                order.getCourierEmail(),
+                order.getCourierId(),
                 order.getCourierTelegramHandle(),
                 order.getRequesterRating(),
                 order.getCourierRating(),

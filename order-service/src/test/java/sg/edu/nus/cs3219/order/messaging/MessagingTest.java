@@ -40,19 +40,19 @@ class MessagingTest {
     void messagesCarryTheOrderAndOptionalFields() throws Exception {
         OrderEntity order = order();
         JsonNode created = mapper.readTree(messages.statusChanged(order, null, OrderStatus.CREATED, true, now));
-        assertTrue(created.get("courierEmail").isNull());
+        assertTrue(created.get("courierId").isNull());
         assertTrue(created.get("fromStatus").isNull());
         assertEquals("CREATED", created.get("toStatus").asText());
 
-        order.setCourierEmail("courier@u.nus.edu");
+        order.setCourierId("22222222-2222-2222-2222-222222222222");
         JsonNode accepted = mapper.readTree(messages.statusChanged(order, OrderStatus.CREATED, OrderStatus.ACCEPTED, true, now));
-        assertEquals("courier@u.nus.edu", accepted.get("courierEmail").asText());
+        assertEquals("22222222-2222-2222-2222-222222222222", accepted.get("courierId").asText());
 
         JsonNode returned = mapper.readTree(messages.creditReturn(order, now));
         assertEquals("EXPIRED", returned.get("reason").asText());
         JsonNode released = mapper.readTree(messages.creditRelease(order, "ACKNOWLEDGED", now));
-        assertEquals("courier@u.nus.edu", released.get("courierEmail").asText());
-        JsonNode rating = mapper.readTree(messages.ratingPermission(order, "courier@u.nus.edu", "COURIER", order.getRequesterEmail(), "REQUESTER", now));
+        assertEquals("22222222-2222-2222-2222-222222222222", released.get("courierId").asText());
+        JsonNode rating = mapper.readTree(messages.ratingPermission(order, "22222222-2222-2222-2222-222222222222", "COURIER", order.getRequesterId(), "REQUESTER", now));
         assertEquals("REQUESTER", rating.get("rateeRole").asText());
 
         JsonNode withoutPhotos = mapper.readTree(messages.escalationOpened(order, now));
@@ -163,7 +163,7 @@ class MessagingTest {
     private OrderEntity order() {
         OrderEntity order = new OrderEntity();
         order.setId(UUID.randomUUID());
-        order.setRequesterEmail("requester@u.nus.edu");
+        order.setRequesterId("11111111-1111-1111-1111-111111111111");
         order.setAmount(8);
         order.setItemDescription("Print notes");
         return order;

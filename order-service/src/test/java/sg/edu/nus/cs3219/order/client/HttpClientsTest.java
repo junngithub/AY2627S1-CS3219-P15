@@ -4,6 +4,7 @@ import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import sg.edu.nus.cs3219.order.config.OrderProperties;
 import sg.edu.nus.cs3219.order.rest.ApiException;
 
@@ -26,7 +27,7 @@ class HttpClientsTest {
     private final AtomicReference<String> lastPath = new AtomicReference<>();
     private final AtomicReference<String> lastBody = new AtomicReference<>();
     private final AtomicReference<String> lastUser = new AtomicReference<>();
-    private final UserAccount ada = new UserAccount("ada-id", "ada@u.nus.edu", "ada");
+    private final UserAccount ada = new UserAccount("ada-id", "ada");
 
     @BeforeEach
     void setUp() throws Exception {
@@ -38,19 +39,40 @@ class HttpClientsTest {
         });
         server.setExecutor(executor);
         server.createContext("/", exchange -> {
-            lastPath.set(exchange.getRequestURI().getPath());
-            lastBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            String path = exchange.getRequestURI().getPath();
+            String requestBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            lastPath.set(path);
+            lastBody.set(requestBody);
             byte[] empty = "null".getBytes(StandardCharsets.UTF_8);
             lastUser.set(exchange.getRequestHeaders().getFirst("X-User-Id"));
-            byte[] body = switch (exchange.getRequestURI().getPath()) {
-                case "/api/v1/supplier/nus-coop" -> "{\"id\":\"nus-coop\",\"name\":\"NUS Co-op\",\"latitude\":1.2,\"longitude\":103.7,\"building\":\"COM2\"}".getBytes(StandardCharsets.UTF_8);
+            int status = 200;
+            byte[] body = switch (path) {
+                case "/api/v1/supplier/2" -> "{\"id\":2,\"name\":\"NUS Co-op\",\"latitude\":1.2,\"longitude\":103.7,\"status\":\"approved\",\"building\":\"COM2\"}".getBytes(StandardCharsets.UTF_8);
+                case "/api/v1/supplier/3" -> "{\"id\":3,\"name\":\"Hidden\",\"latitude\":1.0,\"longitude\":103.0,\"status\":\"pending\"}".getBytes(StandardCharsets.UTF_8);
                 case "/api/v1/supplier/empty" -> empty;
-                case "/api/v1/rating/ada-id" -> "{\"average\":4.25,\"count\":3}".getBytes(StandardCharsets.UTF_8);
-                case "/api/v1/rating/missing" -> empty;
-                default -> empty;
+                case "/api/v1/supplier/missing" -> {
+                    status = 404;
+                    yield "{\"error\":\"Supplier not found\"}".getBytes(StandardCharsets.UTF_8);
+                }
+                case "/api/v1/supplier/slug" -> {
+                    status = 400;
+                    yield "{\"error\":\"Invalid supplier id\"}".getBytes(StandardCharsets.UTF_8);
+                }
+                case "/api/v1/supplier/down" -> {
+                    status = 500;
+                    yield "{\"error\":\"nope\"}".getBytes(StandardCharsets.UTF_8);
+                }
+                default -> {
+                    CreditProblem credit = creditProblem(requestBody);
+                    if (credit == null) {
+                        yield empty;
+                    }
+                    status = credit.status();
+                    yield credit.body();
+                }
             };
             exchange.getResponseHeaders().set("Content-Type", "application/json");
-            exchange.sendResponseHeaders(200, body.length);
+            exchange.sendResponseHeaders(status, body.length);
             exchange.getResponseBody().write(body);
             exchange.close();
         });
@@ -74,38 +96,83 @@ class HttpClientsTest {
         clients.returnReserved(orderId, ada);
         assertEquals("/api/v1/credit/release", lastPath.get());
 
-        Place place = clients.requirePlace("nus-coop", ada);
+        Place place = clients.requirePlace("2", ada);
+        assertEquals("2", place.id());
         assertEquals("NUS Co-op", place.name());
         assertEquals(1.2, place.latitude());
-        assertEquals(4.25, clients.ratingFor("ada-id", ada));
-        clients.escalate(new OrderContext(orderId, "COLLECTED", "Print notes", 8,
-                "ada@u.nus.edu", "ada", 5.0, "courier@u.nus.edu", "courier", 4.0,
-                null, null, null, null, null, "nus-coop", "NUS Co-op", 1.2, 103.7,
-                "cool-spot", "Cool Spot", 1.3, 103.8, "collection", "delivery", "dispute", "wrong item"), ada);
-        assertTrue(lastBody.get().contains(orderId.toString()));
-        assertTrue(lastBody.get().contains("Print notes"));
-        assertTrue(lastBody.get().contains("collection"));
-        assertEquals("/escalations", lastPath.get());
+        assertEquals(HttpStatus.BAD_REQUEST, assertThrows(ApiException.class, () -> clients.requirePlace("3", ada)).getStatus());
+        assertEquals(HttpStatus.BAD_REQUEST, assertThrows(ApiException.class, () -> clients.requirePlace("missing", ada)).getStatus());
+        assertEquals(HttpStatus.BAD_REQUEST, assertThrows(ApiException.class, () -> clients.requirePlace("slug", ada)).getStatus());
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, assertThrows(ApiException.class, () -> clients.requirePlace("down", ada)).getStatus());
     }
 
     @Test
-    void rejectsAnEmptySupplierAndRating() {
+    void rejectsAnEmptySupplier() {
         assertThrows(ApiException.class, () -> clients.requirePlace("empty", ada));
-        assertThrows(ApiException.class, () -> clients.ratingFor("missing", ada));
+    }
+
+    @Test
+    void mapsCreditFailures() {
+        UUID orderId = UUID.randomUUID();
+        ApiException broke = assertThrows(ApiException.class, () -> clients.reserve(orderId, "broke-user", 8, ada));
+        assertEquals(HttpStatus.BAD_REQUEST, broke.getStatus());
+        assertEquals("Not enough credits for this reward", broke.getMessage());
+
+        ApiException invalid = assertThrows(ApiException.class, () -> clients.reserve(orderId, "bad-amount", 1, ada));
+        assertEquals(HttpStatus.BAD_REQUEST, invalid.getStatus());
+
+        UUID duplicate = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        ApiException reserved = assertThrows(ApiException.class, () -> clients.reserve(duplicate, "ada-id", 1, ada));
+        assertEquals(HttpStatus.CONFLICT, reserved.getStatus());
+
+        ApiException missingUser = assertThrows(ApiException.class, () -> clients.reserve(orderId, "missing-user", 1, ada));
+        assertEquals(HttpStatus.NOT_FOUND, missingUser.getStatus());
+
+        UUID released = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        ApiException missingOrder = assertThrows(ApiException.class, () -> clients.returnReserved(released, ada));
+        assertEquals(HttpStatus.BAD_REQUEST, missingOrder.getStatus());
+        assertEquals("No reserved credits were found for this order", missingOrder.getMessage());
+
+        UUID unknown = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
+        ApiException down = assertThrows(ApiException.class, () -> clients.reserve(unknown, "ada-id", 1, ada));
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, down.getStatus());
     }
 
     @Test
     void reportsAnUnavailableService() {
         HttpClients down = clients("http://127.0.0.1:1");
         UUID orderId = UUID.randomUUID();
-        OrderContext escalation = new OrderContext(orderId, null, null, 1,
-                null, null, null, null, null, null, null, null, null, null, null,
-                null, null, 0, 0, null, null, 0, 0, null, null, null, "text");
         assertThrows(ApiException.class, () -> down.reserve(orderId, "ada-id", 1, ada));
         assertThrows(ApiException.class, () -> down.returnReserved(orderId, ada));
-        assertThrows(ApiException.class, () -> down.requirePlace("nus-coop", ada));
-        assertThrows(ApiException.class, () -> down.ratingFor("ada-id", ada));
-        assertThrows(ApiException.class, () -> down.escalate(escalation, ada));
+        assertThrows(ApiException.class, () -> down.requirePlace("2", ada));
+    }
+
+    private static CreditProblem creditProblem(String body) {
+        if (body.contains("broke-user")) {
+            return new CreditProblem(409, "{\"code\":\"CREDIT_INSUFFICIENT_BALANCE\"}");
+        }
+        if (body.contains("bad-amount")) {
+            return new CreditProblem(400, "{\"code\":\"CREDIT_INVALID_AMOUNT\"}");
+        }
+        if (body.contains("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")) {
+            return new CreditProblem(409, "{\"code\":\"CREDIT_ORDER_ALREADY_RESERVED\"}");
+        }
+        if (body.contains("missing-user")) {
+            return new CreditProblem(404, "{\"code\":\"CREDIT_USER_NOT_FOUND\"}");
+        }
+        if (body.contains("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")) {
+            return new CreditProblem(404, "{\"code\":\"CREDIT_ORDER_NOT_FOUND\"}");
+        }
+        if (body.contains("cccccccc-cccc-cccc-cccc-cccccccccccc")) {
+            return new CreditProblem(500, "{\"code\":\"CREDIT_UNKNOWN\"}");
+        }
+        return null;
+    }
+
+    private record CreditProblem(int status, String json) {
+        private byte[] body() {
+            return json.getBytes(StandardCharsets.UTF_8);
+        }
     }
 
     private static HttpClients clients(String baseUrl) {

@@ -8,8 +8,8 @@ import java.util.UUID;
 
 public interface AlertRepository extends JpaRepository<AlertEntity, UUID> {
 
-    Page<AlertEntity> findByRequesterEmailAndNotifyRequesterTrueOrderByCreatedAtDesc(
-            String requesterEmail,
+    Page<AlertEntity> findByRequesterIdAndNotifyRequesterTrueOrderByCreatedAtDesc(
+            String requesterId,
             Pageable pageable
     );
 }

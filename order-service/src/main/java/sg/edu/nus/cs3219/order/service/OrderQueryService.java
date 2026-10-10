@@ -43,8 +43,8 @@ public class OrderQueryService {
     @Transactional(readOnly = true)
     public OrderEntity get(UserAccount actor, UUID orderId) {
         OrderEntity order = orders.findById(orderId).orElseThrow(() -> ApiException.notFound("Order not found"));
-        boolean requester = order.getRequesterEmail().equalsIgnoreCase(actor.email());
-        boolean courier = order.getCourierEmail() != null && order.getCourierEmail().equalsIgnoreCase(actor.email());
+        boolean requester = order.getRequesterId().equalsIgnoreCase(actor.userId());
+        boolean courier = order.getCourierId() != null && order.getCourierId().equalsIgnoreCase(actor.userId());
         if (!requester && !courier) {
             throw ApiException.notFound("Order not found");
         }
@@ -60,7 +60,7 @@ public class OrderQueryService {
         if (latitude == null || longitude == null) {
             Page<OrderEntity> result = orders.searchOpen(
                     OrderStatus.CREATED,
-                    actor.email(),
+                    actor.userId(),
                     null,
                     null,
                     PageRequest.of(page, size, Sort.by(Sort.Order.desc("amount"), Sort.Order.desc("requestTime")))
@@ -70,7 +70,7 @@ public class OrderQueryService {
         ProximityRanker.BoundingBox box = ProximityRanker.box(latitude, longitude, properties.getRanking().getRadiusKm());
         List<OrderEntity> candidates = orders.findOpenInBox(
                 OrderStatus.CREATED,
-                actor.email(),
+                actor.userId(),
                 box.minLat(),
                 box.maxLat(),
                 box.minLng(),
@@ -93,8 +93,8 @@ public class OrderQueryService {
         if (size == 0) {
             return PageResponse.empty(page, size);
         }
-        Page<OrderEntity> result = orders.findByRequesterEmailOrderByRequestTimeDesc(
-                actor.email(),
+        Page<OrderEntity> result = orders.findByRequesterIdOrderByRequestTimeDesc(
+                actor.userId(),
                 PageRequest.of(page, size)
         );
         return PageResponse.of(result.getContent(), page, size, result.getTotalElements());
@@ -117,7 +117,7 @@ public class OrderQueryService {
         }
         Page<OrderEntity> result = orders.searchOpen(
                 OrderStatus.CREATED,
-                actor.email(),
+                actor.userId(),
                 blankToNull(pickupLocationId),
                 blankToNull(dropoffLocationId),
                 PageRequest.of(page, size, Sort.by(Sort.Order.desc("amount")))
@@ -131,8 +131,8 @@ public class OrderQueryService {
         if (size == 0) {
             return PageResponse.empty(page, size);
         }
-        Page<AlertEntity> result = alerts.findByRequesterEmailAndNotifyRequesterTrueOrderByCreatedAtDesc(
-                actor.email(),
+        Page<AlertEntity> result = alerts.findByRequesterIdAndNotifyRequesterTrueOrderByCreatedAtDesc(
+                actor.userId(),
                 PageRequest.of(page, size)
         );
         return PageResponse.of(result.getContent(), page, size, result.getTotalElements());

@@ -63,13 +63,12 @@ order:
     acknowledgement-window: 1d
     completion-window: 7d
   clients:
-    mode: stub
     timeout: 2s
-    user-base-url: http://user-service:8080
-    credit-base-url: http://credit-service:8080
-    supplier-base-url: http://supplier-service:8080
-    rating-base-url: http://rating-service:8080
-    admin-base-url: http://admin-service:8080
+    user-base-url: ${USER_SERVICE_URL:http://user-service:8080}
+    credit-base-url: ${CREDIT_SERVICE_URL:http://credit-service:8080}
+    supplier-base-url: ${SUPPLIER_SERVICE_URL:http://supplier-service:8080}
+    rating-base-url: ${RATING_SERVICE_URL:http://rating-service:8080}
+    admin-base-url: ${ADMIN_SERVICE_URL:http://admin-service:8080}
   kafka:
     replicas: 1
     partitions: 3

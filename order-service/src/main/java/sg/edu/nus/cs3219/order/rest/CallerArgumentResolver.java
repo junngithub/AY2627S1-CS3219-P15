@@ -23,7 +23,6 @@ public class CallerArgumentResolver implements HandlerMethodArgumentResolver {
     ) {
         return CallerHeaders.require(
                 webRequest.getHeader(CallerHeaders.USER_ID),
-                webRequest.getHeader(CallerHeaders.EMAIL),
                 webRequest.getHeader(CallerHeaders.TELEGRAM));
     }
 }

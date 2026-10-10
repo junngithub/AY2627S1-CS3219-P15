@@ -6,8 +6,8 @@ import java.util.UUID;
 public record OrderSnapshot(
         UUID id,
         OrderStatus status,
-        String requesterEmail,
-        String courierEmail,
+        String requesterId,
+        String courierId,
         Instant acceptanceExpiry,
         Instant deliveryDeadline,
         Instant collectionDeadline,

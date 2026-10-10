@@ -13,8 +13,8 @@ import java.util.UUID;
 @Component
 public class OrderMessageFactory {
 
-    private static final String REQUESTER_EMAIL = "requesterEmail";
-    private static final String COURIER_EMAIL = "courierEmail";
+    private static final String REQUESTER_ID = "requesterId";
+    private static final String COURIER_ID = "courierId";
     private static final String AMOUNT = "amount";
     private static final String REASON = "reason";
 
@@ -26,11 +26,11 @@ public class OrderMessageFactory {
 
     public String statusChanged(OrderEntity order, OrderStatus from, OrderStatus to, boolean notify, Instant occurredAt) {
         ObjectNode node = envelope("order.status.changed", order.getId(), occurredAt);
-        node.put(REQUESTER_EMAIL, order.getRequesterEmail());
-        if (order.getCourierEmail() == null) {
-            node.putNull(COURIER_EMAIL);
+        node.put(REQUESTER_ID, order.getRequesterId());
+        if (order.getCourierId() == null) {
+            node.putNull(COURIER_ID);
         } else {
-            node.put(COURIER_EMAIL, order.getCourierEmail());
+            node.put(COURIER_ID, order.getCourierId());
         }
         if (from == null) {
             node.putNull("fromStatus");
@@ -44,7 +44,7 @@ public class OrderMessageFactory {
 
     public String creditReturn(OrderEntity order, Instant occurredAt) {
         ObjectNode node = envelope("credit.reservation.return", order.getId(), occurredAt);
-        node.put(REQUESTER_EMAIL, order.getRequesterEmail());
+        node.put(REQUESTER_ID, order.getRequesterId());
         node.put(AMOUNT, order.getAmount());
         node.put(REASON, "EXPIRED");
         return write(node);
@@ -52,26 +52,26 @@ public class OrderMessageFactory {
 
     public String creditRelease(OrderEntity order, String reason, Instant occurredAt) {
         ObjectNode node = envelope("credit.reservation.release", order.getId(), occurredAt);
-        node.put(REQUESTER_EMAIL, order.getRequesterEmail());
-        node.put(COURIER_EMAIL, order.getCourierEmail());
+        node.put(REQUESTER_ID, order.getRequesterId());
+        node.put(COURIER_ID, order.getCourierId());
         node.put(AMOUNT, order.getAmount());
         node.put(REASON, reason);
         return write(node);
     }
 
-    public String ratingPermission(OrderEntity order, String raterEmail, String raterRole, String rateeEmail, String rateeRole, Instant occurredAt) {
+    public String ratingPermission(OrderEntity order, String raterId, String raterRole, String rateeId, String rateeRole, Instant occurredAt) {
         ObjectNode node = envelope("rating.permission.granted", order.getId(), occurredAt);
-        node.put("raterEmail", raterEmail);
+        node.put("raterId", raterId);
         node.put("raterRole", raterRole);
-        node.put("rateeEmail", rateeEmail);
+        node.put("rateeId", rateeId);
         node.put("rateeRole", rateeRole);
         return write(node);
     }
 
     public String escalationOpened(OrderEntity order, Instant occurredAt) {
         ObjectNode node = envelope("admin.escalation.opened", order.getId(), occurredAt);
-        node.put(REQUESTER_EMAIL, order.getRequesterEmail());
-        node.put(COURIER_EMAIL, order.getCourierEmail());
+        node.put(REQUESTER_ID, order.getRequesterId());
+        node.put(COURIER_ID, order.getCourierId());
         node.put(REASON, "DELIVERY_DEADLINE_MISSED");
         node.put("status", OrderStatus.COLLECTED.name());
         node.put("itemDescription", order.getItemDescription());

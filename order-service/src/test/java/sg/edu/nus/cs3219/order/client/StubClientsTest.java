@@ -13,28 +13,14 @@ class StubClientsTest {
     private final StubClients clients = new StubClients();
 
     @Test
-    void reservesAndReturnsCredits() {
-        UUID orderId = UUID.randomUUID();
-        clients.reserve(orderId, "ada@u.nus.edu", 8, null);
-        clients.returnReserved(orderId, null);
-        clients.reserve(orderId, "ada@u.nus.edu", 20, null);
-        UUID overdrawn = UUID.randomUUID();
-        UUID free = UUID.randomUUID();
-        UUID unknown = UUID.randomUUID();
-        assertThrows(ApiException.class, () -> clients.reserve(overdrawn, "ada@u.nus.edu", 1, null));
-        assertThrows(ApiException.class, () -> clients.reserve(free, "ada@u.nus.edu", 0, null));
-        assertThrows(ApiException.class, () -> clients.returnReserved(unknown, null));
-    }
-
-    @Test
-    void looksUpPlacesRatingsAndEscalations() {
-        assertEquals("NUS Co-op", clients.requirePlace("nus-coop", null).name());
-        assertEquals(5.0, clients.ratingFor("ada@u.nus.edu", null));
+    void ratingsAndEscalationsStayLocal() {
+        assertEquals(5.0, clients.ratingFor("55555555-5555-5555-5555-555555555555", null));
         clients.escalate(context(UUID.randomUUID(), "wrong item"), null);
-        assertThrows(ApiException.class, () -> clients.requirePlace("nowhere", null));
         assertThrows(ApiException.class, () -> clients.escalate(null, null));
         OrderContext blank = context(UUID.randomUUID(), " ");
         assertThrows(ApiException.class, () -> clients.escalate(blank, null));
+        OrderContext missingOrder = context(null, "wrong item");
+        assertThrows(ApiException.class, () -> clients.escalate(missingOrder, null));
     }
 
     private static OrderContext context(UUID orderId, String comment) {

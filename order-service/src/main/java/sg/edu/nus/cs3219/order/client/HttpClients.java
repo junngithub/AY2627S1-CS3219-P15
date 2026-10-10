@@ -1,37 +1,34 @@
 package sg.edu.nus.cs3219.order.client;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.stereotype.Component;
 import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter;
+import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
-import sg.edu.nus.cs3219.order.rest.CallerHeaders;
-import tools.jackson.databind.DeserializationFeature;
-import tools.jackson.databind.json.JsonMapper;
 import sg.edu.nus.cs3219.order.config.OrderProperties;
 import sg.edu.nus.cs3219.order.rest.ApiException;
+import sg.edu.nus.cs3219.order.rest.CallerHeaders;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Duration;
 import java.util.UUID;
 
 @Component
-@ConditionalOnProperty(name = "order.clients.mode", havingValue = "http")
-public class HttpClients implements CreditClient, SupplierClient, RatingClient, AdminClient {
+public class HttpClients implements CreditClient, SupplierClient {
+
+    private static final String NOT_APPROVED = "That location is not an approved supplier";
 
     private final RestClient credits;
     private final RestClient suppliers;
-    private final RestClient ratings;
-    private final RestClient admins;
 
     public HttpClients(OrderProperties properties) {
         Duration timeout = properties.getClients().getTimeout();
         this.credits = client(properties.getClients().getCreditBaseUrl(), timeout);
         this.suppliers = client(properties.getClients().getSupplierBaseUrl(), timeout);
-        this.ratings = client(properties.getClients().getRatingBaseUrl(), timeout);
-        this.admins = client(properties.getClients().getAdminBaseUrl(), timeout);
     }
 
     @Override
@@ -43,6 +40,8 @@ public class HttpClients implements CreditClient, SupplierClient, RatingClient, 
                     .body(new ReserveRequest(orderId, requesterId, amount))
                     .retrieve()
                     .toBodilessEntity();
+        } catch (RestClientResponseException exception) {
+            throw creditFailure(exception);
         } catch (ResourceAccessException exception) {
             throw ApiException.unavailable("Credit service did not respond in time");
         }
@@ -57,6 +56,8 @@ public class HttpClients implements CreditClient, SupplierClient, RatingClient, 
                     .body(new ReleaseRequest(orderId))
                     .retrieve()
                     .toBodilessEntity();
+        } catch (RestClientResponseException exception) {
+            throw creditFailure(exception);
         } catch (ResourceAccessException exception) {
             throw ApiException.unavailable("Credit service did not respond in time");
         }
@@ -70,55 +71,47 @@ public class HttpClients implements CreditClient, SupplierClient, RatingClient, 
                     .headers(headers -> identify(headers, caller))
                     .retrieve()
                     .body(SupplierResponse.class);
-            if (supplier == null || supplier.name() == null || supplier.name().isBlank()) {
-                throw ApiException.badRequest("That location is not an approved supplier");
+            if (supplier == null || supplier.id() == null || supplier.name() == null || supplier.name().isBlank()
+                    || !"approved".equals(supplier.status())) {
+                throw ApiException.badRequest(NOT_APPROVED);
             }
-            String id = supplier.id() == null || supplier.id().isBlank() ? locationId : supplier.id();
-            return new Place(id, supplier.name(), supplier.latitude(), supplier.longitude());
+            return new Place(supplier.id().toString(), supplier.name(), supplier.latitude(), supplier.longitude());
         } catch (RestClientResponseException exception) {
-            if (exception.getStatusCode().value() == 404) {
-                throw ApiException.badRequest("That location is not an approved supplier");
+            int status = exception.getStatusCode().value();
+            if (status == 400 || status == 404) {
+                throw ApiException.badRequest(NOT_APPROVED);
             }
-            throw ApiException.unavailable("Supplier service did not respond in time");
+            throw ApiException.unavailable("Supplier service could not complete the request");
         } catch (ResourceAccessException exception) {
             throw ApiException.unavailable("Supplier service did not respond in time");
         }
     }
 
-    @Override
-    public double ratingFor(String userId, UserAccount caller) {
-        try {
-            RatingResponse response = ratings.get()
-                    .uri("/api/v1/rating/{userId}", userId)
-                    .headers(headers -> identify(headers, caller))
-                    .retrieve()
-                    .body(RatingResponse.class);
-            if (response == null) {
-                throw ApiException.unavailable("Rating service did not respond in time");
-            }
-            return response.average();
-        } catch (ResourceAccessException exception) {
-            throw ApiException.unavailable("Rating service did not respond in time");
-        }
+    private static ApiException creditFailure(RestClientResponseException exception) {
+        return switch (creditCode(exception)) {
+            case "CREDIT_INSUFFICIENT_BALANCE" -> ApiException.badRequest("Not enough credits for this reward");
+            case "CREDIT_INVALID_AMOUNT" -> ApiException.badRequest("The reward must be a positive number of credits");
+            case "CREDIT_ORDER_NOT_FOUND" -> ApiException.badRequest("No reserved credits were found for this order");
+            case "CREDIT_ORDER_ALREADY_RESERVED" -> ApiException.conflict("This order already has reserved credits");
+            case "CREDIT_USER_NOT_FOUND" -> ApiException.notFound("That user has no credit account");
+            default -> ApiException.unavailable("Credit service could not complete the request");
+        };
     }
 
-    @Override
-    public void escalate(OrderContext order, UserAccount caller) {
+    private static String creditCode(RestClientResponseException exception) {
         try {
-            admins.post()
-                    .uri("/escalations")
-                    .headers(headers -> identify(headers, caller))
-                    .body(order)
-                    .retrieve()
-                    .toBodilessEntity();
-        } catch (ResourceAccessException exception) {
-            throw ApiException.unavailable("Admin service did not respond in time");
+            JsonNode code = JsonMapper.shared().readTree(exception.getResponseBodyAsString()).get("code");
+            if (code == null || code.isNull()) {
+                return "";
+            }
+            return code.asString();
+        } catch (RuntimeException ignored) {
+            return "";
         }
     }
 
     private static void identify(HttpHeaders headers, UserAccount caller) {
         headers.set(CallerHeaders.USER_ID, caller.userId());
-        headers.set(CallerHeaders.EMAIL, caller.email());
         if (caller.telegramHandle() != null && !caller.telegramHandle().isBlank()) {
             headers.set(CallerHeaders.TELEGRAM, caller.telegramHandle());
         }
@@ -144,10 +137,6 @@ public class HttpClients implements CreditClient, SupplierClient, RatingClient, 
     private record ReleaseRequest(UUID orderId) {
     }
 
-    private record SupplierResponse(String id, String name, double latitude, double longitude) {
+    private record SupplierResponse(Integer id, String name, double latitude, double longitude, String status) {
     }
-
-    private record RatingResponse(double average) {
-    }
-
 }

@@ -16,13 +16,12 @@ public class OpenApiConfig {
         return new OpenAPI()
                 .info(new Info()
                         .title("Order Service")
-                        .description("Friend on Campus errand orders. The API gateway decodes the JWT and sends X-User-Id, X-User-Email, and X-User-Telegram.")
+                        .description("Friend on Campus errand orders. The API gateway sends the user id in X-User-Id. X-User-Telegram is optional until the order service loads the handle from User Service.")
                         .version("v1"))
-                .addSecurityItem(new SecurityRequirement().addList(CallerHeaders.USER_ID).addList(CallerHeaders.EMAIL))
+                .addSecurityItem(new SecurityRequirement().addList(CallerHeaders.USER_ID))
                 .components(new Components()
-                        .addSecuritySchemes(CallerHeaders.USER_ID, header(CallerHeaders.USER_ID, "User id taken from the JWT."))
-                        .addSecuritySchemes(CallerHeaders.EMAIL, header(CallerHeaders.EMAIL, "Email taken from the JWT."))
-                        .addSecuritySchemes(CallerHeaders.TELEGRAM, header(CallerHeaders.TELEGRAM, "Telegram handle taken from the JWT. Optional.")));
+                        .addSecuritySchemes(CallerHeaders.USER_ID, header(CallerHeaders.USER_ID, "User id from the gateway."))
+                        .addSecuritySchemes(CallerHeaders.TELEGRAM, header(CallerHeaders.TELEGRAM, "Telegram handle. Optional.")));
     }
 
     private static SecurityScheme header(String name, String description) {
