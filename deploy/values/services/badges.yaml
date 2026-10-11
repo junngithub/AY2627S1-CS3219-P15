@@ -7,4 +7,4 @@ healthPath: /health
 env:
   # Peers this service calls over HTTP (short names resolve within the env's namespace).
   USER_SERVICE_URL: http://user:8080 # daily metrics pull
-  ORDER_SERVICE_URL: http://order:8080 # daily metrics pull
+  ORDER_SERVICE_URL: http://order:8083 # daily metrics pull
