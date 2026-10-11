@@ -36,6 +36,20 @@ spec:
               value: {{ .Values.port | quote }}
             - name: SERVICE_NAME
               value: {{ include "foc-service.name" . }}
+          {{- if .Values.database.enabled }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "foc-service.name" . }}-db # created by charts/foc-database
+                  key: DATABASE_URL
+          {{- end }}
+          {{- range $name, $ref := .Values.secretEnv }}
+            - name: {{ $name }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $ref.secret }}
+                  key: {{ $ref.key }}
+          {{- end }}
           {{- with .Values.kafka.user }}
             - name: KAFKA_BROKERS
               value: {{ printf "%s-kafka-bootstrap:9093" $.Values.kafka.clusterName }}

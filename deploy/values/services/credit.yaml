@@ -4,9 +4,15 @@ image:
   name: foc/credit-service
 port: 3000 # CREDIT_SERVICE_PORT default in credit-service/src/config.ts
 healthPath: /health
+database:
+  enabled: true # DATABASE_URL from Secret credit-db (charts/foc-database, ADR-0010)
+  healthPath: /health/db # runs `select 1`
 kafka:
   user: credit # reads foc.user.status, foc.credit.commands (ADR-0004)
 env:
   LOG_LEVEL: info
   # Peers this service calls over HTTP (short names resolve within the env's namespace).
-  USER_SERVICE_URL: http://user:3000 # validate a verified user
+  USER_SERVICE_URL: http://user:8080 # validate a verified user
+migrate:
+  enabled: true # runs before each deploy (ADR-0011); image: the Dockerfile's `migrate` stage
+  command: ["npm", "run", "db:migrate"]

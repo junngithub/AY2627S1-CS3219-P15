@@ -7,6 +7,7 @@ Backend for Friend on Campus errand requests.
 - `application.yml` holds shared settings. The default profile is `local`.
 - `application-local.yml` is for a process on your machine. Postgres is `localhost:5432` and Kafka is `localhost:9092`.
 - `application-dev.yml` is for the app container. Database, Kafka, and photo settings are read from the environment, not from the file. Copy `.env.example` to `.env` in this directory before Compose starts. `.env` is git-ignored.
+- `application-k8s.yml` is for the Kubernetes deploy; `deploy/values/services/order.yaml` sets `SPRING_PROFILES_ACTIVE=k8s`. The database comes from the `PG*` keys of Secret `order-db`, Kafka from the platform's `KAFKA_*` variables (TLS listener with SCRAM-SHA-512), and photos stay on the pod's disk in `/app/photos`. Health is also served at `/health`, like every FoC service.
 
 ```powershell
 copy .env.example .env

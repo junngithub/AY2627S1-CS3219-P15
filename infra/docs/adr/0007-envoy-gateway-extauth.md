@@ -65,14 +65,14 @@ ended March 2026).
   - `/api/v1/user/authorize` from outside: answered with 404 by an
     `HTTPRouteFilter` `directResponse`, never forwarded.
 - The namespace NetworkPolicy allows `envoy-gateway-system` in.
-- Until the real User service exists, the connectivity stub (running as
-  `user`) implements `/authorize`: `Bearer stub:<name>@u.nus.edu` gives 200 +
-  identity headers (`admin*` names → `x-is-admin: true`); anything else gives
-  401.
-- `helm test gateway` (in `deploy/local.sh check`): 22 checks covering routing
-  to all 7 services, 401 without or with a bad token, the admin flag,
-  identity-header spoofing on protected and public routes, public routes,
-  and blocked and unknown paths. All pass locally.
+- The connectivity stub implements `/authorize` too (`Bearer stub:<name>@u.nus.edu`
+  → 200 + identity headers), for running without the real User.
+- `helm test gateway` (in `deploy/local.sh check`): 18 checks without logging
+  in: every protected prefix gives 401 without a token, a bad token or
+  spoofed identity headers get 401, public routes reach their service, and
+  internal and unknown paths are 404. All pass against the real User. A
+  manual run (sign up → verify → log in) confirmed services receive the
+  user's UUID in `x-user-id`, for GET and DELETE alike.
 - **User service** (2026-10-01): `/authorize` accepts every method and returns
   the identity headers plus `Cache-Control: no-store`, keeping the JSON body
   for other callers (`user-service/src/authorization.ts`).

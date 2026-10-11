@@ -1,6 +1,7 @@
-# No user-service image yet: run the connectivity stub under this name.
-# Delete the two image.name/tag overrides once foc/user-service exists.
 image:
-  name: foc/connectivity-stub
-  tag: "0.2.0"
+  tag: dev
 replicas: 1
+# Local: the chart generates Secret user-otp (random, stable across upgrades).
+# The cloud gets the same Secret from External Secrets (ADR-0010).
+generatedSecrets:
+  user-otp: [OTP_SECRET]

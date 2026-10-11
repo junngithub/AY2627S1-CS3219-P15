@@ -5,9 +5,14 @@ How Friend on Campus is provisioned and deployed across **local**, **dev**,
 
 > **Status:** the local environment works end to end: Floci + `infra/local/aws`
 > + `deploy/local.sh` run Strimzi, Kafka 4.3.1 (7 topics, 5 users with ACLs),
-> credit-service, a connectivity stub for each of the other 6 services, and
-> the API gateway (Envoy Gateway with auth, ADR-0007). `deploy/local.sh check`
-> passes: 23 Kafka ACL checks, 7 HTTP checks, 22 gateway checks. The cloud envs are not built; see [Build order](#build-order).
+> the real user, supplier, credit and order services (each with its own
+> database and migrations, ADR-0010/0011; order migrates with Flyway at
+> startup), a connectivity stub for the 3 services without code (rating,
+> badges, admin), the API gateway (Envoy Gateway with auth against the real
+> User, ADR-0007), and Postgres on Floci's RDS.
+> `deploy/local.sh check` passes: 16 database checks, 23 Kafka ACL checks,
+> 7 HTTP checks plus every peer URL (credit also reaches its database),
+> 18 gateway checks. The cloud envs are not built; see [Build order](#build-order).
 
 - New to Terraform / Kubernetes / Strimzi / Argo CD? Read
   [`docs/concepts.md`](docs/concepts.md) first.
@@ -16,7 +21,7 @@ How Friend on Campus is provisioned and deployed across **local**, **dev**,
 - Architecture diagram: [`../docs/architecture/foc-architecture.drawio`](../docs/architecture/foc-architecture.drawio).
 
 **Scope of this phase:** Kafka, service-to-service connectivity, and pulling
-images from ECR. Databases, the API gateway (Envoy), and the AWS-managed
+images from ECR, then the API gateway (ADR-0007) and Postgres (ADR-0010). The AWS-managed
 integrations (S3, SES, Bedrock, EventBridge/SQS) come later.
 
 ---
@@ -62,7 +67,7 @@ infra/                              # Terraform: AWS only
   global/ecr/                       #    shared registry for all cloud envs: ecr.tf
   local/                            # ✅ Floci
     compose.yaml                    #    Floci itself
-    aws/                            #    (own state): ecr.tf · network.tf · eks.tf · kubeconfig.tf
+    aws/                            #    (own state): ecr.tf · network.tf · eks.tf · kubeconfig.tf · rds.tf
   nonprod/{aws,bootstrap}/          #    EKS hosting foc-dev + foc-stg
   prod/{aws,bootstrap}/             #    EKS hosting foc
   docs/
