@@ -49,10 +49,12 @@ terraform -chdir=infra/local/aws init && terraform -chdir=infra/local/aws apply
 deploy/push-local.sh user
 deploy/push-local.sh supplier
 deploy/push-local.sh credit
-deploy/push-local.sh connectivity-stub     # stands in for order, rating, badges, admin
+deploy/push-local.sh order
+deploy/push-local.sh connectivity-stub     # stands in for rating, badges, admin
 
 # 4. Deploy everything: databases → Strimzi → Envoy Gateway → Kafka (7 topics,
-#    5 users) → 7 services (each runs its migrations first) → gateway
+#    5 users) → 7 services (each runs its migrations first; order's Flyway
+#    runs at startup) → gateway
 deploy/local.sh
 
 # 5. Check connectivity: database logins, Kafka logins/ACLs, HTTP to every
