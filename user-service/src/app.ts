@@ -1,10 +1,11 @@
 import express from "express";
 import swaggerUi from "swagger-ui-express";
 import { errorHandler } from "./errors";
+import type { UserEventPublisher } from "./events";
 import { openApiDocument } from "./openapi";
 import { createUsersRouter } from "./routes/users";
 
-export function createApp() {
+export function createApp(eventPublisher?: UserEventPublisher) {
   const app = express();
 
   app.disable("x-powered-by");
@@ -26,7 +27,7 @@ export function createApp() {
     }),
   );
 
-  app.use("/api/v1/user", createUsersRouter());
+  app.use("/api/v1/user", createUsersRouter(undefined, eventPublisher));
 
   app.use((_request, response) => {
     response.status(404).json({ error: "Endpoint not found", code: "NOT_FOUND" });

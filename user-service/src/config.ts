@@ -12,6 +12,14 @@ if (nodeEnv === "production" && otpSecret === "local-development-secret-change-m
   throw new Error("OTP_SECRET must be configured in production");
 }
 
+// Kafka (foc.user.status producer). The Helm chart injects these when the
+// service's `kafka.user` is set; locally/in tests they are usually absent, so
+// `enabled` is false and the service falls back to a logging no-op publisher.
+const kafkaBrokers = (process.env.KAFKA_BROKERS ?? "")
+  .split(",")
+  .map((broker) => broker.trim())
+  .filter(Boolean);
+
 export const config = {
   nodeEnv,
   port: positiveInteger("PORT", 8080),
@@ -25,4 +33,14 @@ export const config = {
   sessionTtlHours: positiveInteger("SESSION_TTL_HOURS", 24),
   loginMaxAttempts: positiveInteger("LOGIN_MAX_ATTEMPTS", 5),
   passwordScryptCost: positiveInteger("PASSWORD_SCRYPT_COST", 16384),
+  kafka: {
+    enabled: kafkaBrokers.length > 0,
+    brokers: kafkaBrokers,
+    username: process.env.KAFKA_USERNAME ?? "",
+    password: process.env.KAFKA_PASSWORD ?? "",
+    saslMechanism: process.env.KAFKA_SASL_MECHANISM ?? "SCRAM-SHA-512",
+    caCertPath: process.env.KAFKA_CA_CERT ?? "",
+    topic: process.env.KAFKA_USER_STATUS_TOPIC ?? "foc.user.status",
+    clientId: process.env.KAFKA_CLIENT_ID ?? "user-service",
+  },
 };
