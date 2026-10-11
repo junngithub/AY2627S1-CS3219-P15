@@ -1,12 +1,19 @@
 import { buildApp } from './app.js';
 import { config } from './config.js';
 import { queryClient } from './database/index.js';
+import { startConsumer, stopConsumer } from './kafka/consumer.js';
 
 const app = buildApp();
 
 async function start(): Promise<void> {
   try {
     await app.listen({ host: config.host, port: config.port });
+    if (config.kafka.enabled) {
+      await startConsumer({
+        info: (message) => app.log.info(message),
+        warn: (message) => app.log.warn(message),
+      });
+    }
   } catch (error) {
     app.log.error(error);
     process.exit(1);
@@ -16,6 +23,7 @@ async function start(): Promise<void> {
 async function shutdown(signal: string): Promise<void> {
   app.log.info(`received ${signal}, shutting down`);
   try {
+    await stopConsumer();
     await app.close();
     await queryClient.end({ timeout: 5 });
   } finally {

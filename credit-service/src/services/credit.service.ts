@@ -114,12 +114,33 @@ export async function releaseCredits(orderId: string): Promise<ReleaseResponse> 
   });
 }
 
-// Event-driven flows (F2 onboarding, F4 order events) — implemented later.
-/* v8 ignore start -- stubs, coverage added when implemented */
-export async function onboardUser(_userId: string): Promise<void> {
-  throw new Error('onboardUser: not implemented');
+// F2 onboarding: create a credit account (starting balance 20) for a verified
+// user, exactly once. Driven by the foc.user.status `UserVerified` event (see
+// src/kafka/). Structurally idempotent — the credit_user PK + ON CONFLICT DO
+// NOTHING makes a redelivered event a no-op, even under concurrent delivery.
+export async function onboardUser(userId: string, eventId: string | null = null): Promise<void> {
+  await db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(creditUser)
+      .values({ userId })
+      .onConflictDoNothing()
+      .returning({ userId: creditUser.userId });
+
+    // Already onboarded (or a redelivered event): nothing to do, no second log.
+    if (!created) return;
+
+    await tx.insert(creditLog).values({
+      operationType: 'ONBOARDING',
+      amount: 20, // the starting grant; balance defaults to 20 in the schema
+      actorId: userId,
+      balanceAfter: 20,
+      eventId, // traceability back to the source event
+    });
+  });
 }
 
+// F4 order events — implemented later.
+/* v8 ignore start -- stubs, coverage added when implemented */
 export async function completeOrder(_orderId: string, _courierId: string): Promise<void> {
   throw new Error('completeOrder: not implemented');
 }

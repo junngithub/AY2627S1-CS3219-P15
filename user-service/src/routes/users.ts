@@ -4,6 +4,7 @@ import { authorizationResult, identityHeaders } from "../authorization";
 import { config } from "../config";
 import { prisma } from "../db";
 import { DevelopmentEmailSender, EmailSender } from "../email";
+import { LoggingUserEventPublisher, UserEventPublisher } from "../events";
 import { AppError } from "../errors";
 import {
   generateOtp,
@@ -64,7 +65,10 @@ async function authenticatedUser(request: Request) {
   return session.user;
 }
 
-export function createUsersRouter(emailSender: EmailSender = new DevelopmentEmailSender()): Router {
+export function createUsersRouter(
+  emailSender: EmailSender = new DevelopmentEmailSender(),
+  eventPublisher: UserEventPublisher = new LoggingUserEventPublisher(),
+): Router {
   const router = Router();
   const dummyPasswordHash = hashPassword("NotARealPassword123", config.passwordScryptCost);
 
@@ -223,6 +227,22 @@ export function createUsersRouter(emailSender: EmailSender = new DevelopmentEmai
           data: { emailVerifiedAt: verifiedAt },
         });
       });
+
+      // Email verification is complete (F1.5.2) — tell the rest of the platform
+      // so the credit service can onboard this user. Best-effort after the
+      // commit: a publish failure must not fail a verification already persisted
+      // (at-least-once delivery is the consumer's concern, not the request's).
+      try {
+        await eventPublisher.publishUserVerified({
+          userId: verifiedUser.id,
+          email: verifiedUser.email,
+        });
+      } catch (error) {
+        console.error(
+          `[user event] failed to publish UserVerified for ${verifiedUser.id}:`,
+          error,
+        );
+      }
 
       response.json({
         status: accountStatus(verifiedUser),
