@@ -24,9 +24,10 @@ export function sslRequired(databaseUrl: string, override = process.env.DB_SSL):
   return !['localhost', '127.0.0.1', '::1', '[::1]'].includes(hostname);
 }
 
-// Kafka (consumes the foc.user.status `UserVerified` event). The Helm chart
-// injects these when the service's `kafka.user` is set; locally/in tests they
-// are usually absent, so `enabled` is false and the consumer is not started.
+// Kafka: consumes foc.user.status (`UserVerified` → onboarding) and order's
+// foc.credit.commands (settlements). The Helm chart injects these when the
+// service's `kafka.user` is set; locally/in tests they are usually absent, so
+// `enabled` is false and the consumers are not started.
 const kafkaBrokers = (process.env.KAFKA_BROKERS ?? '')
   .split(',')
   .map((broker) => broker.trim())
@@ -48,9 +49,12 @@ export const config = {
     saslMechanism: process.env.KAFKA_SASL_MECHANISM ?? 'SCRAM-SHA-512',
     caCertPath: process.env.KAFKA_CA_CERT ?? '',
     userStatusTopic: process.env.KAFKA_USER_STATUS_TOPIC ?? 'foc.user.status',
-    // Must be prefixed `credit` — the KafkaUser ACL grants Read only on
-    // consumer groups with that prefix (ADR-0004).
-    consumerGroupId: process.env.KAFKA_CONSUMER_GROUP_ID ?? 'credit-user-status',
+    creditCommandsTopic: process.env.KAFKA_CREDIT_COMMANDS_TOPIC ?? 'foc.credit.commands',
+    // One consumer group per topic (see src/kafka/consumer.ts). Both must be
+    // prefixed `credit` — the KafkaUser ACL grants Read only on consumer
+    // groups with that prefix (ADR-0004).
+    userStatusGroupId: process.env.KAFKA_USER_STATUS_GROUP_ID ?? 'credit-user-status',
+    creditCommandsGroupId: process.env.KAFKA_CREDIT_COMMANDS_GROUP_ID ?? 'credit-commands',
     clientId: process.env.KAFKA_CLIENT_ID ?? 'credit-service',
   },
 } as const;
