@@ -26,7 +26,7 @@ export default defineConfig({
         'src/app.ts', // bootstrap: Fastify instance + logger wiring
         'src/config.ts', // env plumbing (?? defaults); exercised by every test
         'src/database/schema.ts', // declarative; thunks run only during migration
-        'src/kafka/consumer.ts', // transport glue; logic lives in userStatusHandler.ts
+        'src/kafka/consumer.ts', // transport glue; logic lives in the *Handler.ts files
       ],
       // Scoped logic sits at 100%; this floor flags any real regression.
       thresholds: {
