@@ -75,7 +75,20 @@ describe('handleUserStatusMessage (UserVerified → onboarding)', () => {
     expect(await db.select().from(creditUser)).toHaveLength(0);
   });
 
+  it('skips JSON that is not an object (e.g. null) without throwing', async () => {
+    // `null` parses fine; reading .type off it must not throw, or the consumer
+    // would retry the message forever.
+    for (const raw of ['null', '42', '"UserVerified"', '[]']) {
+      await handleUserStatusMessage(raw, silent);
+    }
+    expect(await db.select().from(creditUser)).toHaveLength(0);
+  });
+
   it('skips a UserVerified with a missing or malformed userId', async () => {
+    await handleUserStatusMessage(
+      JSON.stringify({ eventId: randomUUID(), type: 'UserVerified' }),
+      silent,
+    );
     await handleUserStatusMessage(
       JSON.stringify({ eventId: randomUUID(), type: 'UserVerified', data: {} }),
       silent,

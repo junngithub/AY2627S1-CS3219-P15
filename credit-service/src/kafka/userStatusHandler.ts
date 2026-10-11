@@ -1,21 +1,14 @@
 import { onboardUser } from '../services/credit.service.js';
+import { asUuid, parseObject } from './messages.js';
 
-// The foc.user.status envelope, as published by the user service. Declared
-// independently here (no shared package across the service boundary) and parsed
-// defensively — anything unexpected is skipped, not trusted.
-interface EventEnvelope {
-  eventId?: unknown;
-  type?: unknown;
-  occurredAt?: unknown;
-  data?: unknown;
-}
-
+// The foc.user.status envelope, as published by the user service:
+// { eventId, type, occurredAt, data: { userId, email } }. Declared independently
+// here (no shared package across the service boundary) and parsed defensively —
+// anything unexpected is skipped, not trusted.
 interface UserVerifiedData {
   userId?: unknown;
   email?: unknown;
 }
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Parse and apply one `foc.user.status` message.
@@ -29,16 +22,9 @@ export async function handleUserStatusMessage(
   rawValue: string | null,
   log: (message: string) => void = console.warn,
 ): Promise<void> {
-  if (!rawValue) {
-    log('user.status: empty message, skipping');
-    return;
-  }
-
-  let envelope: EventEnvelope;
-  try {
-    envelope = JSON.parse(rawValue) as EventEnvelope;
-  } catch {
-    log('user.status: non-JSON message, skipping');
+  const envelope = parseObject(rawValue);
+  if (!envelope) {
+    log('user.status: empty, non-JSON or non-object message, skipping');
     return;
   }
 
@@ -48,16 +34,11 @@ export async function handleUserStatusMessage(
   }
 
   const data = (envelope.data ?? {}) as UserVerifiedData;
-  const userId = data.userId;
-  if (typeof userId !== 'string' || !UUID_RE.test(userId)) {
+  const userId = asUuid(data.userId);
+  if (!userId) {
     log('user.status: UserVerified with missing/invalid userId, skipping');
     return;
   }
 
-  const eventId =
-    typeof envelope.eventId === 'string' && UUID_RE.test(envelope.eventId)
-      ? envelope.eventId
-      : null;
-
-  await onboardUser(userId, eventId);
+  await onboardUser(userId, asUuid(envelope.eventId));
 }
