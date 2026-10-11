@@ -8,8 +8,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api, UNAUTHORIZED_EVENT } from '../lib/api';
-import { AUTH_ENABLED, clearToken, setToken } from '../lib/session';
-import { DEMO_USER } from '../samples/account';
+import { clearToken, setToken } from '../lib/session';
 
 /** The signed-in user, as the pages see it. */
 export interface CurrentUser {
@@ -43,11 +42,10 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [status, setStatus] = useState<AuthStatus>(AUTH_ENABLED ? 'loading' : 'authenticated');
-  const [user, setUser] = useState<CurrentUser | null>(AUTH_ENABLED ? null : DEMO_USER);
+  const [status, setStatus] = useState<AuthStatus>('loading');
+  const [user, setUser] = useState<CurrentUser | null>(null);
 
   const refresh = useCallback(async () => {
-    if (!AUTH_ENABLED) return;
     try {
       const me = await api.get<MeResponse>('/user/me');
       // The service calls it id; every page, and the admin user rows, call it
@@ -77,7 +75,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Any 401 from any service ends the session, so RequireAuth sends the user
   // to login instead of leaving them on a page whose calls all fail.
   useEffect(() => {
-    if (!AUTH_ENABLED) return undefined;
     function onUnauthorized() {
       setUser(null);
       setStatus('anonymous');
@@ -88,15 +85,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(
     async (email: string, password: string) => {
-      if (!AUTH_ENABLED) {
-        setUser(DEMO_USER);
-        setStatus('authenticated');
-        return;
-      }
-
-      // TODO(user-service): the contract does not say what login returns. This
-      // assumes { token }. If it sets an HttpOnly cookie instead, drop the
-      // setToken call and nothing else changes - see src/lib/session.ts.
+      // User F2: login returns { token, tokenType, expiresAt, user }. Only the
+      // token is kept; /me is the source for everything else.
       const result = await api.post<{ token?: string }>('/user/login', { email, password });
       if (result?.token) {
         setToken(result.token);
@@ -111,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // call it here so the server can invalidate the session too.
     clearToken();
     setUser(null);
-    setStatus(AUTH_ENABLED ? 'anonymous' : 'authenticated');
+    setStatus('anonymous');
   }, []);
 
   const value = useMemo(

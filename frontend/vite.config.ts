@@ -13,12 +13,17 @@ const SUPPLIER_SERVICE = 'http://localhost:8081';
 const BADGES_SERVICE = 'http://localhost:4006';
 
 export default defineConfig(({ mode }) => {
-  // TODO(team): no port is agreed for the Admin Service yet. Its default is a
-  // placeholder; override it in frontend/.env.local once the service picks
-  // one, and update nginx.conf to match.
+  // Override either in frontend/.env.local; keep nginx.conf in step.
   const env = loadEnv(mode, '.', '');
   const userService = env.USER_SERVICE_URL || 'http://localhost:8080';
-  const adminService = env.ADMIN_SERVICE_URL || 'http://localhost:8083';
+  const adminService = env.ADMIN_SERVICE_URL || 'http://localhost:8084';
+
+  /*
+   * Order and Credit are deliberately not proxied here. They identify the
+   * caller from X-User-Id, which only the gateway's authorize check sets, and
+   * the dev server cannot do that check; nginx.conf does. Run the frontend
+   * container to use the order pages and credit balance.
+   */
 
   return {
     plugins: [react()],

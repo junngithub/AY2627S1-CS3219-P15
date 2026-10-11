@@ -1,0 +1,441 @@
+/*
+ * AI-generated (Claude Code);
+ * Reviewed by Ngooi Jun Sen.
+ */
+
+.page {
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: var(--space-5);
+}
+
+.body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.mainColumn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  overflow-wrap: anywhere;
+}
+
+.subtitle {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* The five-minute window: the loudest thing on the Accepted screen. */
+.urgent {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-4) var(--space-5);
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+  border-radius: var(--radius-lg);
+}
+
+.urgentClock {
+  margin: 0;
+  flex: none;
+  font-size: 2rem;
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  color: var(--color-danger);
+  font-variant-numeric: tabular-nums;
+}
+
+.urgentText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.urgentLead {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.urgentBody {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.deadline,
+.awaiting,
+.detailsCard,
+.photoCard,
+.personCard,
+.statusPanel {
+  padding: var(--space-4) var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.deadline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.deadlineLabel,
+.awaitingLabel,
+.detailLabel,
+.sectionTitle {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+}
+
+.deadlineClock {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.deadlineWhen {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* Credits held pending the requester's confirmation. */
+.awaiting {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  background: var(--color-warning-bg);
+  border-color: var(--color-warning);
+}
+
+.awaitingLabel {
+  color: var(--color-warning);
+}
+
+.awaitingClock {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.1;
+  color: var(--color-warning);
+  font-variant-numeric: tabular-nums;
+}
+
+.awaitingBody {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+}
+
+.detailsCard {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4) var(--space-5);
+}
+
+.detailBlock,
+.detailBlockWide {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.detailBlockWide {
+  grid-column: 1 / -1;
+}
+
+.detailValue {
+  margin: 0;
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.detailNote {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.photoCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.photoGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.photo {
+  margin: 0;
+  min-width: 0;
+}
+
+.photoFilled,
+.photoEmpty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 4 / 3;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--color-text-subtle);
+  font-size: var(--font-size-sm);
+  text-align: center;
+}
+
+/* A taken photo reads as a filled frame; a missing one stays dashed. */
+.photoFilled {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+}
+
+.photoEmpty {
+  border: 1px dashed var(--color-border-strong);
+}
+
+.photoFilled img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+
+.photoCaption {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-subtle);
+}
+
+.personCard {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: var(--radius-pill);
+  background: var(--color-danger-bg);
+  color: var(--color-accent);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.personText {
+  flex: 1;
+  min-width: 0;
+}
+
+.personName {
+  margin: 0;
+  font-weight: var(--font-weight-semibold);
+}
+
+.personNote {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.contactLink:hover {
+  text-decoration: none;
+}
+
+.statusPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  position: sticky;
+  top: calc(var(--nav-height) + var(--space-5));
+}
+
+.earnings {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-bg);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.earnings strong {
+  font-size: var(--font-size-lg);
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.earningsUnit {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-muted);
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.actionNote {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-subtle);
+}
+
+.stepperBar,
+.mobileHeader,
+.mobileActions {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .page {
+    padding: 0 0 calc(var(--touch-target) + var(--space-7));
+  }
+
+  .mobileHeader {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    height: var(--nav-height);
+    padding: 0 var(--space-4);
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .back {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--touch-target);
+    height: var(--touch-target);
+    margin-left: calc(var(--space-3) * -1);
+    color: var(--color-text);
+    font-size: var(--font-size-xl);
+    line-height: 1;
+  }
+
+  .back:hover {
+    text-decoration: none;
+  }
+
+  .mobileTitle {
+    margin: 0;
+    font-size: var(--font-size-md);
+    font-weight: var(--font-weight-bold);
+  }
+
+  .mobileHeader > :last-child {
+    margin-left: auto;
+  }
+
+  .stepperBar {
+    display: block;
+    padding: 0 var(--space-2);
+    background: var(--color-surface);
+  }
+
+  .body {
+    grid-template-columns: 1fr;
+    gap: var(--space-4);
+    padding: var(--space-4);
+  }
+
+  .desktopBadge,
+  .statusPanel {
+    display: none;
+  }
+
+  .urgent {
+    gap: var(--space-4);
+    padding: var(--space-4);
+  }
+
+  .urgentClock {
+    font-size: 1.75rem;
+  }
+
+  .detailsCard,
+  .photoGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .detailsCard,
+  .deadline,
+  .awaiting,
+  .photoCard,
+  .personCard {
+    padding: var(--space-4);
+  }
+
+  .mobileActions {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: block;
+    padding: var(--space-3) var(--space-4) calc(var(--space-3) + env(safe-area-inset-bottom));
+    background: var(--color-bg);
+    border-top: 1px solid var(--color-border);
+  }
+
+  .mobileActions:empty {
+    display: none;
+  }
+}

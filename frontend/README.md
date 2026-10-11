@@ -19,7 +19,7 @@ docker compose -f supplier-service/docker-compose.yml up -d --build
 docker compose -f user-service/docker-compose.yml up -d --build
 docker network connect --alias supplier-service foc supplier-service-supplier-service-1
 docker network connect --alias user-service foc user-service-user-service-1
-docker build -t foc-frontend --build-arg VITE_AUTH_ENABLED=true ./frontend
+docker build -t foc-frontend ./frontend
 docker run -d --rm --name foc-frontend -p 3000:80 --network foc foc-frontend   # http://localhost:3000
 ```
 
@@ -52,29 +52,36 @@ variables cannot be used inside media queries, so `767px` is written literally.
   `/orders/:orderId`, `/suppliers`, `/suppliers/new`, `/profile`, `/account-status`
 - Admin: `/admin`, `/admin/suppliers`, `/admin/users`, `/admin/escalations`, `/admin/ratings`
 
-## Sign-in and demo mode
+## Backends
 
-Sign-in is off by default, because the User Service does not exist yet. While
-it is off, every visitor is the demo user in `src/samples/account.ts` (an
-admin), and every User and Admin Service call is stubbed. Supplier calls are
-always real.
+There is no demo mode: every page talks to the real services, and signing in
+needs the User Service. Pages whose service is not running show an error
+rather than sample data.
 
-To use the real services, create `frontend/.env.local`:
+The dev server (`npm run dev`) proxies the User, Admin, Supplier and Badges
+Services, overridable in `frontend/.env.local`:
 
 ```
-VITE_AUTH_ENABLED=true
 USER_SERVICE_URL=http://localhost:8080
-# Placeholder until the team agrees a port; see vite.config.ts.
-ADMIN_SERVICE_URL=http://localhost:8083
+ADMIN_SERVICE_URL=http://localhost:8084
 ```
 
-For the Docker image, pass `--build-arg VITE_AUTH_ENABLED=true`.
+The Order and Credit Services identify the caller from an `X-User-Id` header
+that only the gateway's authorize check sets (infra ADR-0007). `nginx.conf`
+repeats that check for local runs, so the order pages and credit balance work
+in the container but not on the dev server.
 
 ## Not wired yet
 
-- The nav credit balance shows a placeholder, though
-  `GET /api/v1/credit/me/balance` now exists.
-- Order pages run on sample data; see `src/samples/README.md`.
+Commented out in the pages, each with a TODO naming the missing piece:
+
+- Names of requesters and couriers: orders carry user ids only.
+- Order photos: they can be uploaded but no endpoint serves them.
+- My deliveries: no endpoint lists the orders a courier is delivering.
+- Credits reserved, the earned/spent breakdown and credit history: the
+  balance endpoint returns the available figure only, and the ledger endpoint
+  is not implemented.
+- Ratings from the courier side: the Rating Service does not exist yet.
 
 ## AI assistance
 

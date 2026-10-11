@@ -24,6 +24,7 @@ import { TextField } from '../components/ui/TextField';
 import { errorMessage } from '../lib/api';
 import { changePassword, deleteAccount } from '../lib/user';
 import { checkPasswordRules, isValidPassword } from '../lib/validation';
+import { useCreditBalance } from '../lib/credit';
 import styles from './ProfilePage.module.css';
 
 function initials(name: string): string {
@@ -37,6 +38,7 @@ function initials(name: string): string {
 
 export function ProfilePage() {
   const { user, signOut } = useAuth();
+  const creditBalance = useCreditBalance();
   const navigate = useNavigate();
 
   const [changingPassword, setChangingPassword] = useState(false);
@@ -136,17 +138,30 @@ export function ProfilePage() {
             </div>
           </section>
 
-          {/* TODO(credit): FR12.1.1's balance and GET /api/v1/credit/me/ledger
-              history, once the Credit Service exists. */}
           <section className={styles.card}>
-            <div className={styles.soonHead}>
-              <h2 className={styles.cardTitle}>Credit balance</h2>
-              <span className={styles.soonTag}>Coming soon</span>
-            </div>
-            <p className={styles.soonBody}>
-              Credits available and reserved, and how they were earned and spent. Waiting on the
-              Credit Service.
+            <h2 className={styles.cardTitle}>Credit balance</h2>
+
+            <p className={styles.balance}>
+              <span className={styles.balanceNumber}>{creditBalance ?? '--'}</span>
+              <span className={styles.balanceNote}>
+                {creditBalance === null ? 'balance unavailable' : 'available'}
+                {/* TODO(credit): "· N reserved" - the balance endpoint returns
+                    the available figure only. */}
+              </span>
             </p>
+
+            {/*
+              TODO(credit): the mockup's breakdown (earned as a courier, spent
+              as a requester, granted at signup) and the credit history button
+              need GET /api/v1/credit/me/ledger, which is in the contract but
+              not implemented.
+
+            <p className={styles.breakdown}>
+              Earned {earnedAsCourier} as a courier &middot; spent {spentAsRequester} as a
+              requester &middot; {grantedAtSignup} granted at signup.
+            </p>
+            <Button variant="secondary" fullWidth>View credit history</Button>
+            */}
           </section>
         </div>
 
