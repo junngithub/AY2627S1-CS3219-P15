@@ -1,0 +1,28 @@
+meta {
+  name: Collect before accept
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/collect
+  body: multipartForm
+  auth: none
+}
+headers {
+  X-User-Id: 43497a23-55b7-35df-9839-1e230d3f657a
+  X-User-Telegram: collect-courier
+}
+
+
+
+body:multipart-form {
+  photo: @file(C:\Users\varun\Pictures\Screenshots\Screenshot 2023-07-26 180036.png) @contentType(image/png)
+}
+
+tests {
+  test("status is 409", function() {
+    expect(res.getStatus()).to.equal(409);
+    expect(res.getBody().error).to.include("not waiting for collection");
+  });
+}

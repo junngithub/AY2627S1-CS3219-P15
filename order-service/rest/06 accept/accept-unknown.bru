@@ -1,0 +1,25 @@
+meta {
+  name: Unknown order
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/00000000-0000-0000-0000-000000000001/accept
+  body: none
+  auth: none
+}
+headers {
+  X-User-Id: 222e7425-518f-3139-8f89-6324aa2b5bc8
+  X-User-Telegram: accept-courier
+}
+
+
+
+tests {
+  test("status is 404", function() {
+    expect(res.getStatus()).to.equal(404);
+    expect(res.getBody().error).to.include("Order not found");
+  });
+}
+

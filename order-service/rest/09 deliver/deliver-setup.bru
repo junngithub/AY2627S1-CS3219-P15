@@ -1,0 +1,40 @@
+meta {
+  name: Setup order
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders
+  body: json
+  auth: none
+}
+headers {
+  X-User-Id: c0e8ac0d-6089-31b0-a013-fa4f0061ad3f
+  X-User-Telegram: deliver-req
+}
+
+
+
+body:json {
+  {
+    "itemDescription": "Print notes",
+    "credits": 1,
+    "expiryTime": "{{acceptanceExpiry}}",
+    "deliveryTime": "{{deliveryDeadline}}",
+    "fromLocation": "2",
+    "toLocation": "4"
+  }
+}
+
+script:post-response {
+  bru.setVar("orderId", res.getBody().id);
+}
+
+tests {
+  test("status is 201", function() {
+    expect(res.getStatus()).to.equal(201);
+    expect(res.getBody().status).to.equal("CREATED");
+  });
+}
+

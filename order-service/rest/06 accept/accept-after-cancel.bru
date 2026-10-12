@@ -1,0 +1,25 @@
+meta {
+  name: Accept a cancelled order
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/accept
+  body: none
+  auth: none
+}
+headers {
+  X-User-Id: 7665ce42-b9ab-3c93-85fc-791ba92cf14e
+  X-User-Telegram: accept-late
+}
+
+
+
+tests {
+  test("status is 409", function() {
+    expect(res.getStatus()).to.equal(409);
+    expect(res.getBody().error).to.include("already claimed");
+  });
+}
+

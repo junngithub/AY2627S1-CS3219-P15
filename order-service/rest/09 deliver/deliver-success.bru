@@ -1,0 +1,28 @@
+meta {
+  name: Deliver with a photo
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/deliver
+  body: multipartForm
+  auth: none
+}
+headers {
+  X-User-Id: c35dc8b4-f300-3285-8e2f-983ed1c791ef
+  X-User-Telegram: deliver-courier
+}
+
+
+
+body:multipart-form {
+  photo: @file(C:\Users\varun\Downloads\My Timetable (5).png) @contentType(image/png)
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().status).to.equal("DELIVERED");
+  });
+}

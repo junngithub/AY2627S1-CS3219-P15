@@ -1,0 +1,22 @@
+meta {
+  name: collect missing auth
+  type: http
+  seq: 19
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/collect
+  body: multipartForm
+  auth: none
+}
+
+body:multipart-form {
+  photo: @file(C:\Users\varun\Downloads\My Timetable (5).png) @contentType(image/png)
+}
+
+tests {
+  test("status is 401", function() {
+    expect(res.getStatus()).to.equal(401);
+    expect(res.getBody().error).to.include("Sign in is required");
+  });
+}

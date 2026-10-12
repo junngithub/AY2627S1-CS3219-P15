@@ -1,0 +1,40 @@
+meta {
+  name: Setup empty photo
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders
+  body: json
+  auth: none
+}
+headers {
+  X-User-Id: 1df6a67d-7877-3f76-b3f0-bd73b1dadbd5
+  X-User-Telegram: collect-empty-req
+}
+
+
+
+body:json {
+  {
+    "itemDescription": "Print notes",
+    "credits": 1,
+    "expiryTime": "{{acceptanceExpiry}}",
+    "deliveryTime": "{{deliveryDeadline}}",
+    "fromLocation": "2",
+    "toLocation": "4"
+  }
+}
+
+script:post-response {
+  bru.setVar("orderId", res.getBody().id);
+}
+
+tests {
+  test("status is 201", function() {
+    expect(res.getStatus()).to.equal(201);
+    expect(res.getBody().status).to.equal("CREATED");
+  });
+}
+

@@ -1,0 +1,25 @@
+meta {
+  name: Acknowledge an open order
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/acknowledge
+  body: none
+  auth: none
+}
+headers {
+  X-User-Id: a1638593-be09-3de8-a14c-8740a5a19df4
+  X-User-Telegram: ack-open-req
+}
+
+
+
+tests {
+  test("status is 409", function() {
+    expect(res.getStatus()).to.equal(409);
+    expect(res.getBody().error).to.include("cannot be acknowledged");
+  });
+}
+

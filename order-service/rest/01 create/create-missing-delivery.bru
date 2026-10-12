@@ -1,0 +1,35 @@
+meta {
+  name: Missing delivery deadline
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders
+  body: json
+  auth: none
+}
+headers {
+  X-User-Id: b5e92e87-7422-3b8f-8d68-54a41e3362d3
+  X-User-Telegram: create-nodel
+}
+
+
+
+body:json {
+  {
+    "itemDescription": "Print notes",
+    "credits": 1,
+    "expiryTime": "{{acceptanceExpiry}}",
+    "fromLocation": "2",
+    "toLocation": "4"
+  }
+}
+
+tests {
+  test("status is 400", function() {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().error).to.include("deliveryTime");
+  });
+}
+

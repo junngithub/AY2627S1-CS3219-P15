@@ -1,0 +1,10 @@
+target
+.sonar
+.git
+*.md
+compose.yaml
+compose.local.yaml
+analyze.ps1
+**/application-local.yml
+**/application-local.yaml
+**/application-local.properties

@@ -5,14 +5,16 @@
 #
 #   deploy/local.sh            install / upgrade everything
 #   deploy/local.sh status     show releases, Kafka and pods
-#   deploy/local.sh check      connectivity tests (helm test): Kafka logins and
-#                              ACLs, HTTP to every service by name, and requests
+#   deploy/local.sh check      connectivity tests (helm test): database logins,
+#                              Kafka logins and ACLs, HTTP to every service by
+#                              name (and its database, if any), and requests
 #                              through the gateway (routing, auth, header spoofing)
 #   deploy/local.sh gateway    port-forward the gateway to http://localhost:8080
 #   deploy/local.sh down       uninstall everything and delete the namespaces
 #                              (deletes Kafka data)
 #
-# Needs: helm, kubectl, and the kubeconfig written by infra/local/aws.
+# Needs: helm, kubectl, terraform, and infra/local/aws applied (kubeconfig,
+# Postgres on Floci).
 set -euo pipefail
 
 DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -24,7 +26,8 @@ STRIMZI_NS=strimzi
 GATEWAY_NS=envoy-gateway-system
 VALUES="$DEPLOY_DIR/values"
 CHARTS="$DEPLOY_DIR/charts"
-PLATFORM_RELEASES=(namespace kafka gateway) # releases in $NS that are not services
+PLATFORM_RELEASES=(namespace database kafka gateway) # releases in $NS that are not services
+TF_LOCAL="$DEPLOY_DIR/../infra/local/aws"
 GATEWAY_PORT="${GATEWAY_PORT:-8080}"
 
 log() { printf '\n==> %s\n' "$*"; }
@@ -55,11 +58,19 @@ require_cluster() {
 # Remove dead nodes and reset volumes pinned to nodes that no longer exist.
 # Locally this only loses Kafka's messages; topics and users are recreated.
 heal_after_floci_restart() {
-  local node pv ns claim pinned pod
-  for node in $(kubectl get nodes --no-headers | awk '$2 ~ /NotReady/ {print $1}'); do
-    log "Removing dead node $node (k3s container was recreated)"
-    kubectl delete node "$node" --ignore-not-found
+  local node pv ns claim pinned pod stale
+  # Floci runs one k3s node, so every node but the newest is from an earlier
+  # k3s container. Don't wait for NotReady: that takes ~40s after a restart,
+  # and pods (CoreDNS too) stay stuck on the dead node until it's deleted.
+  stale=$(kubectl get nodes --sort-by=.metadata.creationTimestamp -o name | sed '$d')
+  for node in $stale; do
+    log "Removing dead ${node} (k3s container was recreated)"
+    kubectl delete "$node" --ignore-not-found
   done
+  if [[ -n "$stale" ]]; then
+    log "Waiting for cluster DNS on the new node"
+    kubectl -n kube-system rollout status deploy/coredns --timeout=3m
+  fi
   local nodes
   nodes=" $(kubectl get nodes -o jsonpath='{.items[*].metadata.name}') "
   kubectl get pv -o jsonpath='{range .items[*]}{.metadata.name} {.spec.claimRef.namespace} {.spec.claimRef.name} {.spec.nodeAffinity.required.nodeSelectorTerms[0].matchExpressions[0].values[0]}{"\n"}{end}' |
@@ -74,6 +85,9 @@ heal_after_floci_restart() {
           kubectl -n "$ns" delete pod "$pod" --force --grace-period=0 >/dev/null 2>&1 || true
         done
         kubectl -n "$ns" delete pvc "$claim" --ignore-not-found --wait=false >/dev/null
+        # Wait until it's gone: a pod recreated meanwhile would bind to the
+        # dying claim, look ready, then be replaced minutes later.
+        kubectl -n "$ns" wait --for=delete "pvc/$claim" --timeout=3m >/dev/null 2>&1 || true
       fi
       # The stale volume's cleanup hook can never run on a node that's gone.
       log "Removing stale volume $pv (pinned to missing node $pinned)"
@@ -90,6 +104,21 @@ up() {
   helm upgrade --install namespace "$CHARTS/foc-namespace" -n "$NS" --create-namespace \
     -f "$VALUES/envs/$ENV/namespace.yaml"
   kubectl label namespace "$NS" "foc.io/env=$ENV" --overwrite >/dev/null
+
+  log "Databases on Floci's Postgres: one database, login and <svc>-db Secret per service"
+  # Terraform's JSON output is valid YAML, so it's passed as a values file.
+  # Kept in a private temp file, never on the command line.
+  local dbvalues
+  dbvalues="$(mktemp)"
+  if ! terraform -chdir="$TF_LOCAL" output -json database >"$dbvalues" 2>/dev/null; then
+    rm -f "$dbvalues"
+    echo "No database in infra/local/aws state. Run: terraform -chdir=infra/local/aws apply" >&2
+    exit 1
+  fi
+  helm upgrade --install database "$CHARTS/foc-database" -n "$NS" \
+    -f "$VALUES/envs/$ENV/database.yaml" -f "$dbvalues" --wait --timeout 5m ||
+    { rm -f "$dbvalues"; exit 1; }
+  rm -f "$dbvalues"
 
   log "Strimzi CRDs"
   apply_vendored_crds "$(ls "$CHARTS"/strimzi/charts/strimzi-kafka-operator-*.tgz)"
@@ -111,6 +140,9 @@ up() {
   kubectl -n "$NS" wait kafka/kafka --for=condition=Ready --timeout=10m
   # Kafka's status can lag behind a broker that's being recreated; wait for the pods too.
   kubectl -n "$NS" wait pod -l strimzi.io/cluster=kafka,strimzi.io/kind=Kafka --for=condition=Ready --timeout=10m
+  # The topic and user operators crash-loop while the broker is down, and
+  # recreate topics and logins once they're back up.
+  kubectl -n "$NS" rollout status deploy/kafka-entity-operator --timeout=10m
   kubectl -n "$NS" wait kafkatopic --all --for=condition=Ready --timeout=5m
   kubectl -n "$NS" wait kafkauser --all --for=condition=Ready --timeout=5m
 
@@ -160,6 +192,8 @@ status() {
 check() {
   require_cluster
   local failed=() release
+  log "Databases: each service's login works on its own database only"
+  helm test database -n "$NS" --logs --timeout 3m || failed+=(database)
   log "Kafka: logins and ACLs for every KafkaUser (takes ~2 min)"
   helm test kafka -n "$NS" --logs --timeout 10m || failed+=(kafka)
   for release in $(helm list -n "$NS" -q); do
@@ -182,7 +216,7 @@ gateway() {
   cat <<EOF
   curl localhost:$GATEWAY_PORT/api/v1/supplier                                   # public
   curl localhost:$GATEWAY_PORT/api/v1/orders                                     # 401
-  curl -H 'Authorization: Bearer stub:alice@u.nus.edu' localhost:$GATEWAY_PORT/api/v1/orders
+  curl localhost:$GATEWAY_PORT/api/v1/user/me -H 'Authorization: Bearer <token from POST /api/v1/user/login>'
 EOF
   kubectl -n "$GATEWAY_NS" port-forward "svc/envoy-$NS" "$GATEWAY_PORT:80"
 }

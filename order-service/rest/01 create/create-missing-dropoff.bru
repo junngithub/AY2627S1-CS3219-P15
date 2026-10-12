@@ -1,0 +1,35 @@
+meta {
+  name: Missing dropoff location
+  type: http
+  seq: 18
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders
+  body: json
+  auth: none
+}
+headers {
+  X-User-Id: 85cf96df-0d4e-3807-965c-269bf22ca80b
+  X-User-Telegram: create-nodrop
+}
+
+
+
+body:json {
+  {
+    "itemDescription": "Print notes",
+    "credits": 1,
+    "expiryTime": "{{acceptanceExpiry}}",
+    "deliveryTime": "{{deliveryDeadline}}",
+    "fromLocation": "2"
+  }
+}
+
+tests {
+  test("status is 400", function() {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().error).to.include("toLocation");
+  });
+}
+

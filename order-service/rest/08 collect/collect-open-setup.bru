@@ -1,0 +1,40 @@
+meta {
+  name: Setup still-open order
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders
+  body: json
+  auth: none
+}
+headers {
+  X-User-Id: fe896047-6713-3bbf-976d-ed7e456539dd
+  X-User-Telegram: collect-open-req
+}
+
+
+
+body:json {
+  {
+    "itemDescription": "Print notes",
+    "credits": 1,
+    "expiryTime": "{{acceptanceExpiry}}",
+    "deliveryTime": "{{deliveryDeadline}}",
+    "fromLocation": "2",
+    "toLocation": "4"
+  }
+}
+
+script:post-response {
+  bru.setVar("orderId", res.getBody().id);
+}
+
+tests {
+  test("status is 201", function() {
+    expect(res.getStatus()).to.equal(201);
+    expect(res.getBody().status).to.equal("CREATED");
+  });
+}
+

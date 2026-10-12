@@ -1,0 +1,40 @@
+meta {
+  name: Setup an alert
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders
+  body: json
+  auth: none
+}
+headers {
+  X-User-Id: ecb16930-ec95-30f7-9ee6-6475d5dc46c3
+  X-User-Telegram: alerts-req
+}
+
+
+
+body:json {
+  {
+    "itemDescription": "Print notes",
+    "credits": 1,
+    "expiryTime": "{{acceptanceExpiry}}",
+    "deliveryTime": "{{deliveryDeadline}}",
+    "fromLocation": "2",
+    "toLocation": "4"
+  }
+}
+
+script:post-response {
+  bru.setVar("orderId", res.getBody().id);
+}
+
+tests {
+  test("status is 201", function() {
+    expect(res.getStatus()).to.equal(201);
+    expect(res.getBody().status).to.equal("CREATED");
+  });
+}
+

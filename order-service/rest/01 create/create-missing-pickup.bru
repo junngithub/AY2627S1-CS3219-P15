@@ -1,0 +1,35 @@
+meta {
+  name: Missing pickup location
+  type: http
+  seq: 15
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders
+  body: json
+  auth: none
+}
+headers {
+  X-User-Id: f6660fc2-57fb-383b-bd4d-81156ceec210
+  X-User-Telegram: create-nopick
+}
+
+
+
+body:json {
+  {
+    "itemDescription": "Print notes",
+    "credits": 1,
+    "expiryTime": "{{acceptanceExpiry}}",
+    "deliveryTime": "{{deliveryDeadline}}",
+    "toLocation": "4"
+  }
+}
+
+tests {
+  test("status is 400", function() {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().error).to.include("fromLocation");
+  });
+}
+

@@ -19,6 +19,10 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
   const userService = env.USER_SERVICE_URL || 'http://localhost:8082';
   const adminService = env.ADMIN_SERVICE_URL || 'http://localhost:8083';
+  // Gateway mode: every /api call goes to the API gateway, which routes by
+  // path and checks the token (deploy/README.md). Locally that's the cluster's
+  // gateway via `deploy/local.sh gateway` (http://localhost:8080).
+  const gateway = env.API_GATEWAY_URL;
 
   return {
     plugins: [react()],
@@ -26,7 +30,7 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       // Same one-origin arrangement as nginx: the app only ever calls its own
       // origin, so there is no cross-origin request and no service needs CORS.
-      proxy: {
+      proxy: gateway ? { '/api': { target: gateway, changeOrigin: true } } : {
         // Supplier Service already serves this prefix, so nothing is rewritten.
         '/api/v1/supplier': {
           target: SUPPLIER_SERVICE,

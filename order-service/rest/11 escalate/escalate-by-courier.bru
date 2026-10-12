@@ -1,0 +1,31 @@
+meta {
+  name: Courier cannot escalate
+  type: http
+  seq: 21
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/escalate
+  body: json
+  auth: none
+}
+headers {
+  X-User-Id: ba7dba89-fdf3-3780-ac38-2bcf64aef3bf
+  X-User-Telegram: esc-notreq-courier
+}
+
+
+
+body:json {
+  {
+    "disputeText": "The courier collected the wrong item"
+  }
+}
+
+tests {
+  test("status is 409", function() {
+    expect(res.getStatus()).to.equal(409);
+    expect(res.getBody().error).to.include("Only the requester");
+  });
+}
+

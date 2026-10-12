@@ -1,0 +1,25 @@
+meta {
+  name: Accept bad photo type
+  type: http
+  seq: 16
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/accept
+  body: none
+  auth: none
+}
+headers {
+  X-User-Id: 521fca70-3948-3f5f-9f72-3b255428d701
+  X-User-Telegram: collect-type-courier
+}
+
+
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().status).to.equal("ACCEPTED");
+  });
+}
+

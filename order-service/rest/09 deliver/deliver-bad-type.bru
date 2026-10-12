@@ -1,0 +1,28 @@
+meta {
+  name: Photo is not an image
+  type: http
+  seq: 22
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/deliver
+  body: multipartForm
+  auth: none
+}
+headers {
+  X-User-Id: 998b8d65-d06f-3bad-b9cd-deec753a5451
+  X-User-Telegram: deliver-type-courier
+}
+
+
+
+body:multipart-form {
+  photo: @file(C:\Users\varun\Downloads\Corporate_Finance_Cheatsheet.pdf) @contentType(application/pdf)
+}
+
+tests {
+  test("status is 400", function() {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().error).to.include("JPEG, PNG, or WebP");
+  });
+}

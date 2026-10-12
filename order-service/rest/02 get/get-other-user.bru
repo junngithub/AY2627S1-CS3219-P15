@@ -1,0 +1,25 @@
+meta {
+  name: Another user cannot see the order
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}
+  body: none
+  auth: none
+}
+headers {
+  X-User-Id: ba3fb91b-0f35-3d9b-ae30-793bcb2897c5
+  X-User-Telegram: get-stranger
+}
+
+
+
+tests {
+  test("status is 404", function() {
+    expect(res.getStatus()).to.equal(404);
+    expect(res.getBody().error).to.include("Order not found");
+  });
+}
+

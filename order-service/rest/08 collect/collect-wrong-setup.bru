@@ -1,0 +1,40 @@
+meta {
+  name: Setup for the wrong courier
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders
+  body: json
+  auth: none
+}
+headers {
+  X-User-Id: 7d78c0d8-2dad-3a49-998d-4b3c87abc2e9
+  X-User-Telegram: collect-wrong-req
+}
+
+
+
+body:json {
+  {
+    "itemDescription": "Print notes",
+    "credits": 1,
+    "expiryTime": "{{acceptanceExpiry}}",
+    "deliveryTime": "{{deliveryDeadline}}",
+    "fromLocation": "2",
+    "toLocation": "4"
+  }
+}
+
+script:post-response {
+  bru.setVar("orderId", res.getBody().id);
+}
+
+tests {
+  test("status is 201", function() {
+    expect(res.getStatus()).to.equal(201);
+    expect(res.getBody().status).to.equal("CREATED");
+  });
+}
+

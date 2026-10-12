@@ -1,0 +1,29 @@
+meta {
+  name: Collect delivered order
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/collect
+  body: multipart-form
+  auth: none
+}
+headers {
+  X-User-Id: bea549a4-dc9a-3acc-bfd1-dafbf7b2a31d
+  X-User-Telegram: ack-courier
+}
+
+
+
+body:multipart-form {
+  photo: @file(../fixtures/proof.png)
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().status).to.equal("COLLECTED");
+  });
+}
+

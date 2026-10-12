@@ -1,0 +1,36 @@
+meta {
+  name: Reward above the credit balance
+  type: http
+  seq: 21
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders
+  body: json
+  auth: none
+}
+headers {
+  X-User-Id: 51bd3155-b68c-3017-b250-edd21f485a88
+  X-User-Telegram: create-broke
+}
+
+
+
+body:json {
+  {
+    "itemDescription": "Print notes",
+    "credits": 21,
+    "expiryTime": "{{acceptanceExpiry}}",
+    "deliveryTime": "{{deliveryDeadline}}",
+    "fromLocation": "2",
+    "toLocation": "4"
+  }
+}
+
+tests {
+  test("status is 400", function() {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().error).to.include("Not enough credits");
+  });
+}
+

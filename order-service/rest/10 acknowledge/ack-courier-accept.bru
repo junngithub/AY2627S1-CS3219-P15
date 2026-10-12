@@ -1,0 +1,25 @@
+meta {
+  name: Accept courier acknowledge
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/accept
+  body: none
+  auth: none
+}
+headers {
+  X-User-Id: c90c3b6d-a0c3-3dea-b640-87c23b1ca59d
+  X-User-Telegram: ack-notreq-courier
+}
+
+
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().status).to.equal("ACCEPTED");
+  });
+}
+

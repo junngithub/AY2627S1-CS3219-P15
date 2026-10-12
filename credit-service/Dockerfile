@@ -9,6 +9,15 @@ COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build
 
+# ---- Migrate stage ----
+# Used only by the migration Job (deploy/charts/foc-service/templates/migrate-job.yaml,
+# ADR-0011): drizzle-kit (a devDependency) plus the config and SQL migrations.
+FROM build AS migrate
+COPY drizzle.config.ts ./
+COPY drizzle ./drizzle
+USER node
+CMD ["npm", "run", "db:migrate"]
+
 # ---- Runtime stage ----
 FROM node:22-alpine AS runtime
 ENV NODE_ENV=production

@@ -10,6 +10,10 @@ terraform {
       source  = "hashicorp/local"
       version = "~> 2.5"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.7"
+    }
   }
 
   # Local env keeps state on disk (terraform.tfstate, git-ignored).

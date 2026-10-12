@@ -1,0 +1,25 @@
+meta {
+  name: Negative page size
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/v1/orders?size=-1
+  body: none
+  auth: none
+}
+headers {
+  X-User-Id: 55e91d50-3a78-3c3e-b310-e45f09a6b4e7
+  X-User-Telegram: pool-courier
+}
+
+
+
+tests {
+  test("status is 400", function() {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().error).to.include("Page size");
+  });
+}
+

@@ -1,0 +1,25 @@
+meta {
+  name: Requester cannot cancel after accept
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/cancel
+  body: none
+  auth: none
+}
+headers {
+  X-User-Id: 3b8a8ca4-9e66-30ad-8b01-b80c2539397d
+  X-User-Telegram: cancel-late-req
+}
+
+
+
+tests {
+  test("status is 409", function() {
+    expect(res.getStatus()).to.equal(409);
+    expect(res.getBody().error).to.include("cannot be cancelled");
+  });
+}
+

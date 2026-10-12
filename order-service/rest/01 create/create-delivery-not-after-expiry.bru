@@ -1,0 +1,36 @@
+meta {
+  name: Delivery deadline not after expiry
+  type: http
+  seq: 14
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders
+  body: json
+  auth: none
+}
+headers {
+  X-User-Id: a1513c53-8036-3779-8b00-b9a496f58fc1
+  X-User-Telegram: create-samedel
+}
+
+
+
+body:json {
+  {
+    "itemDescription": "Print notes",
+    "credits": 1,
+    "expiryTime": "{{acceptanceExpiry}}",
+    "deliveryTime": "{{acceptanceExpiry}}",
+    "fromLocation": "2",
+    "toLocation": "4"
+  }
+}
+
+tests {
+  test("status is 400", function() {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().error).to.include("Delivery deadline");
+  });
+}
+

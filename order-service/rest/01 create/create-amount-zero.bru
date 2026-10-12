@@ -1,0 +1,36 @@
+meta {
+  name: Amount zero
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders
+  body: json
+  auth: none
+}
+headers {
+  X-User-Id: 5ca1cc86-0475-3a7c-8e7c-cd13ea79cb69
+  X-User-Telegram: create-zero
+}
+
+
+
+body:json {
+  {
+    "itemDescription": "Print notes",
+    "credits": 0,
+    "expiryTime": "{{acceptanceExpiry}}",
+    "deliveryTime": "{{deliveryDeadline}}",
+    "fromLocation": "2",
+    "toLocation": "4"
+  }
+}
+
+tests {
+  test("status is 400", function() {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().error).to.include("credits");
+  });
+}
+

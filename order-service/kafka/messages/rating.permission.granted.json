@@ -1,0 +1,11 @@
+{
+  "eventId": "EVENT_ID",
+  "eventType": "rating.permission.granted",
+  "schemaVersion": 1,
+  "occurredAt": "2026-09-23T00:00:00Z",
+  "orderId": "00000000-0000-0000-0000-000000000000",
+  "raterId": "22222222-2222-2222-2222-222222222222",
+  "raterRole": "COURIER",
+  "rateeId": "11111111-1111-1111-1111-111111111111",
+  "rateeRole": "REQUESTER"
+}

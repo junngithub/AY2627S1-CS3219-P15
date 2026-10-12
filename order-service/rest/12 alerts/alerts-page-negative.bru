@@ -1,0 +1,25 @@
+meta {
+  name: Negative page
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/v1/orders/alerts?page=-1
+  body: none
+  auth: none
+}
+headers {
+  X-User-Id: ecb16930-ec95-30f7-9ee6-6475d5dc46c3
+  X-User-Telegram: alerts-req
+}
+
+
+
+tests {
+  test("status is 400", function() {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().error).to.include("Page size");
+  });
+}
+
