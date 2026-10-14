@@ -14,15 +14,15 @@ import { DEMO_USER } from '../samples/account';
 /** Shape of User F3 (`GET /api/v1/user/me`), plus the admin flag from F4. */
 export interface CurrentUser {
   userId: string;
-  /**
-   * UI FR1.1.1 collects a name at sign-up and the contract's /user/me returns
-   * one, but the contract's signup body does not accept it currently.
-   */
   name: string;
   email: string;
+  telegramHandle?: string;
   status: 'Created' | 'Verified' | 'Suspended';
   isAdmin: boolean;
 }
+
+type UserProfile = Omit<CurrentUser, 'userId'> & { id: string };
+const currentUser = ({ id, ...profile }: UserProfile): CurrentUser => ({ ...profile, userId: id });
 
 type AuthStatus = 'loading' | 'authenticated' | 'anonymous';
 
@@ -43,8 +43,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     if (!AUTH_ENABLED) return;
     try {
-      const me = await api.get<CurrentUser>('/user/me');
-      setUser(me);
+      const me = await api.get<UserProfile>('/user/me');
+      setUser(currentUser(me));
       setStatus('authenticated');
     } catch {
       // Any failure here means "not signed in". The reason is deliberately not
@@ -80,16 +80,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // TODO(user-service): the contract does not say what login returns. This
-      // assumes { token }. If it sets an HttpOnly cookie instead, drop the
-      // setToken call and nothing else changes - see src/lib/session.ts.
-      const result = await api.post<{ token?: string }>('/user/login', { email, password });
-      if (result?.token) {
-        setToken(result.token);
+      const result = await api.post<{ token: string }>('/user/login', { email, password });
+      if (!result.token) throw new Error('Login response did not contain a session token');
+      setToken(result.token);
+      try {
+        const me = await api.get<UserProfile>('/user/me');
+        setUser(currentUser(me));
+        setStatus('authenticated');
+      } catch (error) {
+        clearToken();
+        setUser(null);
+        setStatus('anonymous');
+        throw error;
       }
-      await refresh();
     },
-    [refresh],
+    [],
   );
 
   const signOut = useCallback(async () => {

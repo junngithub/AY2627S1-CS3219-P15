@@ -17,7 +17,7 @@
  */
 
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { Alert } from '../components/ui/Alert';
 import { Button } from '../components/ui/Button';
@@ -106,6 +106,9 @@ export function ProfilePage() {
             <p className={styles.rowNote}>
               Your name and email are fixed once your account is created.
             </p>
+            {user.status === 'Created' ? <p className={styles.rowNote}>
+              Finish verification before posting or accepting errands. <Link to="/account-status">View verification steps</Link>
+            </p> : null}
 
             <div className={styles.divider} />
 

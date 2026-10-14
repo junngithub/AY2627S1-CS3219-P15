@@ -10,11 +10,9 @@
 
 /**
  * Domains accepted at sign-up (User F1.1.1).
- * OPEN QUESTION: the backlog targets students *and* staff, but the mockup error
- * says "Use your @u.nus.edu address". Staff addresses are @nus.edu.sg. Confirm
- * with the User Service owner and add the domain here if staff are in scope.
+ * Both student and staff email domains are accepted by User Service.
  */
-export const ALLOWED_EMAIL_DOMAINS = ['u.nus.edu'];
+export const ALLOWED_EMAIL_DOMAINS = ['u.nus.edu', 'nus.edu.sg'];
 
 export interface PasswordRule {
   id: 'case' | 'number' | 'length';
@@ -23,13 +21,13 @@ export interface PasswordRule {
 }
 
 export function isValidName(name: string): boolean {
-  return name.trim().length >= 2;
+  return name.trim().length >= 2 && name.trim().length <= 100;
 }
 
 export function isNusEmail(email: string): boolean {
   const trimmed = email.trim().toLowerCase();
   const at = trimmed.lastIndexOf('@');
-  if (at <= 0) return false;
+  if (at <= 0 || trimmed.indexOf('@') !== at) return false;
   const local = trimmed.slice(0, at);
   const domain = trimmed.slice(at + 1);
   return local.length > 0 && ALLOWED_EMAIL_DOMAINS.includes(domain);
@@ -40,7 +38,7 @@ export function isNusEmail(email: string): boolean {
  * The leading "@" is shown as a prefix in the field, so it is not part of the value.
  */
 export function isValidTelegramHandle(handle: string): boolean {
-  return /^[A-Za-z0-9_]{5,32}$/.test(handle.trim());
+  return /^[A-Za-z][A-Za-z0-9_]{4,31}$/.test(handle.trim().replace(/^@/, ''));
 }
 
 /** User F1.2: upper and lower case, a digit, at least 10 characters. */

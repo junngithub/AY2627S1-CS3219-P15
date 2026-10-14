@@ -26,6 +26,8 @@ import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { SignUpPage } from './pages/SignUpPage';
 import { VerifyEmailLinkPage } from './pages/VerifyEmailLinkPage';
 import { VerifyEmailPage } from './pages/VerifyEmailPage';
+import { VerifyTelegramPage } from './pages/VerifyTelegramPage';
+import { AccountStatusPage } from './pages/AccountStatusPage';
 
 export function App() {
   const { user } = useAuth();
@@ -48,8 +50,7 @@ export function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
-        {/* TODO(user-service): the path the verification email links to,
-            with ?token=. Whoever writes the email template must use it. */}
+        {/* Older verification links redirect to the current email OTP form. */}
         <Route path="/verify-email/confirm" element={<VerifyEmailLinkPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
@@ -79,7 +80,8 @@ export function App() {
           <Route path="/suppliers/new" element={<NewSupplierPage />} />
           <Route path="/suppliers/:supplierId" element={<SupplierDetailPage />} />
           <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/account-status" element={<PagePlaceholder title="Account status" requirements="UI FR13" />} />
+          <Route path="/verify-telegram" element={<VerifyTelegramPage />} />
+          <Route path="/account-status" element={<AccountStatusPage />} />
 
           {/*
             Admin pages have their own shell (UI FR15.1.2), so they sit

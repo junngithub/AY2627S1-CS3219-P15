@@ -18,12 +18,9 @@ function demoDelay(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 400));
 }
 
-/**
- * User F1. The contract's body is email, password and telegramHandle only.
- * Sign-up also collects a name (UI FR1.1.1) that nothing accepts; see
- * docs/open-items.md section 5.
- */
+/** User F1: signup requires a display name as well as account credentials. */
 export async function signUp(body: {
+  name: string;
   email: string;
   password: string;
   telegramHandle: string;
@@ -32,10 +29,30 @@ export async function signUp(body: {
   await api.post('/user/signup', body);
 }
 
-/** User F1.3.2: the token comes from the link in the verification email. */
-export async function verifyEmail(token: string): Promise<void> {
+/** User F1.3.2: email verification uses a six-digit OTP. */
+export async function verifyEmail(email: string, otp: string): Promise<void> {
   if (!AUTH_ENABLED) return demoDelay();
-  await api.post('/user/verify-email', { token });
+  await api.post('/user/verify-email', { email, otp });
+}
+
+export interface AccountStatusResponse {
+  status: 'Created' | 'Verified' | 'Suspended';
+  nextSteps: string[];
+}
+
+export async function getAccountStatus(): Promise<AccountStatusResponse> {
+  if (!AUTH_ENABLED) return { status: 'Verified', nextSteps: [] };
+  return api.get('/user/me/status');
+}
+
+export async function requestTelegramVerification(): Promise<{ telegramBotUrl: string | null; expiresAt: string | null }> {
+  if (!AUTH_ENABLED) return { telegramBotUrl: null, expiresAt: null };
+  return api.post('/user/request-telegram-verification');
+}
+
+export async function verifyTelegram(otp: string): Promise<AccountStatusResponse> {
+  if (!AUTH_ENABLED) return { status: 'Verified', nextSteps: [] };
+  return api.post('/user/verify-telegram', { otp });
 }
 
 /** User F1.3.4. */

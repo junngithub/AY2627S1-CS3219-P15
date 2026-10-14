@@ -29,7 +29,7 @@ export function LoginPage() {
   const { signIn } = useAuth();
 
   // Where the guard sent them from, so they land back there after signing in.
-  const from = (location.state as { from?: string } | null)?.from ?? '/browse';
+  const from = (location.state as { from?: string } | null)?.from ?? '/profile';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

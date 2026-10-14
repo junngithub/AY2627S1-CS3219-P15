@@ -4,7 +4,7 @@
 //        the nginx one, so the app runs against the same paths in both.
 // Reviewed by Ngooi Jun Sen.
 
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig, loadEnv, type UserConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 // Backends run on the host during development. In the container they are
@@ -12,12 +12,10 @@ import react from '@vitejs/plugin-react';
 const SUPPLIER_SERVICE = 'http://localhost:8081';
 const BADGES_SERVICE = 'http://localhost:4006';
 
-export default defineConfig(({ mode }) => {
-  // TODO(team): no port is agreed for the User or Admin Service yet. These
-  // defaults are placeholders; override them in frontend/.env.local once the
-  // services pick one, and update nginx.conf to match.
+export default defineConfig(({ mode }): UserConfig => {
+  // Override service URLs in frontend/.env.local when using another environment.
   const env = loadEnv(mode, '.', '');
-  const userService = env.USER_SERVICE_URL || 'http://localhost:8082';
+  const userService = env.USER_SERVICE_URL || 'http://localhost:8080';
   const adminService = env.ADMIN_SERVICE_URL || 'http://localhost:8083';
   // Gateway mode: every /api call goes to the API gateway, which routes by
   // path and checks the token (deploy/README.md). Locally that's the cluster's

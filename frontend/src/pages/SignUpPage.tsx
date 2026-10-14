@@ -59,8 +59,7 @@ export function SignUpPage() {
     setSubmitting(true);
     setFailure(null);
     try {
-      // The name is not sent: the contract's signup body has no field for it.
-      await signUp({ email: email.trim(), password, telegramHandle: telegram });
+      await signUp({ name: name.trim(), email: email.trim(), password, telegramHandle: telegram });
       // UI FR2: on success the user lands on the verification-pending page.
       navigate('/verify-email', { state: { email: email.trim() } });
     } catch (error) {
@@ -87,10 +86,11 @@ export function SignUpPage() {
         label="Name"
         name="name"
         autoComplete="name"
+        maxLength={100}
         value={name}
         onChange={(event) => setName(event.target.value)}
         onBlur={() => markTouched('name')}
-        error={show('name', name) && !nameOk ? 'Enter your full name' : null}
+        error={show('name', name) && !nameOk ? 'Enter a name between 2 and 100 characters' : null}
         success={show('name', name) && nameOk ? 'Looks good' : null}
       />
 
@@ -103,7 +103,7 @@ export function SignUpPage() {
         value={email}
         onChange={(event) => setEmail(event.target.value)}
         onBlur={() => markTouched('email')}
-        error={show('email', email) && !emailOk ? 'Use your @u.nus.edu address' : null}
+        error={show('email', email) && !emailOk ? 'Use your @u.nus.edu or @nus.edu.sg address' : null}
         success={show('email', email) && emailOk ? 'Valid NUS email' : null}
       />
 

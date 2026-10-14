@@ -34,16 +34,16 @@ variables cannot be used inside media queries, so `767px` is written literally.
 
 ## Routes
 
-- Signed out: `/login`, `/signup`, `/verify-email`, `/verify-email/confirm?token=`
-  (where the verification email should link), `/forgot-password`,
+- Signed out: `/login`, `/signup`, `/verify-email` (six-digit email OTP), `/verify-email/confirm`
+  (legacy redirect to the OTP form), `/forgot-password`,
   `/reset-password?token=`
 - Signed in: `/browse`, `/my-requests`, `/my-deliveries`, `/requests/new`,
-  `/orders/:orderId`, `/suppliers`, `/suppliers/new`, `/profile`, `/account-status`
+  `/orders/:orderId`, `/suppliers`, `/suppliers/new`, `/profile`, `/account-status`, `/verify-telegram`
 - Admin: `/admin`, `/admin/suppliers`, `/admin/users`, `/admin/escalations`, `/admin/ratings`
 
 ## Sign-in and demo mode
 
-Sign-in is off by default, because the User Service does not exist yet. While
+Sign-in is off by default for the existing demo mode. While
 it is off, every visitor is the demo user in `src/samples/account.ts` (an
 admin), and every User and Admin Service call is stubbed. Supplier calls are
 always real.
@@ -52,12 +52,15 @@ To use the real services, create `frontend/.env.local`:
 
 ```
 VITE_AUTH_ENABLED=true
-# Placeholders until the team agrees ports; see vite.config.ts.
-USER_SERVICE_URL=http://localhost:8082
+USER_SERVICE_URL=http://localhost:8080
 ADMIN_SERVICE_URL=http://localhost:8083
 ```
 
 For the Docker image, pass `--build-arg VITE_AUTH_ENABLED=true`.
+
+User Service signup now requires `{ name, email, password, telegramHandle }`. Student (`u.nus.edu`) and staff (`nus.edu.sg`) domains are accepted, and names must contain 2–100 characters. Email verification submits `{ email, otp }`; after logging in, `/verify-telegram` requests a bot link and submits `{ otp }`. `/account-status` lists the remaining steps. User Service returns profile `id`, which the authentication provider maps to the UI's `userId`.
+
+This frontend proposal is isolated on `user-service-frontend-integration` for the frontend owner's review. It depends on the User Service verification/password changes. With local development senders, read the email/Telegram codes from `docker compose logs user-service` in the User Service folder. Real delivery needs the email provider and Telegram bot configuration described in the User Service README.
 
 ### Against the local cluster (all services, through the API gateway)
 
