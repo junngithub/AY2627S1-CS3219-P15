@@ -25,6 +25,7 @@ model User {
   telegramHandle      String                 @unique
   emailVerifiedAt     DateTime?
   telegramVerifiedAt  DateTime?
+  telegramUserId      String?                @unique
   role                UserRole               @default(USER)
   accessStatus        AccessStatus           @default(ACTIVE)
   failedLoginAttempts Int                    @default(0)
@@ -39,6 +40,9 @@ model User {
   updatedAt           DateTime               @updatedAt
   emailOtps           EmailVerificationOtp[]
   sessions            AuthSession[]
+  passwordResetTokens PasswordResetToken[]
+  telegramChallenges  TelegramVerificationChallenge[]
+  verifiedEvent       UserVerifiedOutbox?
 
   @@index([accessStatus])
   @@index([scheduledDeletionAt])
@@ -71,4 +75,47 @@ model AuthSession {
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model TelegramVerificationChallenge {
+  id             String    @id @default(uuid()) @db.Uuid
+  userId         String    @db.Uuid
+  linkHash       String    @unique
+  otpHash        String?
+  telegramUserId String?
+  expiresAt      DateTime
+  sentAt         DateTime?
+  attemptCount   Int       @default(0)
+  usedAt         DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+}
+
+model UserVerifiedOutbox {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @unique @db.Uuid
+  email       String
+  createdAt   DateTime  @default(now())
+  publishedAt DateTime?
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([publishedAt, createdAt])
 }

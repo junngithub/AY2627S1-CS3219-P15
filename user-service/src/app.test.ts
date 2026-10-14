@@ -41,6 +41,10 @@ describe("HTTP foundation", () => {
     };
     assert.equal(document.openapi, "3.0.3");
     assert.ok(document.paths["/api/v1/user/signup"]);
+    assert.ok(document.paths["/api/v1/user/forgot-password"]);
+    assert.ok(document.paths["/api/v1/user/reset-password"]);
+    assert.ok(document.paths["/api/v1/user/verify-telegram"]);
+    assert.ok(document.paths["/api/v1/user/request-telegram-verification"]);
     assert.ok(document.paths["/api/v1/user/authorize"]);
   });
 
@@ -62,6 +66,40 @@ describe("HTTP foundation", () => {
 });
 
 describe("request validation before database access", () => {
+  it("requires authentication for Telegram verification and profile password changes", async () => {
+    for (const [endpoint, method] of [
+      ["request-telegram-verification", "POST"], ["verify-telegram", "POST"], ["me/password", "PATCH"],
+    ]) {
+      const response = await fetch(`${baseUrl}/api/v1/user/${endpoint}`, { method });
+      assert.equal(response.status, 401);
+    }
+  });
+  it("requires an email to request a password reset", async () => {
+    const response = await fetch(`${baseUrl}/api/v1/user/forgot-password`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json() as { code: string }).code, "MISSING_EMAIL");
+  });
+
+  it("rejects malformed and weak password reset requests", async () => {
+    for (const [body, code] of [
+      [{ newPassword: "SecurePass1" }, "MISSING_FIELDS"],
+      [{ token: "invalid", newPassword: "short" }, "INVALID_PASSWORD"],
+      [{ token: "invalid", newPassword: "SecurePass1" }, "INVALID_RESET_TOKEN"],
+    ] as const) {
+      const response = await fetch(`${baseUrl}/api/v1/user/reset-password`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      assert.equal(response.status, 400);
+      assert.equal((await response.json() as { code: string }).code, code);
+    }
+  });
+
   it("rejects signup when required fields are absent", async () => {
     const response = await fetch(`${baseUrl}/api/v1/user/signup`, {
       method: "POST",

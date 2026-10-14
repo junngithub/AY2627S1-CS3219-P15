@@ -2,8 +2,17 @@ import { createApp } from "./app";
 import { config } from "./config";
 import { prisma } from "./db";
 import { KafkaUserEventPublisher } from "./kafka";
+import { TelegramBotClient, TelegramPoller } from "./telegram";
+import { VerificationEventDispatcher } from "./verification-events";
 
 const publisher = config.kafka.enabled ? new KafkaUserEventPublisher() : undefined;
+const dispatcher = publisher ? new VerificationEventDispatcher(publisher) : undefined;
+const telegram = config.telegram.botToken && process.env.TELEGRAM_POLLING_ENABLED !== "false"
+  ? new TelegramPoller(new TelegramBotClient(config.telegram.botToken)) : undefined;
+telegram?.start();
+const verificationTimer = dispatcher ? setInterval(() => {
+  void dispatcher.flush().catch(() => console.error("Verification event publication failed; queued for retry"));
+}, 5000) : undefined;
 
 const app = createApp(publisher);
 const server = app.listen(config.port, () => {
@@ -20,7 +29,10 @@ if (publisher) {
 }
 
 async function shutdown(): Promise<void> {
+  if (verificationTimer) clearInterval(verificationTimer);
+  await telegram?.stop();
   server.close(async () => {
+    await dispatcher?.flush().catch(() => undefined);
     if (publisher) {
       await publisher.disconnect().catch(() => undefined);
     }

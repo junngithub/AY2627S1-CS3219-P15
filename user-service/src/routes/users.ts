@@ -4,13 +4,15 @@ import { authorizationResult, identityHeaders } from "../authorization";
 import { config } from "../config";
 import { prisma } from "../db";
 import { DevelopmentEmailSender, EmailSender } from "../email";
-import { LoggingUserEventPublisher, UserEventPublisher } from "../events";
+import type { UserEventPublisher } from "../events";
 import { AppError } from "../errors";
 import {
   generateOtp,
+  generatePasswordResetToken,
   generateSessionToken,
   hashOtp,
   hashPassword,
+  hashPasswordResetToken,
   hashSessionToken,
   isAllowedEmail,
   isValidTelegramHandle,
@@ -21,6 +23,8 @@ import {
   verifyPassword,
 } from "../security";
 import { accountNextSteps, accountStatus } from "../status";
+import { requestTelegramVerification, verifyTelegramOtp } from "../telegram";
+import { enqueueUserVerified, lockVerificationUser, VerificationEventDispatcher } from "../verification-events";
 
 type AsyncHandler = (request: Request, response: Response, next: NextFunction) => Promise<void>;
 
@@ -67,10 +71,14 @@ async function authenticatedUser(request: Request) {
 
 export function createUsersRouter(
   emailSender: EmailSender = new DevelopmentEmailSender(),
-  eventPublisher: UserEventPublisher = new LoggingUserEventPublisher(),
+  eventPublisher?: UserEventPublisher,
 ): Router {
   const router = Router();
   const dummyPasswordHash = hashPassword("NotARealPassword123", config.passwordScryptCost);
+  const dispatcher = eventPublisher ? new VerificationEventDispatcher(eventPublisher) : undefined;
+  function publishPendingVerificationEvents(): void {
+    void dispatcher?.flush().catch(() => console.error("Verification event publication failed; queued for retry"));
+  }
 
   router.post(
     "/signup",
@@ -182,67 +190,43 @@ export function createUsersRouter(
         throw new AppError(400, "INVALID_OTP", "Invalid or expired verification OTP");
       }
 
-      if (user.emailVerifiedAt) {
-        response.json({
-          status: accountStatus(user),
-          nextSteps: accountNextSteps(user),
-        });
-        return;
-      }
-
-      const otpRecord = await prisma.emailVerificationOtp.findFirst({
-        where: { userId: user.id, usedAt: null, revokedAt: null },
-        orderBy: { createdAt: "desc" },
-      });
-
-      const submittedHash = hashOtp(email, otp, config.otpSecret);
-      const valid =
-        otpRecord !== null &&
-        otpRecord.expiresAt > new Date() &&
-        otpRecord.attemptCount < config.otpMaxAttempts &&
-        safeHashEqual(otpRecord.otpHash, submittedHash);
-
-      if (!valid) {
-        if (otpRecord) {
-          const nextAttemptCount = otpRecord.attemptCount + 1;
-          await prisma.emailVerificationOtp.update({
-            where: { id: otpRecord.id },
-            data: {
-              attemptCount: nextAttemptCount,
-              revokedAt: nextAttemptCount >= config.otpMaxAttempts ? new Date() : undefined,
-            },
-          });
-        }
-        throw new AppError(400, "INVALID_OTP", "Invalid or expired verification OTP");
-      }
-
-      const verifiedAt = new Date();
       const verifiedUser = await prisma.$transaction(async (transaction) => {
+        await lockVerificationUser(transaction, user.id);
+        const current = await transaction.user.findUniqueOrThrow({ where: { id: user.id } });
+        if (current.emailVerifiedAt) return current;
+        const otpRecord = await transaction.emailVerificationOtp.findFirst({
+          where: { userId: user.id, usedAt: null, revokedAt: null }, orderBy: { createdAt: "desc" },
+        });
+        const valid = otpRecord && otpRecord.expiresAt > new Date()
+          && otpRecord.attemptCount < config.otpMaxAttempts
+          && safeHashEqual(otpRecord.otpHash, hashOtp(email, otp, config.otpSecret));
+        if (!valid || !otpRecord) {
+          if (otpRecord) {
+            await transaction.emailVerificationOtp.update({
+              where: { id: otpRecord.id },
+              data: {
+                attemptCount: { increment: 1 },
+                revokedAt: otpRecord.attemptCount + 1 >= config.otpMaxAttempts ? new Date() : undefined,
+              },
+            });
+          }
+          return null;
+        }
+        const verifiedAt = new Date();
         await transaction.emailVerificationOtp.update({
           where: { id: otpRecord.id },
           data: { usedAt: verifiedAt },
         });
-        return transaction.user.update({
+        const updated = await transaction.user.update({
           where: { id: user.id },
           data: { emailVerifiedAt: verifiedAt },
         });
+        await enqueueUserVerified(transaction, updated);
+        return updated;
       });
 
-      // Email verification is complete (F1.5.2) — tell the rest of the platform
-      // so the credit service can onboard this user. Best-effort after the
-      // commit: a publish failure must not fail a verification already persisted
-      // (at-least-once delivery is the consumer's concern, not the request's).
-      try {
-        await eventPublisher.publishUserVerified({
-          userId: verifiedUser.id,
-          email: verifiedUser.email,
-        });
-      } catch (error) {
-        console.error(
-          `[user event] failed to publish UserVerified for ${verifiedUser.id}:`,
-          error,
-        );
-      }
+      if (!verifiedUser) throw new AppError(400, "INVALID_OTP", "Invalid or expired verification OTP");
+      publishPendingVerificationEvents();
 
       response.json({
         status: accountStatus(verifiedUser),
@@ -289,6 +273,120 @@ export function createUsersRouter(
 
       await emailSender.sendVerificationOtp(email, otp, config.otpTtlMinutes);
       response.status(202).json(acceptedResponse);
+    }),
+  );
+
+  router.post(
+    "/request-telegram-verification",
+    asyncHandler(async (request, response) => {
+      const user = await authenticatedUser(request);
+      response.status(202).json(await requestTelegramVerification(user));
+    }),
+  );
+
+  router.post(
+    "/verify-telegram",
+    asyncHandler(async (request, response) => {
+      const user = await authenticatedUser(request);
+      const otp = requiredString(request.body?.otp);
+      if (!otp || !/^\d{6}$/.test(otp)) {
+        throw new AppError(400, "INVALID_OTP", "Invalid or expired verification OTP");
+      }
+      const verifiedUser = await verifyTelegramOtp(user, otp);
+      publishPendingVerificationEvents();
+      response.json({ status: accountStatus(verifiedUser), nextSteps: accountNextSteps(verifiedUser) });
+    }),
+  );
+
+  router.post(
+    "/forgot-password",
+    asyncHandler(async (request, response) => {
+      const emailInput = requiredString(request.body?.email);
+      if (!emailInput) {
+        throw new AppError(400, "MISSING_EMAIL", "email is required");
+      }
+
+      // An unknown address gets the same answer as a known one.
+      const acceptedResponse = { message: "If the account exists, a password reset link has been sent" };
+      const email = normalizeEmail(emailInput);
+      const user = await prisma.user.findUnique({ where: { email } });
+
+      if (user) {
+        const token = generatePasswordResetToken();
+        const expiresAt = new Date(Date.now() + config.passwordResetTtlMinutes * 60_000);
+        await prisma.$transaction([
+          prisma.passwordResetToken.updateMany({
+            where: { userId: user.id, usedAt: null, revokedAt: null },
+            data: { revokedAt: new Date() },
+          }),
+          prisma.passwordResetToken.create({
+            data: { userId: user.id, tokenHash: hashPasswordResetToken(token), expiresAt },
+          }),
+        ]);
+
+        const link = new URL("/reset-password", config.frontendBaseUrl);
+        link.searchParams.set("token", token);
+        try {
+          await emailSender.sendPasswordResetLink(email, link.toString(), config.passwordResetTtlMinutes);
+        } catch (error) {
+          // Do not reveal account existence through a delivery failure.
+          console.error("[user email] failed to send password reset link:", error);
+        }
+      }
+
+      response.set("Cache-Control", "no-store").status(202).json(acceptedResponse);
+    }),
+  );
+
+  router.post(
+    "/reset-password",
+    asyncHandler(async (request, response) => {
+      const token = requiredString(request.body?.token);
+      const newPassword = requiredString(request.body?.newPassword);
+      if (!token || !newPassword) {
+        throw new AppError(400, "MISSING_FIELDS", "token and newPassword are required");
+      }
+
+      const passwordErrors = passwordValidationErrors(newPassword);
+      if (passwordErrors.length > 0) {
+        throw new AppError(400, "INVALID_PASSWORD", `Password ${passwordErrors.join(", ")}`);
+      }
+
+      const invalidToken = new AppError(400, "INVALID_RESET_TOKEN", "Invalid or expired reset link");
+      if (!/^[A-Za-z0-9_-]{43}$/.test(token)) throw invalidToken;
+
+      const tokenHash = hashPasswordResetToken(token);
+      const resetToken = await prisma.passwordResetToken.findUnique({ where: { tokenHash } });
+      const now = new Date();
+      if (!resetToken || resetToken.usedAt || resetToken.revokedAt || resetToken.expiresAt <= now) {
+        throw invalidToken;
+      }
+
+      const passwordHash = await hashPassword(newPassword, config.passwordScryptCost);
+      await prisma.$transaction(async (transaction) => {
+        await lockVerificationUser(transaction, resetToken.userId);
+        // Conditional update makes the token single-use even under concurrent requests.
+        const claimed = await transaction.passwordResetToken.updateMany({
+          where: { id: resetToken.id, usedAt: null, revokedAt: null, expiresAt: { gt: new Date() } },
+          data: { usedAt: new Date() },
+        });
+        if (claimed.count !== 1) throw invalidToken;
+
+        await transaction.user.update({
+          where: { id: resetToken.userId },
+          data: { passwordHash, failedLoginAttempts: 0, lockedAt: null, authVersion: { increment: 1 } },
+        });
+        await transaction.authSession.updateMany({
+          where: { userId: resetToken.userId, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+        await transaction.passwordResetToken.updateMany({
+          where: { userId: resetToken.userId, id: { not: resetToken.id }, usedAt: null, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+      });
+
+      response.set("Cache-Control", "no-store").json({ message: "Password reset successful" });
     }),
   );
 
@@ -394,6 +492,38 @@ export function createUsersRouter(
         status: accountStatus(user),
         isAdmin: user.role === "ADMIN",
       });
+    }),
+  );
+
+  router.patch(
+    "/me/password",
+    asyncHandler(async (request, response) => {
+      const user = await authenticatedUser(request);
+      const newPassword = requiredString(request.body?.newPassword);
+      if (!newPassword) throw new AppError(400, "MISSING_FIELDS", "newPassword is required");
+      const errors = passwordValidationErrors(newPassword);
+      if (errors.length) throw new AppError(400, "INVALID_PASSWORD", `Password ${errors.join(", ")}`);
+      const passwordHash = await hashPassword(newPassword, config.passwordScryptCost);
+      const currentTokenHash = hashSessionToken(bearerToken(request));
+      await prisma.$transaction(async (transaction) => {
+        await lockVerificationUser(transaction, user.id);
+        const session = await transaction.authSession.findUnique({ where: { tokenHash: currentTokenHash } });
+        const current = await transaction.user.findUniqueOrThrow({ where: { id: user.id } });
+        if (!session || session.revokedAt || session.expiresAt <= new Date() || current.accessStatus === "SUSPENDED") {
+          throw new AppError(401, "UNAUTHORIZED", "Authentication required");
+        }
+        await transaction.user.update({
+          where: { id: user.id }, data: { passwordHash, authVersion: { increment: 1 } },
+        });
+        await transaction.authSession.updateMany({
+          where: { userId: user.id, tokenHash: { not: currentTokenHash }, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+        await transaction.passwordResetToken.updateMany({
+          where: { userId: user.id, usedAt: null, revokedAt: null }, data: { revokedAt: new Date() },
+        });
+      });
+      response.set("Cache-Control", "no-store").json({ message: "Password changed successfully" });
     }),
   );
 

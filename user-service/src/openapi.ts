@@ -106,6 +106,24 @@ export const openApiDocument = {
           password: { type: "string", format: "password", example: "SecurePass1" },
         },
       },
+      ResetPasswordRequest: {
+        type: "object",
+        required: ["token", "newPassword"],
+        properties: {
+          token: { type: "string", description: "Opaque token from the password reset link" },
+          newPassword: { type: "string", format: "password", example: "NewSecurePass1" },
+        },
+      },
+      NewPasswordRequest: {
+        type: "object",
+        required: ["newPassword"],
+        properties: { newPassword: { type: "string", format: "password", example: "NewSecurePass1" } },
+      },
+      TelegramOtpRequest: {
+        type: "object",
+        required: ["otp"],
+        properties: { otp: { type: "string", pattern: "^[0-9]{6}$", example: "123456" } },
+      },
       UserSummary: {
         type: "object",
         required: ["id", "name", "email", "status"],
@@ -281,6 +299,90 @@ export const openApiDocument = {
         },
       },
     },
+    "/api/v1/user/request-telegram-verification": {
+      post: {
+        tags: ["Authentication"],
+        summary: "Request a Telegram verification code",
+        description: "Requires login. Returns a private bot start link; in development without a bot, the OTP is logged. Requests have a 60-second cooldown.",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          "202": {
+            description: "Verification challenge prepared (or already verified)",
+            content: { "application/json": { schema: {
+              type: "object", required: ["telegramBotUrl", "expiresAt"],
+              properties: {
+                telegramBotUrl: { type: "string", nullable: true, format: "uri" },
+                expiresAt: { type: "string", nullable: true, format: "date-time" },
+              },
+            } } },
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "429": { description: "Verification request cooldown" },
+          "503": { description: "A production Telegram bot has not been configured" },
+        },
+      },
+    },
+    "/api/v1/user/verify-telegram": {
+      post: {
+        tags: ["Authentication"],
+        summary: "Verify the signed-in user's Telegram OTP",
+        description: "The user becomes Verified only when email is also verified. OTPs expire and have an attempt limit.",
+        security: [{ bearerAuth: [] }],
+        requestBody: { required: true, content: {
+          "application/json": { schema: { $ref: "#/components/schemas/TelegramOtpRequest" } },
+        } },
+        responses: {
+          "200": { description: "Telegram verified or already verified", content: {
+            "application/json": { schema: { $ref: "#/components/schemas/StatusResponse" } },
+          } },
+          "400": { description: "Invalid or expired OTP", content: {
+            "application/json": { schema: { $ref: "#/components/schemas/Error" } },
+          } },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "409": { description: "Telegram account already linked to another user" },
+        },
+      },
+    },
+    "/api/v1/user/forgot-password": {
+      post: {
+        tags: ["Authentication"],
+        summary: "Request a password reset link",
+        description: "Returns the same response whether the account exists or not. In development, the link is logged by User Service.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": { schema: { $ref: "#/components/schemas/EmailRequest" } },
+          },
+        },
+        responses: {
+          "202": { description: "Request accepted; account existence is not disclosed" },
+          "400": {
+            description: "Email missing",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
+        },
+      },
+    },
+    "/api/v1/user/reset-password": {
+      post: {
+        tags: ["Authentication"],
+        summary: "Set a new password using a single-use reset token",
+        description: "Consumes a 30-minute token (configurable), unlocks the account and revokes existing sessions.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": { schema: { $ref: "#/components/schemas/ResetPasswordRequest" } },
+          },
+        },
+        responses: {
+          "200": { description: "Password reset successful" },
+          "400": {
+            description: "Missing fields, invalid password, or invalid/expired token",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
+        },
+      },
+    },
     "/api/v1/user/login": {
       post: {
         tags: ["Authentication"],
@@ -346,6 +448,23 @@ export const openApiDocument = {
               "application/json": { schema: { $ref: "#/components/schemas/Profile" } },
             },
           },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+    "/api/v1/user/me/password": {
+      patch: {
+        tags: ["User"], summary: "Change the signed-in user's password",
+        description: "Keeps the current session, revokes other sessions and invalidates outstanding reset links.",
+        security: [{ bearerAuth: [] }],
+        requestBody: { required: true, content: {
+          "application/json": { schema: { $ref: "#/components/schemas/NewPasswordRequest" } },
+        } },
+        responses: {
+          "200": { description: "Password changed" },
+          "400": { description: "Missing or invalid new password", content: {
+            "application/json": { schema: { $ref: "#/components/schemas/Error" } },
+          } },
           "401": { $ref: "#/components/responses/Unauthorized" },
         },
       },

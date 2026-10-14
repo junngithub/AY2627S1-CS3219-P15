@@ -10,7 +10,7 @@ export interface UserVerifiedEvent {
 }
 
 export interface UserEventPublisher {
-  publishUserVerified(event: UserVerifiedEvent): Promise<void>;
+  publishUserVerified(event: UserVerifiedEvent, eventId?: string, occurredAt?: string): Promise<void>;
 }
 
 // Default when Kafka is not configured (local dev without a broker, tests): it
