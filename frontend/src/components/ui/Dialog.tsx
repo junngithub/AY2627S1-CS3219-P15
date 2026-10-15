@@ -25,11 +25,17 @@ export function Dialog({ open, title, onClose, footer, children }: DialogProps) 
   const titleId = useId();
   const panel = useRef<HTMLDivElement>(null);
 
+  // Callers usually pass a new onClose on every render. Read it through a ref
+  // so the effect below runs only on open and close: re-running it on each
+  // render would pull focus out of whatever field the user is typing in.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!open) return undefined;
 
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') onCloseRef.current();
     }
 
     const previousFocus = document.activeElement as HTMLElement | null;
@@ -44,7 +50,7 @@ export function Dialog({ open, title, onClose, footer, children }: DialogProps) 
       document.removeEventListener('keydown', onKeyDown);
       previousFocus?.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 

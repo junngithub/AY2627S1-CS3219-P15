@@ -2,7 +2,7 @@
  * AI Assistance Disclosure
  * Tool: Claude Code (Claude Opus 5)
  * Scope: Generated the admin dashboard from the mockup.
- * Author review: Ngooi Jun Sen to validate before merge.
+ * Reviewed by Ngooi Jun Sen.
  *
  * Covers UI FR15.1.1 (summary cards for pending supplier approvals, pending
  * escalations and suspended users) and FR15.1.2 (links into each section,
