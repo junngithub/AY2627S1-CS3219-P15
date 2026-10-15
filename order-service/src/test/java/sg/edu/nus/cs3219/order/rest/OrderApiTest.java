@@ -139,6 +139,14 @@ class OrderApiTest {
                 .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
         mvc.perform(post("/api/v1/orders").header("X-User-Id", "not-a-uuid").contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/v1/orders")
+                        .header(CallerHeaders.USER_ID, caller.userId())
+                        .header(CallerHeaders.PERMITTED, "false")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("This account is not permitted to use orders"))
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
         mvc.perform(signed(post("/api/v1/orders")).contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").exists())
@@ -156,6 +164,8 @@ class OrderApiTest {
         org.junit.jupiter.api.Assertions.assertEquals(400, handler.handleMissingParam(new org.springframework.web.bind.MissingServletRequestParameterException("photo", "MultipartFile")).getStatusCode().value());
         org.junit.jupiter.api.Assertions.assertEquals(409, handler.handle(ApiException.conflict("taken")).getStatusCode().value());
         org.junit.jupiter.api.Assertions.assertEquals("CONFLICT", handler.handle(ApiException.conflict("taken")).getBody().code());
+        org.junit.jupiter.api.Assertions.assertEquals(403, handler.handle(ApiException.forbidden("not permitted")).getStatusCode().value());
+        org.junit.jupiter.api.Assertions.assertEquals("FORBIDDEN", handler.handle(ApiException.forbidden("not permitted")).getBody().code());
         org.junit.jupiter.api.Assertions.assertEquals(401, handler.handle(ApiException.unauthorized("sign in")).getStatusCode().value());
         org.junit.jupiter.api.Assertions.assertEquals("UNAUTHORIZED", handler.handle(ApiException.unauthorized("sign in")).getBody().code());
         org.junit.jupiter.api.Assertions.assertEquals(404, handler.handle(ApiException.notFound("missing")).getStatusCode().value());
@@ -167,6 +177,7 @@ class OrderApiTest {
     private <B extends AbstractMockHttpServletRequestBuilder<B>> B signed(B request) {
         return request
                 .header(CallerHeaders.USER_ID, caller.userId())
+                .header(CallerHeaders.PERMITTED, "true")
                 .header(CallerHeaders.TELEGRAM, caller.telegramHandle());
     }
 }
