@@ -1,0 +1,64 @@
+# Creates (or updates) each service's login and database, as the admin. Safe to
+# rerun: existing logins get their password reset to the one in the Secret,
+# existing databases are left as they are. Runs after every install/upgrade
+# (Argo CD: PostSync).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: foc-database-setup
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: foc
+        foc.io/job: database-setup
+    spec:
+      restartPolicy: Never
+      {{- include "foc-database.podSecurity" . | nindent 6 }}
+      containers:
+        - name: psql
+          image: {{ .Values.image }}
+          envFrom:
+            - secretRef:
+                name: foc-db-admin
+          env:
+            {{- range $service, $_ := .Values.services }}
+            - name: PW_{{ $service | upper }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $service }}-db
+                  key: PGPASSWORD
+            {{- end }}
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              until pg_isready -q -t 3; do echo "waiting for $PGHOST:$PGPORT"; sleep 2; done
+              setup() { # name password
+                psql -X -q -v ON_ERROR_STOP=1 -v name="$1" -v pw="$2" <<'SQL'
+              SELECT format('CREATE ROLE %I LOGIN', :'name')
+                WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'name') \gexec
+              SELECT format('ALTER ROLE %I WITH LOGIN PASSWORD %L', :'name', :'pw') \gexec
+              -- On RDS the admin isn't a superuser: it must be a member of a
+              -- role to create a database owned by it.
+              SELECT format('GRANT %I TO CURRENT_USER', :'name')
+                WHERE NOT pg_has_role(CURRENT_USER, :'name', 'MEMBER') \gexec
+              SELECT format('CREATE DATABASE %I OWNER %I', :'name', :'name')
+                WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'name') \gexec
+              SELECT format('REVOKE ALL ON DATABASE %I FROM PUBLIC', :'name') \gexec
+              SQL
+                echo "ready: database and login $1"
+              }
+              {{- range $service, $_ := .Values.services }}
+              setup {{ include "foc-database.dbName" (dict "env" $.Values.env "service" $service) }} "$PW_{{ $service | upper }}"
+              {{- end }}
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 200m, memory: 64Mi }
+          securityContext:
+            allowPrivilegeEscalation: false

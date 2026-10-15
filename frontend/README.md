@@ -71,6 +71,28 @@ that only the gateway's authorize check sets (infra ADR-0007). `nginx.conf`
 repeats that check for local runs, so the order pages and credit balance work
 in the container but not on the dev server.
 
+### Against the local cluster (all services, through the API gateway)
+
+Start the local stack and the gateway port-forward
+(see [`deploy/README.md`](../deploy/README.md)):
+
+```bash
+deploy/local.sh gateway     # keep running: the gateway on http://localhost:8080
+```
+
+Then use this `frontend/.env.local` instead, and `npm run dev`:
+
+```
+VITE_AUTH_ENABLED=true
+API_GATEWAY_URL=http://localhost:8080
+```
+
+Every `/api` call then goes through the gateway, which checks the token. Only
+signup/login-style routes and `GET /api/v1/supplier` work without one, so
+sign-in must be on. To get a login, sign up and verify the email with the OTP
+from `kubectl -n foc logs deploy/user`, or use the local test users in
+`deploy/README.md`.
+
 ## Not wired yet
 
 Commented out in the pages, each with a TODO naming the missing piece:

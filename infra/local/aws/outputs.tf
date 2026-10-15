@@ -39,3 +39,17 @@ output "ecr_repository_urls" {
     { for name, repo in aws_ecr_repository.tool : name => repo.repository_url },
   )
 }
+
+# Everything deploy/local.sh passes to deploy/charts/foc-database. `address`
+# is the Floci container's IP on the Docker network k3s shares; pods can't
+# resolve Docker names (ADR-0010).
+output "database" {
+  sensitive = true
+  value = {
+    host           = aws_db_instance.foc.address
+    port           = aws_db_instance.foc.port
+    admin_username = aws_db_instance.foc.username
+    admin_password = random_password.db_admin.result
+    services       = { for name in var.databases : name => { password = random_password.db_service[name].result } }
+  }
+}

@@ -7,6 +7,7 @@ Backend for Friend on Campus errand requests.
 - `application.yml` holds shared settings. The default profile is `local`.
 - `application-local.yml` is for a process on your machine. Postgres is `localhost:5432` and Kafka is `localhost:9092`.
 - `application-dev.yml` is for the app container. Database, Kafka, and photo settings are read from the environment, not from the file. Copy `.env.example` to `.env` in this directory before Compose starts. `.env` is git-ignored.
+- `application-k8s.yml` is for the Kubernetes deploy; `deploy/values/services/order.yaml` sets `SPRING_PROFILES_ACTIVE=k8s`. The database comes from the `PG*` keys of Secret `order-db`, Kafka from the platform's `KAFKA_*` variables (TLS listener with SCRAM-SHA-512), and photos stay on the pod's disk in `/app/photos`. Health is also served at `/health`, like every FoC service.
 
 ```powershell
 copy .env.example .env
@@ -37,7 +38,7 @@ docker compose exec kafka-tools bash /defaults/send.sh admin.case.resolved <orde
 
 Create and cancel call Credit Service (`POST /api/v1/credit/reserve` and `POST /api/v1/credit/release`). Pickup and dropoff ids are Supplier Service numeric ids; only `approved` suppliers are accepted (`GET /api/v1/supplier/{id}`). The `local` profile calls User Service at `http://localhost:8080`, Credit Service at `http://localhost:3000`, and Supplier Service at `http://localhost:8081`. Deployed environments override those with `USER_SERVICE_URL`, `CREDIT_SERVICE_URL`, `SUPPLIER_SERVICE_URL`, `RATING_SERVICE_URL`, and `ADMIN_SERVICE_URL`.
 
-The API gateway sends the user id in `X-User-Id`. `X-User-Telegram` is optional. Bruno sends those headers directly. Courier ratings and requester escalations still use local stand-ins, because Rating Service and Admin Service are not in this repository. User Service has no lookup by user id, so the order service does not call it yet.
+The API gateway sends `X-User-Id` and `X-Permitted-Action`. Every order endpoint accepts the call only when `X-Permitted-Action` is `true`. `X-User-Telegram` is optional. Bruno sends those headers directly. Courier ratings and requester escalations still use local stand-ins, because Rating Service and Admin Service are not in this repository. User Service has no lookup by user id, so the order service does not call it yet.
 
 ## Images
 

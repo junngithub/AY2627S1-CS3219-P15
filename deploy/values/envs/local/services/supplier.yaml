@@ -1,6 +1,3 @@
-# No supplier-service image yet: run the connectivity stub under this name.
-# Delete the two image.name/tag overrides once foc/supplier-service exists.
 image:
-  name: foc/connectivity-stub
-  tag: "0.2.0"
+  tag: dev
 replicas: 1

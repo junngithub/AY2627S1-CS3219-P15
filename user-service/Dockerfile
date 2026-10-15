@@ -19,6 +19,13 @@ COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build
 
+# ---- Migrate stage ----
+# Used only by the migration Job (deploy/charts/foc-service/templates/migrate-job.yaml,
+# ADR-0011): the build stage's prisma CLI and prisma/ migrations.
+FROM build AS migrate
+USER node
+CMD ["node_modules/.bin/prisma", "migrate", "deploy"]
+
 # ---- Runtime stage ----
 # Same base image as the build stage: the generated Prisma query engine is
 # compiled for this OS / OpenSSL version.

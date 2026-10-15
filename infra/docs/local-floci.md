@@ -17,6 +17,7 @@ and is a drop-in replacement for LocalStack.
 | **ECR** | a real `registry:2`, at `000000000000.dkr.ecr.ap-southeast-1.localhost:4566/<repo>` | `docker push` / `pull` with the same flow as CI |
 | **IAM / STS** | in-process | roles referenced by EKS; the IAM user whose key logs kubectl in |
 | **S3** | in-process | optional: Terraform state for `infra/local` |
+| **RDS** | a real `postgres:16` container behind a proxy on ports 7001–7099 | one instance, a database and login per service ([ADR-0010](adr/0010-postgres-per-service-database.md)) |
 | **MSK** | Redpanda | **not used.** We run Strimzi so local matches the cloud. |
 
 Defaults: account `000000000000`, credentials `test` / `test`. We use region
@@ -29,27 +30,59 @@ keeps each region separate, just like AWS.
 - AWS CLI v2, kubectl, Helm (`brew install helm`)
 - Terraform via `tfenv` (`brew install tfenv`). `infra/.terraform-version`
   pins the version, and tfenv installs it on first use.
+- Node.js 22 and npm, only to run the frontend dev server.
 
 ## Quick start
+
+All commands run from the repository root.
 
 ```bash
 # 1. Start Floci (compose.yaml mounts the Docker socket so Floci can run k3s + the registry)
 docker compose -f infra/local/compose.yaml up -d
 
-# 2. Local "AWS": IAM user, 7 ECR repos, VPC/subnets, EKS (k3s) cluster, infra/local/kubeconfig
+# 2. Local "AWS": IAM user, ECR repos, VPC/subnets, EKS (k3s) cluster,
+#    Postgres (RDS), and infra/local/kubeconfig
 terraform -chdir=infra/local/aws init && terraform -chdir=infra/local/aws apply
 
-# 3. Push images (see below): credit-service, plus the connectivity stub that
-#    stands in for the 6 services without code yet. Then deploy everything:
-deploy/local.sh            # Strimzi → Kafka (7 topics, 5 users) → 7 services
-deploy/local.sh check      # connectivity tests: Kafka logins/ACLs, HTTP to every service, the gateway
-deploy/local.sh gateway    # the API gateway on http://localhost:8080 (port-forward)
+# 3. Build and push images to local ECR (each also pushes <tag>-migrate if
+#    its Dockerfile has a migrate stage)
+deploy/push-local.sh user
+deploy/push-local.sh supplier
+deploy/push-local.sh credit
+deploy/push-local.sh order
+deploy/push-local.sh connectivity-stub     # stands in for rating, badges, admin
 
-# 4. Use the cluster
+# 4. Deploy everything: databases → Strimzi → Envoy Gateway → Kafka (7 topics,
+#    5 users) → 7 services (each runs its migrations first; order's Flyway
+#    runs at startup) → gateway
+deploy/local.sh
+
+# 5. Check connectivity: database logins, Kafka logins/ACLs, HTTP to every
+#    service and its peers, requests through the gateway
+deploy/local.sh check
+
+# 6. Test data (optional, local only):
+#    - suppliers: the seed Job in deploy/README.md ("Seed Supplier's database")
+#    - logins: student@u.nus.edu / admin@u.nus.edu, password Password123
+#      (deploy/README.md, "Local test users", for how to create them)
+
+# 7. Open the API gateway on http://localhost:8080 (keep it running)
+deploy/local.sh gateway
+
+# 8. Frontend through the gateway (another terminal) → http://localhost:5173
+printf 'VITE_AUTH_ENABLED=true\nAPI_GATEWAY_URL=http://localhost:8080\n' > frontend/.env.local
+(cd frontend && npm ci && npm run dev)
+
+# Inspect the cluster
 export KUBECONFIG=$PWD/infra/local/kubeconfig
 deploy/local.sh status
 kubectl -n foc get pods
+kubectl -n foc logs deploy/user          # e.g. the email OTP after a signup
 ```
+
+After restarting Docker or Floci, see
+[After restarting Floci](#after-restarting-floci-or-docker): run
+`terraform -chdir=infra/local/aws apply`, then `deploy/local.sh`.
 
 ### Push an image to local ECR
 
@@ -106,7 +139,7 @@ deploy/local.sh                                                      # redeploy 
 | Path | Terraform state | Creates |
 |---|---|---|
 | `compose.yaml` | n/a | Floci |
-| `aws/` | `aws/terraform.tfstate` | IAM user `foc-local-admin` + key, ECR `foc/<service>` ×7 (MUTABLE), VPC + 2 subnets, IAM role, EKS cluster `foc-local`, `../kubeconfig` (0600, git-ignored) |
+| `aws/` | `aws/terraform.tfstate` | IAM user `foc-local-admin` + key, ECR `foc/<service>` ×7 (MUTABLE), VPC + 2 subnets, IAM role, EKS cluster `foc-local`, `../kubeconfig` (0600, git-ignored), RDS Postgres `foc-local` + generated passwords (admin and one per service in `var.databases`) |
 
 Everything inside the cluster comes from `deploy/local.sh`, not Terraform
 (see [`deploy/README.md`](../../deploy/README.md)).
@@ -117,6 +150,10 @@ Everything inside the cluster comes from `deploy/local.sh`, not Terraform
   `modules/eks` (node group, node role with ECR read-only).
 - The cloud envs add a second Terraform layer (`bootstrap/`) that installs
   Argo CD via `modules/argocd`. Local has none.
+- RDS (`aws/rds.tf`) has a Terraform-generated admin password and no subnet
+  or security group; the cloud lets RDS manage the admin password in Secrets
+  Manager and keeps the instance in private subnets. Pods reach Floci's RDS
+  by the IP Terraform outputs (Docker names don't resolve in pods).
 - ECR repositories are declared directly in `aws/ecr.tf` (mutable tags,
   force-delete). The cloud registry in `global/ecr` gets its own `ecr.tf` with
   immutable tags, scanning and a lifecycle policy.
@@ -245,7 +282,7 @@ reached with `deploy/local.sh gateway`. The real NLB is tested in nonprod.
 | **k3s mirror is set at cluster creation** | The registry mirror points at Floci's container IP on the compose network. If that IP changes (Floci container recreated), a cluster created earlier may lose it. | Recreate the cluster (`terraform apply -replace` on the EKS cluster). |
 | **New pods are briefly blocked by the network policy** | k3s enforces NetworkPolicy with kube-router, which adds a new pod's IP to the allowed set shortly after it starts. Connections in about the first second are refused, even from the same namespace. Measured: fine from 2 s after start. | Nothing for long-running services (clients retry). For one-off test pods, `sleep 2` before connecting. |
 | **Floci expires cluster tokens after 60 s** | `aws eks get-token` signs a token valid for 60 s but tells clients to reuse it for 14 min. Real EKS accepts it for ~15 min; Floci enforces 60 s. Any kubectl/helm operation lasting over a minute (e.g. `helm test`) then fails with `Unauthorized`. | Handled: the local kubeconfig calls `infra/local/eks-token.sh`, which reports a 45 s expiry so clients refresh in time. |
-| **A Floci restart recreates k3s** | New node name (old node NotReady forever), possibly a new API port, and `local-path` volumes (Kafka's disk) stay pinned to the old node name, so Kafka can't reschedule. | `terraform apply`, then `deploy/local.sh`, which deletes NotReady nodes and resets only claims still bound to a volume pinned to a missing node (locally only Kafka's messages are lost). It also waits for the broker **pod**, since Kafka's status can lag. |
+| **A Floci restart recreates k3s** | New node name (old node NotReady forever, but only ~40 s after the restart), possibly a new API port. Pods on the old node, including CoreDNS, stay stuck there, so name lookups time out (`curl: (28) Resolving timed out`). `local-path` volumes (Kafka's disk) stay pinned to the old node name, so Kafka can't reschedule. | `terraform apply`, then `deploy/local.sh`, which deletes every node but the newest (without waiting for NotReady), waits for CoreDNS, and resets only claims still bound to a volume pinned to a missing node (locally only Kafka's messages are lost). It also waits for the broker **pod**, since Kafka's status can lag. |
 | **Resources** | k3s + Strimzi + one Kafka broker (1–1.5 GiB) + services on one laptop. | 1 broker, 1 replica per service, small requests. |
 
 ## Useful commands

@@ -15,6 +15,7 @@ const BADGES_SERVICE = 'http://localhost:4006';
 export default defineConfig(({ mode }) => {
   // Override either in frontend/.env.local; keep nginx.conf in step.
   const env = loadEnv(mode, '.', '');
+
   const userService = env.USER_SERVICE_URL || 'http://localhost:8080';
   const adminService = env.ADMIN_SERVICE_URL || 'http://localhost:8084';
 
@@ -24,14 +25,14 @@ export default defineConfig(({ mode }) => {
    * the dev server cannot do that check; nginx.conf does. Run the frontend
    * container to use the order pages and credit balance.
    */
-
+  
   return {
     plugins: [react()],
     server: {
       port: 5173,
       // Same one-origin arrangement as nginx: the app only ever calls its own
       // origin, so there is no cross-origin request and no service needs CORS.
-      proxy: {
+      proxy: gateway ? { '/api': { target: gateway, changeOrigin: true } } : {
         // Supplier Service already serves this prefix, so nothing is rewritten.
         '/api/v1/supplier': {
           target: SUPPLIER_SERVICE,
