@@ -6,18 +6,18 @@ meta {
 
 post {
   url: {{baseUrl}}/api/v1/orders/{{orderId}}/deliver
-  body: multipart-form
+  body: multipartForm
   auth: none
 }
+
 headers {
   X-User-Id: 5f5ce989-a038-3f69-9aa4-54b24d8cfa63
+  X-Permitted-Action: true
   X-User-Telegram: flow-courier
 }
 
-
-
 body:multipart-form {
-  photo: @file(../fixtures/proof.png)
+  photo: @file(C:\Users\varun\Pictures\CS2109s Report\NN train p2.png) @contentType(image/png)
 }
 
 tests {
@@ -26,4 +26,3 @@ tests {
     expect(res.getBody().status).to.equal("DELIVERED");
   });
 }
-
