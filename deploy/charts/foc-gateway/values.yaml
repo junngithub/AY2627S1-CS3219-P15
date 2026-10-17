@@ -44,6 +44,10 @@ publicRoutes:
 blockedPaths:
   - /api/v1/user/authorize
 
+# Service-token APIs are called directly over private service DNS, never by clients.
+blockedPrefixes:
+  - /api/v1/user/internal
+
 # `helm test` pod (not used by Argo CD).
 tests:
   curlImage: curlimages/curl:8.10.1
