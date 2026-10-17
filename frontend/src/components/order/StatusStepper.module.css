@@ -1,0 +1,130 @@
+/*
+ * AI-generated (Claude Code);
+ * Reviewed by Ngooi Jun Sen.
+ */
+
+.stepper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-1) var(--space-3);
+  /* Top-aligned so the marker sits on the first line of its label, which lets
+     the connector below be positioned from a fixed offset. */
+  align-items: start;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-subtle);
+}
+
+/*
+ * The line through the circles. It hangs from each marker down across the
+ * gap to the next one, so the last step has none.
+ */
+.step:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 17px;
+  bottom: calc(var(--space-3) * -1);
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--color-border-strong);
+}
+
+/* Filled behind the steps already passed, hollow ahead of them. */
+.reached:not(.current)::before {
+  background: var(--color-text-muted);
+}
+
+.marker {
+  width: 10px;
+  height: 10px;
+  margin-top: 5px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border-strong);
+  background: transparent;
+}
+
+.reached {
+  color: var(--color-text);
+}
+
+.reached .marker {
+  background: var(--color-text-muted);
+  border-color: var(--color-text-muted);
+}
+
+.current {
+  font-weight: var(--font-weight-semibold);
+}
+
+.current .marker {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.detail {
+  grid-column: 2;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-muted);
+}
+
+.labelShort {
+  display: none;
+}
+
+/*
+ * Mobile: the same five steps become a tab strip across the top, with the
+ * current one underlined in the accent colour.
+ */
+@media (max-width: 767px) {
+  /*
+   * Each step carries its own underline segment with a gap between them, as
+   * the mockup draws it, rather than one rule running under the whole strip.
+   */
+  .stepper {
+    flex-direction: row;
+    gap: var(--space-2);
+  }
+
+  .step {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    padding: var(--space-3) var(--space-1) var(--space-2);
+    border-bottom: 2px solid var(--color-border);
+    font-size: var(--font-size-xs);
+    text-align: center;
+  }
+
+  /* Steps already passed keep a light segment; the current one takes accent. */
+  .reached {
+    border-bottom-color: var(--color-text);
+  }
+
+  .current {
+    border-bottom-color: var(--color-accent);
+    color: var(--color-accent);
+  }
+
+  /* No circles in the tab strip, so no connector either. */
+  .step::before,
+  .marker,
+  .detail,
+  .labelLong {
+    display: none;
+  }
+
+  .labelShort {
+    display: inline;
+  }
+}
