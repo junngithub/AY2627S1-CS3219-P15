@@ -416,12 +416,12 @@ export const openApiDocument = {
         },
       },
     },
-    "/api/v1/user/authorize": {
+    "/api/v1/user/internal/authorize": {
       post: {
         tags: ["User"],
         summary: "Validate a session for another service",
         description:
-          "Called by the API gateway for every protected request, with the client's HTTP method and no body, so every method is accepted (POST shown). The gateway reads only the status and the identity headers. Responses are never cached.",
+          "Internal only: blocked at public proxies. Called directly by the API gateway for every protected request, with the client's HTTP method and no body, so every method is accepted (POST shown). Requires the user's bearer session, not the Order lookup service token. The gateway reads only the status and the identity headers. Responses are never cached. /api/v1/user/authorize remains a temporary, externally blocked compatibility alias during caller migration.",
         security: [{ bearerAuth: [] }],
         responses: {
           "200": {

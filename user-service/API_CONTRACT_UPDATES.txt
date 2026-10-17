@@ -5,8 +5,16 @@ This is a copy-and-paste edit guide, not a replacement for the whole team's
 contract. The shared document itself has NOT been edited. No other service's
 endpoint is changed by these edits. Swagger at /api-docs documents the API.
 
-1. ADD AFTER THE AUTH LINE UNDER "Conventions"
+1. UPDATE AUTH UNDER "Conventions"
 ------------------------------------------------------------
+Replace the existing Auth line with:
+
+Auth: every endpoint (except explicitly marked public or service-token-only)
+requires Authorization: Bearer <token>, validated via User Service
+POST /api/v1/user/internal/authorize over private service DNS.
+
+Then add:
+
 User Service auth exceptions: POST /api/v1/user/signup, /verify-email,
 /resend-verification, /login, /forgot-password, and /reset-password are public
 (all suffixes above are relative to /api/v1/user). Telegram verification and
@@ -60,8 +68,12 @@ F1.4. Requires the user's bearer session. Confirms the Telegram handle using
 200 { status, nextSteps }. The account becomes Verified only when both email
 and Telegram are verified. Queues UserVerified once when verification completes.
 
-5. REPLACE /authorize's PURPOSE; KEEP THE POST ROW
+5. MIGRATE THE /authorize ROW TO /internal/authorize
 ------------------------------------------------------------
+Method: POST
+Endpoint: /api/v1/user/internal/authorize
+Body / Params: header only
+Purpose:
 F4. Internal authorization check, normally called by the gateway using the
 client's bearer token. Returns 200 { authenticated, userId, isAdmin,
 permittedAction } and response headers x-user-id, x-is-admin,
@@ -73,6 +85,16 @@ headers before injecting trusted values. permittedAction=false is still a
 valid authenticated session: each backend must check permission for its own
 operations. This route is blocked at the public gateway, but services may call
 it over private service DNS. Tokens are opaque sessions, not JWTs.
+
+Migration: /api/v1/user/authorize remains a temporary, externally blocked
+compatibility alias with the same authentication and response, not a redirect.
+New callers must use /api/v1/user/internal/authorize. The Envoy and frontend
+nginx configurations in this checkout are updated to the new path; other
+branches and deployed configurations must migrate before removing the alias.
+The internal prefix is blocked at both public proxies. This authorization
+endpoint requires a user bearer session, not the Order lookup service token.
+Roll out the updated User image FIRST, then update/reload Envoy and nginx.
+Switching callers while the old User image is running would break authorization.
 
 6. REPLACE DELETE /api/v1/user/me's PURPOSE
 ------------------------------------------------------------
@@ -179,7 +201,7 @@ environment and ENABLE_TEST_VERIFICATION=true. Keep production disabled.
 Plan how to seed the real admin through the privileged deployment process.
 
 Admin Service owner: in the previously fetched Admin branch, core/security.py calls
-/api/v1/user/me/authorize and expects role/email. Use /api/v1/user/authorize and
+/api/v1/user/me/authorize and expects role/email. Use /api/v1/user/internal/authorize and
 check authenticated, isAdmin and permittedAction; userId is the identity field.
 Forward the real admin Authorization header for the new verification override.
 Recheck this finding against the latest Admin code before applying changes.
@@ -187,15 +209,20 @@ Recheck this finding against the latest Admin code before applying changes.
 Frontend owner: reconcile the earlier user-service-frontend-integration proposal with
 latest frontend work. Signup needs name; email verification needs { email, otp },
 not { token }. Wire the Telegram challenge/OTP flow and test with real auth
-enabled; demo mode skips User Service requests. No frontend changes are included
-in this backend batch. Review deletion UI/session behavior as part of testing.
+enabled; demo mode skips User Service requests in the older proposal. The current
+authorization-route migration only updates frontend nginx proxy configuration
+and its documentation, not React pages or forms. Review deletion UI/session
+behavior as part of testing.
 
 Together: run real sign-in through Envoy, both verification steps, Credit
 onboarding, and Order create/accept with the Telegram lookup. Check ordinary
 users cannot call admin operations and public requests cannot reach the private
 lookup. Local service tests do not prove the complete deployed journey.
 
-Tests already run locally: 47 automated tests, TypeScript build, isolated
+Tests already run locally: 48 automated tests, TypeScript build, isolated
 PostgreSQL lifecycle/integration test, Docker build/start/migration and gateway
-chart lint/render. No live Kubernetes gateway test has been run from this laptop.
+chart lint/render. The authorization migration also passed nginx syntax and
+temporary-container public-path blocking checks. The Docker build/start/migration
+check predates this route migration; the running User container has not been
+rebuilt for the new route. No live Kubernetes gateway test has been run from this laptop.
 The temporary integration database is removed after testing.

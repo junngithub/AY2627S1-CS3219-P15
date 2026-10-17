@@ -3,6 +3,18 @@
 - **Status:** Accepted. Implemented and tested locally on 2026-10-01; cloud NLB pending.
 - **Date:** 2026-09-29
 
+## Route migration (2026-10-18)
+
+The canonical authorization route is now `/api/v1/user/internal/authorize`.
+User Service accepts the same bearer session, methods and identity response as
+before. Envoy's `auth.path` and frontend nginx's authorization subrequest now
+target the new address directly. Both public proxies block the User Service
+internal prefix. The old `/api/v1/user/authorize` remains a temporary compatibility
+alias and keeps its external exact-path block until all deployed callers migrate.
+Other branches calling User Service must update their direct authorization URL.
+The route references in the original decision and implementation record below
+describe the pre-migration deployment.
+
 ## Context
 
 The API contract has every service call User `POST /api/v1/user/authorize`

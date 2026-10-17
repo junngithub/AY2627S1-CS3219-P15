@@ -71,6 +71,12 @@ that only the gateway's authorize check sets (infra ADR-0007). `nginx.conf`
 repeats that check for local runs, so the order pages and credit balance work
 in the container but not on the dev server.
 
+The nginx authorization subrequest calls User Service's canonical
+`/api/v1/user/internal/authorize` directly. Public requests to the User Service
+internal prefix and the legacy `/api/v1/user/authorize` alias receive `404`.
+Rebuild/recreate the frontend container when changing this proxy configuration;
+this migration does not change any React pages or forms.
+
 ### Against the local cluster (all services, through the API gateway)
 
 Start the local stack and the gateway port-forward

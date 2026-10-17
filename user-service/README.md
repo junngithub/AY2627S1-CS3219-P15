@@ -143,7 +143,7 @@ Successful response:
 ### Authorize
 
 ```http
-POST /api/v1/user/authorize
+POST /api/v1/user/internal/authorize
 Authorization: Bearer <token>
 ```
 
@@ -168,11 +168,15 @@ Cache-Control: no-store
 
 `permittedAction` becomes true when the account is active and both email and Telegram have been verified.
 
-The API gateway calls `/authorize` for every protected request (see `infra/docs/adr/0007-envoy-gateway-extauth.md`), so:
+The API gateway calls `/api/v1/user/internal/authorize` directly for every protected request (see `infra/docs/adr/0007-envoy-gateway-extauth.md`), so:
 
-- **Any method is accepted.** The gateway's check uses the client's method (`GET /api/v1/orders` is checked as `GET /authorize`) and sends no body.
+- **Any method is accepted.** The gateway's check uses the client's method (`GET /api/v1/orders` is checked as `GET /api/v1/user/internal/authorize`) and sends no body.
 - **Identity is in the headers.** The gateway ignores the JSON body and copies `x-user-id`, `x-is-admin` and `x-permitted-action` onto the request it forwards. The JSON is for other callers.
 - **Nothing is cached**, so a suspension applies to the next request.
+
+The `/api/v1/user/internal` prefix is blocked at the public Envoy gateway and the frontend nginx proxy. Internal authorization requires the user's bearer session; it does not use the separate Order lookup service token. `/api/v1/user/authorize` remains a temporary compatibility alias with identical authentication and responses, still blocked externally. Remove the alias and its exact-path blocks only after deployed Envoy, nginx and other direct callers have migrated. The canonical route is documented in Swagger; the legacy alias is not advertised as a separate operation.
+
+Rollout order: deploy/rebuild the updated User Service first (it supports both routes), then update/reload the Envoy and nginx configurations. An older User image does not serve the new route, so switching callers first would break protected requests. Source/config validation here does not update running containers or the cluster automatically.
 
 ### Telegram verification
 
@@ -295,7 +299,7 @@ See [API_CONTRACT_UPDATES.txt](API_CONTRACT_UPDATES.txt) for exact edits to the 
 - Add authenticated `POST /api/v1/user/request-telegram-verification`, no body, response `202 { telegramBotUrl, expiresAt }`; errors include `401`, `429`, and `503`.
 - Keep `POST /api/v1/user/verify-telegram` authenticated with `{ otp }`, response `{ status, nextSteps }`. Keep the existing password recovery and profile password endpoints.
 - Infrastructure and Credit Service owners: run the normal migration Job with the new image, then test that Credit grants 20 credits only after both verification steps. The event format is unchanged; delivery now retries from the database.
-- Frontend owner: the earlier proposed frontend changes are isolated on the already-pushed `user-service-frontend-integration` branch for review. They send signup `name`, use email OTPs, map profile `id` to the frontend's `userId`, align the User Service port, and add verification/status screens. Reconcile them with the newer frontend work on `main` before merging; this update does not change frontend files.
+- Frontend owner: the earlier proposed frontend changes are isolated on the already-pushed `user-service-frontend-integration` branch for review. Signup `name` and email OTP requests are now aligned on `main`; review the remaining Telegram verification/status screens against the latest frontend before bringing them over. The current authorization-route migration changes nginx proxy configuration and documentation only, not React pages or forms.
 - Still outstanding: real email delivery (including the login-lockout email), account escalation to Admin, Admin search/role/suspension endpoints and integration, and friendships. The complete frontend/Order/Credit/Admin journey has not been demonstrated by these service-level tests. The latest fetched `main` also has new frontend changes; the older isolated frontend proposal must be reconciled with those before merging.
 
 ## Account deletion (F5)
@@ -351,9 +355,9 @@ Admin Service must forward its administrator's real `Authorization` header when 
 
 ### Infrastructure and Admin Service integration review
 
-- User Service uses opaque bearer session tokens, not JWTs. The gateway sends `Authorization` to `/api/v1/user/authorize` (`POST` or the original request method is accepted). It then injects `x-user-id`, `x-is-admin`, and `x-permitted-action` from that response after stripping client-supplied copies early.
+- User Service uses opaque bearer session tokens, not JWTs. The gateway sends `Authorization` directly to `/api/v1/user/internal/authorize` (`POST` or the original request method is accepted). It then injects `x-user-id`, `x-is-admin`, and `x-permitted-action` from that response after stripping client-supplied copies early. The gateway and frontend nginx configurations now call this canonical path; existing deployed callers can temporarily use the legacy alias.
 - Gateway authentication proves identity; each service must still check permission. `x-permitted-action=false` is a valid authenticated `Created` account and must not be allowed to create/accept orders. Services must not be publicly reachable through a route that bypasses this trusted gateway boundary.
-- In the fetched Admin branch, `core/security.py` calls `/api/v1/user/me/authorize` and expects `role`/`email`. Change it to `/api/v1/user/authorize` and check `authenticated`, `isAdmin`, and `permittedAction`; only `userId` is guaranteed as identity. Its role/status/search relays also need an agreed User Service contract and forwarded credentials; they are not implemented by these two new endpoints.
+- In the previously fetched Admin branch, `core/security.py` calls `/api/v1/user/me/authorize` and expects `role`/`email`. Its owner must migrate it to `/api/v1/user/internal/authorize` over private service DNS and check `authenticated`, `isAdmin`, and `permittedAction`; only `userId` is guaranteed as identity. That branch is not modified here. Its role/status/search relays also need an agreed User Service contract and forwarded credentials; they are not implemented by these two new endpoints.
 - Rebuild the User image and run the migration Job. Configure the dedicated Order lookup secret. For load tests only, explicitly set the non-production `APP_ENV` and enable the override. Keep the production override disabled. Apply the gateway chart update to block `/api/v1/user/internal` externally.
 - The local machine currently has no selected Kubernetes context. The gateway configuration was reviewed and chart checks run locally; no live Envoy cluster or full service-to-service flow was tested here. Run `helm test` and an authenticated end-to-end order test in the team's cluster before treating integration as complete.
 

@@ -9,7 +9,7 @@
 //
 // When running as "user", it also stands in for User's auth endpoint
 // (ADR-0007), mirroring the order service's local stub mode:
-//   * /api/v1/user/authorize
+//   * /api/v1/user/internal/authorize (legacy /api/v1/user/authorize alias)
 //       Authorization: Bearer stub:<name>@u.nus.edu | stub:<name>@nus.edu.sg
 //         → 200, headers x-user-id: <email>, x-is-admin: true if <name> starts with "admin"
 //       anything else → 401
@@ -20,7 +20,7 @@ import { createServer } from 'node:http';
 const port = Number.parseInt(process.env.PORT ?? '3000', 10);
 const service = process.env.SERVICE_NAME ?? 'stub';
 
-const AUTHORIZE_PATH = '/api/v1/user/authorize';
+const AUTHORIZE_PATHS = new Set(['/api/v1/user/internal/authorize', '/api/v1/user/authorize']);
 const STUB_TOKEN = /^Bearer stub:([a-z0-9._-]+@(?:u\.nus\.edu|nus\.edu\.sg))$/i;
 
 function send(res, status, body, headers = {}) {
@@ -48,7 +48,7 @@ const server = createServer((req, res) => {
   if (path === '/health') {
     return send(res, 200, { status: 'ok', service });
   }
-  if (service === 'user' && path === AUTHORIZE_PATH) {
+  if (service === 'user' && AUTHORIZE_PATHS.has(path)) {
     return authorize(req, res);
   }
   return send(res, 200, {

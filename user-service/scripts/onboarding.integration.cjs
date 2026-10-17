@@ -74,7 +74,7 @@ test("complete local verification and profile password workflow", async () => {
 
   try {
     const first = await signup();
-    assert.equal((await request("/authorize", {}, first.token)).body.permittedAction, false);
+    assert.equal((await request("/internal/authorize", {}, first.token)).body.permittedAction, false);
     const emailOnly = await request("/verify-email", { email: first.email, otp: first.emailOtp });
     assert.equal(emailOnly.status, 200);
     assert.equal(emailOnly.body.status, "Created");
@@ -101,7 +101,7 @@ test("complete local verification and profile password workflow", async () => {
     assert.equal(verified.status, 200);
     assert.equal(verified.body.status, "Verified");
     assert.deepEqual(verified.body.nextSteps, []);
-    assert.equal((await request("/authorize", {}, first.token)).body.permittedAction, true);
+    assert.equal((await request("/internal/authorize", {}, first.token)).body.permittedAction, true);
     assert.equal((await request("/verify-telegram", { otp: validOtp }, first.token)).status, 200);
     assert.equal(await prisma.userVerifiedOutbox.count({ where: { userId: first.id } }), 1);
     const queued = await prisma.userVerifiedOutbox.findUnique({ where: { userId: first.id } });

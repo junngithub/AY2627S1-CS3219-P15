@@ -445,9 +445,10 @@ export function createUsersRouter(
   // The API gateway checks every protected request here, using the client's
   // method and no body, so any method is accepted. Identity goes out as
   // headers for the gateway and as JSON for other callers. Never cached, so a
-  // suspension applies to the next request.
+  // suspension applies to the next request. Keep the old path as a temporary
+  // compatibility alias until deployed gateways and direct callers migrate.
   router.all(
-    "/authorize",
+    ["/internal/authorize", "/authorize"],
     asyncHandler(async (request, response) => {
       const result = authorizationResult(await authenticatedUser(request));
       response.set(identityHeaders(result)).set("Cache-Control", "no-store").json(result);

@@ -47,13 +47,28 @@ describe("HTTP foundation", () => {
     assert.ok(document.paths["/api/v1/user/request-telegram-verification"]);
     assert.ok(document.paths["/api/v1/user/internal/users/{userId}/telegram"]);
     assert.ok(document.paths["/api/v1/user/admin/users/{userId}/verify"]);
-    assert.ok(document.paths["/api/v1/user/authorize"]);
+    assert.ok(document.paths["/api/v1/user/internal/authorize"]);
+    assert.equal(document.paths["/api/v1/user/authorize"], undefined);
   });
 
   it("answers authorize checks for any method, as the API gateway sends them", async () => {
-    for (const method of ["GET", "POST", "PATCH", "DELETE"]) {
-      const response = await fetch(`${baseUrl}/api/v1/user/authorize`, { method });
-      assert.equal(response.status, 401, `${method} /authorize without a token`);
+    for (const endpoint of ["internal/authorize", "authorize"]) {
+      for (const method of ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]) {
+        const response = await fetch(`${baseUrl}/api/v1/user/${endpoint}`, { method });
+        assert.equal(response.status, 401, `${method} /${endpoint} without a token`);
+      }
+    }
+  });
+
+  it("does not accept gateway identity headers or an Order service token as authorize credentials", async () => {
+    for (const endpoint of ["internal/authorize", "authorize"]) {
+      const response = await fetch(`${baseUrl}/api/v1/user/${endpoint}`, {
+        headers: {
+          "x-user-id": "5999fc1e-1496-45a0-af8e-53ebf70669ba", "x-is-admin": "true",
+          "x-permitted-action": "true", "x-service-token": "not-a-user-session",
+        },
+      });
+      assert.equal(response.status, 401);
     }
   });
 

@@ -44,7 +44,9 @@ test("account lifecycle and service integration in an isolated PostgreSQL databa
         method, headers: { "content-type": "application/json", ...(token ? { authorization: "Bearer " + token } : {}), ...extraHeaders },
         body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(15_000),
       });
-      return { status: response.status, body: await response.json(), cache: response.headers.get("cache-control") };
+      return { status: response.status, body: await response.json(), cache: response.headers.get("cache-control"),
+        userIdHeader: response.headers.get("x-user-id"), isAdminHeader: response.headers.get("x-is-admin"),
+        permittedActionHeader: response.headers.get("x-permitted-action") };
     }
     async function user(overrides = {}) {
       const suffix = randomBytes(6).toString("hex");
@@ -65,6 +67,23 @@ test("account lifecycle and service integration in an isolated PostgreSQL databa
     const owner = await user();
     const ownerToken = await login(owner);
     const target = await user({ emailVerifiedAt: null, telegramVerifiedAt: null });
+    const targetToken = await login(target);
+    for (const [account, token, isAdmin, permittedAction] of [
+      [owner, ownerToken, false, true], [adminA, adminTokenA, true, true], [target, targetToken, false, false],
+    ]) {
+      for (const endpoint of ["/internal/authorize", "/authorize"]) {
+        for (const method of ["GET", "POST", "PATCH", "DELETE"]) {
+          const authorization = await request(endpoint, method, undefined, token);
+          assert.equal(authorization.status, 200);
+          assert.deepEqual(authorization.body, { authenticated: true, userId: account.id, isAdmin, permittedAction });
+          assert.equal(authorization.userIdHeader, account.id);
+          assert.equal(authorization.isAdminHeader, String(isAdmin));
+          assert.equal(authorization.permittedActionHeader, String(permittedAction));
+          assert.equal(authorization.cache, "no-store");
+        }
+      }
+    }
+    console.log("PASS: canonical internal authorize and legacy alias preserve bearer authentication, methods, identity headers and permissions");
     const lookup = `/internal/users/${target.id}/telegram`;
     const serviceHeaders = { "x-service-token": process.env.ORDER_USER_LOOKUP_TOKEN };
     const spoofHeaders = { "x-is-admin": "true", "x-user-id": adminA.id, "x-permitted-action": "true" };
@@ -99,6 +118,19 @@ test("account lifecycle and service integration in an isolated PostgreSQL databa
     const suspended = await user({ accessStatus: "SUSPENDED" });
     assert.equal((await request(`/admin/users/${suspended.id}/verify`, "POST", { reason: "Load-test setup" }, adminTokenA)).status, 409);
     assert.equal((await request(`/internal/users/${suspended.id}/telegram`, "GET", undefined, undefined, serviceHeaders)).status, 404);
+    for (const [account, expiresAt] of [
+      [suspended, new Date(Date.now() + 600_000)], [owner, new Date(Date.now() - 1000)],
+    ]) {
+      const token = randomBytes(32).toString("base64url");
+      await prisma.authSession.create({ data: { userId: account.id, tokenHash: hashSessionToken(token), expiresAt } });
+      for (const endpoint of ["/internal/authorize", "/authorize"]) {
+        assert.equal((await request(endpoint, "GET", undefined, token)).status, 401);
+      }
+    }
+    const actualIdentity = await request("/internal/authorize", "POST", undefined, ownerToken, spoofHeaders);
+    assert.equal(actualIdentity.status, 200);
+    assert.equal(actualIdentity.body.userId, owner.id);
+    assert.equal(actualIdentity.body.isAdmin, false);
     console.log("PASS: scoped service-token lookup; spoofed headers and non-admin override denied; audit and verification event idempotent");
 
     const oldSession = await login(owner);
@@ -115,7 +147,9 @@ test("account lifecycle and service integration in an isolated PostgreSQL databa
     assert.equal(pending.scheduledDeletionAt.toISOString(), deletionDeadline(pending.deletionRequestedAt).toISOString());
     assert.equal(deletion.body.scheduledDeletionAt, pending.scheduledDeletionAt.toISOString());
     assert.equal((await request("/me", "GET", undefined, ownerToken)).status, 401);
-    assert.equal((await request("/authorize", "POST", {}, oldSession)).status, 401);
+    for (const endpoint of ["/internal/authorize", "/authorize"]) {
+      assert.equal((await request(endpoint, "POST", {}, oldSession)).status, 401);
+    }
     assert.equal(await prisma.passwordResetToken.count({ where: { userId: owner.id, revokedAt: null } }), 0);
     assert.equal(await prisma.telegramVerificationChallenge.count({ where: { userId: owner.id, revokedAt: null } }), 0);
     assert.equal((await request(`/admin/users/${owner.id}/verify`, "POST", { reason: "Load-test setup" }, adminTokenA)).status, 409);
@@ -136,7 +170,9 @@ test("account lifecycle and service integration in an isolated PostgreSQL databa
     const fakeActive = randomBytes(32).toString("base64url");
     await prisma.authSession.create({ data: { userId: owner.id, tokenHash: hashSessionToken(fakeActive), expiresAt: new Date(Date.now() + 600_000) } });
     assert.equal((await request("/login", "POST", { email: owner.email, password })).status, 401);
-    assert.equal((await request("/authorize", "POST", {}, fakeActive)).status, 401);
+    for (const endpoint of ["/internal/authorize", "/authorize"]) {
+      assert.equal((await request(endpoint, "POST", {}, fakeActive)).status, 401);
+    }
     const cleaned = await Promise.all([
       deleteExpiredAccounts({ userIds: [owner.id] }), deleteExpiredAccounts({ userIds: [owner.id] }),
     ]);
