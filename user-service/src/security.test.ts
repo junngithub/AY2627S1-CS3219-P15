@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   generateOtp,
+  generatePasswordResetToken,
   generateSessionToken,
   hashOtp,
   hashPassword,
+  hashPasswordResetToken,
   hashSessionToken,
   isAllowedEmail,
   isValidTelegramHandle,
@@ -35,6 +37,15 @@ describe("email validation", () => {
 });
 
 describe("password handling", () => {
+  it("generates unpredictable reset tokens and stores only hashes", () => {
+    const first = generatePasswordResetToken();
+    const second = generatePasswordResetToken();
+    assert.match(first, /^[A-Za-z0-9_-]{43}$/);
+    assert.notEqual(first, second);
+    assert.notEqual(hashPasswordResetToken(first), first);
+    assert.equal(hashPasswordResetToken(first), hashPasswordResetToken(first));
+  });
+
   it("reports every unmet password requirement", () => {
     assert.deepEqual(passwordValidationErrors("short"), [
       "must contain at least 10 characters",

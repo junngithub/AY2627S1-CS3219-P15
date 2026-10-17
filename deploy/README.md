@@ -68,8 +68,8 @@ exist (`retry`, `SkipDryRunOnMissingResource`). A service pod waits in
 client ─▶ Envoy (envoy-<namespace> Service, type LoadBalancer)
            │  1. strip client-sent x-user-id / x-is-admin
            │  2. public exact path?  → forward to the service, no auth
-           │     /api/v1/user/authorize → 404 at the gateway
-           │  3. protected prefix?    → ask user:8080/api/v1/user/authorize
+           │     /api/v1/user/internal/* → 404 at the gateway (legacy /authorize also blocked)
+           │  3. protected prefix?    → ask user:8080/api/v1/user/internal/authorize
            │        401 → back to the client
            │        200 → add x-user-id / x-is-admin from the answer, forward
            ▼
@@ -256,7 +256,7 @@ ignores them.
 | `foc-kafka` | `kafka-test-acls` (Kafka CLI, same image as the brokers) | built from the `users` table: every allowed write and read works (consumer group `<user>-conntest`); per user, one forbidden write and one wrong-prefix group are denied; a wrong password is rejected |
 | `foc-database` | `foc-database-test-access` (psql) | each service's login creates and reads a table in its own database, and is refused (`permission denied`) by every other service's database |
 | `foc-service` | `<svc>-test-http` (curl) | `GET http://<svc>:<port><healthPath>` from another pod, plus `database.healthPath` if set (credit: `/health/db`), plus `/health` on each `*_SERVICE_URL` in its `env`, retrying for ~20 s |
-| `foc-gateway` | `foc-gateway-test` (curl) | 18 requests through Envoy, without logging in: every protected prefix gives 401 without a token, and with a bad token or spoofed `x-user-id` / `x-is-admin`; public routes reach their service without a token; `/api/v1/user/authorize` and unknown paths give 404. It can't check which identity headers reach a backend (real services don't echo them) |
+| `foc-gateway` | `foc-gateway-test` (curl) | Requests through Envoy, without logging in: every protected prefix gives 401 without a token, and with a bad token or spoofed `x-user-id` / `x-is-admin`; public routes reach their service without a token; internal authorization/lookup paths, the legacy `/api/v1/user/authorize` alias and unknown paths give 404. It can't check which identity headers reach a backend (real services don't echo them) |
 
 Test pods are kept until the next run, so `kubectl -n foc logs kafka-test-acls`
 still shows the last result.

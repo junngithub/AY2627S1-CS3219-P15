@@ -41,13 +41,34 @@ describe("HTTP foundation", () => {
     };
     assert.equal(document.openapi, "3.0.3");
     assert.ok(document.paths["/api/v1/user/signup"]);
-    assert.ok(document.paths["/api/v1/user/authorize"]);
+    assert.ok(document.paths["/api/v1/user/forgot-password"]);
+    assert.ok(document.paths["/api/v1/user/reset-password"]);
+    assert.ok(document.paths["/api/v1/user/verify-telegram"]);
+    assert.ok(document.paths["/api/v1/user/request-telegram-verification"]);
+    assert.ok(document.paths["/api/v1/user/internal/users/{userId}/telegram"]);
+    assert.ok(document.paths["/api/v1/user/admin/users/{userId}/verify"]);
+    assert.ok(document.paths["/api/v1/user/internal/authorize"]);
+    assert.equal(document.paths["/api/v1/user/authorize"], undefined);
   });
 
   it("answers authorize checks for any method, as the API gateway sends them", async () => {
-    for (const method of ["GET", "POST", "PATCH", "DELETE"]) {
-      const response = await fetch(`${baseUrl}/api/v1/user/authorize`, { method });
-      assert.equal(response.status, 401, `${method} /authorize without a token`);
+    for (const endpoint of ["internal/authorize", "authorize"]) {
+      for (const method of ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]) {
+        const response = await fetch(`${baseUrl}/api/v1/user/${endpoint}`, { method });
+        assert.equal(response.status, 401, `${method} /${endpoint} without a token`);
+      }
+    }
+  });
+
+  it("does not accept gateway identity headers or an Order service token as authorize credentials", async () => {
+    for (const endpoint of ["internal/authorize", "authorize"]) {
+      const response = await fetch(`${baseUrl}/api/v1/user/${endpoint}`, {
+        headers: {
+          "x-user-id": "5999fc1e-1496-45a0-af8e-53ebf70669ba", "x-is-admin": "true",
+          "x-permitted-action": "true", "x-service-token": "not-a-user-session",
+        },
+      });
+      assert.equal(response.status, 401);
     }
   });
 
@@ -62,6 +83,50 @@ describe("HTTP foundation", () => {
 });
 
 describe("request validation before database access", () => {
+  it("requires authentication for Telegram verification and profile password changes", async () => {
+    for (const [endpoint, method] of [
+      ["request-telegram-verification", "POST"], ["verify-telegram", "POST"], ["me/password", "PATCH"], ["me", "DELETE"],
+    ]) {
+      const response = await fetch(`${baseUrl}/api/v1/user/${endpoint}`, { method });
+      assert.equal(response.status, 401);
+    }
+  });
+
+  it("does not accept spoofed identity headers for integration endpoints", async () => {
+    for (const endpoint of ["internal/users/5999fc1e-1496-45a0-af8e-53ebf70669ba/telegram", "admin/users/5999fc1e-1496-45a0-af8e-53ebf70669ba/verify"]) {
+      const response = await fetch(`${baseUrl}/api/v1/user/${endpoint}`, {
+        method: endpoint.startsWith("admin") ? "POST" : "GET",
+        headers: { "x-is-admin": "true", "x-user-id": "5999fc1e-1496-45a0-af8e-53ebf70669ba", "x-permitted-action": "true" },
+      });
+      assert.equal(response.status, 404);
+    }
+  });
+  it("requires an email to request a password reset", async () => {
+    const response = await fetch(`${baseUrl}/api/v1/user/forgot-password`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json() as { code: string }).code, "MISSING_EMAIL");
+  });
+
+  it("rejects malformed and weak password reset requests", async () => {
+    for (const [body, code] of [
+      [{ newPassword: "SecurePass1" }, "MISSING_FIELDS"],
+      [{ token: "invalid", newPassword: "short" }, "INVALID_PASSWORD"],
+      [{ token: "invalid", newPassword: "SecurePass1" }, "INVALID_RESET_TOKEN"],
+    ] as const) {
+      const response = await fetch(`${baseUrl}/api/v1/user/reset-password`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      assert.equal(response.status, 400);
+      assert.equal((await response.json() as { code: string }).code, code);
+    }
+  });
+
   it("rejects signup when required fields are absent", async () => {
     const response = await fetch(`${baseUrl}/api/v1/user/signup`, {
       method: "POST",
