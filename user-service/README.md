@@ -14,7 +14,7 @@ Owns user registration, verification, authentication, profile status, account li
 - Interactive Swagger/OpenAPI documentation
 - Docker Compose configuration for the service and its own PostgreSQL database
 
-Email and Telegram verification, password recovery and profile password changes are implemented. Email delivery still uses the development logger. Telegram uses a real verification bot when configured, or a development logger when running locally without a bot. Account deletion, account escalation and friendship management remain to be implemented.
+Email and Telegram verification, password recovery/change, and account deletion are implemented. Order can look up Telegram handles through a service-authenticated endpoint. An audited admin verification override is available for non-production load tests. Email delivery still uses the development logger. Telegram uses a real verification bot when configured, or a development logger locally without a bot. Account escalation and friendship management remain to be implemented.
 
 ## Swagger API documentation
 
@@ -56,10 +56,10 @@ POST /api/v1/user/signup
 Content-Type: application/json
 
 {
-  "name": "Joshua Tan",
+  "name": "Example User",
   "email": "e1234567@u.nus.edu",
   "password": "SecurePass1",
-  "telegramHandle": "joshuatan"
+  "telegramHandle": "example_user"
 }
 ```
 
@@ -133,7 +133,7 @@ Successful response:
   "expiresAt": "2026-09-30T00:00:00.000Z",
   "user": {
     "id": "uuid",
-    "name": "Joshua Tan",
+    "name": "Example User",
     "email": "e1234567@u.nus.edu",
     "status": "Created"
   }
@@ -290,8 +290,81 @@ This checks verification in both orders, OTP expiry and concurrent attempt limit
 
 ## Team handoff and API contract updates
 
+See [API_CONTRACT_UPDATES.txt](API_CONTRACT_UPDATES.txt) for exact edits to the shared contract pasted on 18 October 2026, including the authentication exceptions, new endpoints, deletion behavior and the event-format question to resolve with the Credit Service owner. This is a copyable edit guide; the external shared document has not been changed.
+
 - Add authenticated `POST /api/v1/user/request-telegram-verification`, no body, response `202 { telegramBotUrl, expiresAt }`; errors include `401`, `429`, and `503`.
 - Keep `POST /api/v1/user/verify-telegram` authenticated with `{ otp }`, response `{ status, nextSteps }`. Keep the existing password recovery and profile password endpoints.
-- Don: run the normal migration Job with the new image, then test that Credit grants 20 credits only after both verification steps. The event format is unchanged; delivery now retries from the database.
-- Jun Sen: the proposed frontend changes are isolated on the local `user-service-frontend-integration` branch for review. They send signup `name`, use email OTPs, map profile `id` to the frontend's `userId`, align the User Service port, and add verification/status screens.
-- Still outstanding: real email delivery (including the login-lockout email), account deletion/cleanup, account escalation to Admin, agreed access rules for Order's Telegram lookup, and friendships. The complete frontend/Order/Credit/Admin journey has not been demonstrated by these service-level tests.
+- Infrastructure and Credit Service owners: run the normal migration Job with the new image, then test that Credit grants 20 credits only after both verification steps. The event format is unchanged; delivery now retries from the database.
+- Frontend owner: the earlier proposed frontend changes are isolated on the already-pushed `user-service-frontend-integration` branch for review. They send signup `name`, use email OTPs, map profile `id` to the frontend's `userId`, align the User Service port, and add verification/status screens. Reconcile them with the newer frontend work on `main` before merging; this update does not change frontend files.
+- Still outstanding: real email delivery (including the login-lockout email), account escalation to Admin, Admin search/role/suspension endpoints and integration, and friendships. The complete frontend/Order/Credit/Admin journey has not been demonstrated by these service-level tests. The latest fetched `main` also has new frontend changes; the older isolated frontend proposal must be reconciled with those before merging.
+
+## Account deletion (F5)
+
+```http
+DELETE /api/v1/user/me
+Authorization: Bearer <user-session-token>
+Content-Type: application/json
+
+{"confirm":true}
+```
+
+Returns `202 { message, scheduledDeletionAt }`. The deadline is six calendar months later, clamping month-end dates when necessary. All current sessions, outstanding reset links and verification challenges are revoked immediately. The last active administrator cannot schedule deletion (`409 LAST_ADMIN`).
+
+Correct-password login before the deadline cancels deletion and creates a new session; old sessions remain revoked. Login and authorization reject an account whose deadline has passed, even if the cleanup worker has not run yet. The worker runs every `USER_DELETION_SWEEP_INTERVAL_SECONDS` (default 3600), removes up to 100 expired accounts per run, and uses database locks to coordinate with login and other workers. User-owned sessions, OTPs, challenges and verification outbox rows are removed through foreign-key cascades. A minimal audit trail stores UUIDs/action/reason, not profile fields. Other services retain their own records; no unagreed cross-service deletion event is invented here.
+
+## New integration endpoints
+
+Copy these rows into the shared API contract; keep the standard `{ error, code }` convention.
+
+| Method | Endpoint | Body / Params | Access and result |
+| --- | --- | --- | --- |
+| DELETE | `/api/v1/user/me` | `{ confirm: true }` | Account owner's bearer session; returns `202 { message, scheduledDeletionAt }`, revokes sessions, allows cancellation by login before the six-month deadline. Last active admin: `409 LAST_ADMIN`. |
+| GET | `/api/v1/user/internal/users/{userId}/telegram` | UUID path parameter | Dedicated `X-Service-Token`; returns `{ userId, telegramHandle }` for an active, verified, non-expired account. Private service DNS only; blocked at the gateway. |
+| POST | `/api/v1/user/admin/users/{userId}/verify` | UUID path parameter; `{ reason }` (3–500 characters) | Verified admin bearer session, non-production feature flag; returns `{ userId, status, nextSteps, changed }`. |
+
+### Order Service integration
+
+```http
+GET http://user:8080/api/v1/user/internal/users/<uuid>/telegram
+X-Service-Token: <dedicated-shared-secret>
+```
+
+The infrastructure owner must configure the same dedicated `ORDER_USER_LOOKUP_TOKEN` in User Service and securely supply it to Order. Order sends that value in `X-Service-Token`; it must never be sent to or stored in the frontend. An empty or incorrect token returns `404`; invalid UUIDs return `400`, missing/suspended/expired accounts `404`, and unverified accounts `409`. Only user ID and handle are returned, with `Cache-Control: no-store`.
+
+Order remains responsible for authenticating the requester/courier and enforcing order participation. Derive the acting UUID from the gateway's trusted `x-user-id`, rather than trusting a UUID supplied by the frontend. The service token authorizes the Order backend to perform lookups; it does not prove which user is acting.
+
+### Admin Service / load tests
+
+```http
+POST /api/v1/user/admin/users/<uuid>/verify
+Authorization: Bearer <actual-admin-session-token>
+Content-Type: application/json
+
+{"reason":"D3 load-test setup"}
+```
+
+This sets missing email/Telegram verification timestamps on synthetic non-production users. It does not grant admin roles, change Telegram identity IDs, unlock accounts, or reinstate suspended users. Suspended accounts and accounts pending deletion are rejected. The first actual change is audited with the admin UUID, target UUID, reason and time. Repeating the request is idempotent; `UserVerified` is queued once through the existing outbox.
+
+It defaults to `404` unless `ENABLE_TEST_VERIFICATION=true` and `APP_ENV` is explicitly a permitted non-production environment (`local`, `development`, `dev`, `test`, `staging`, `stg`). When `APP_ENV` is absent it falls back to `NODE_ENV`; production/unknown environments remain disabled. Runtime Node images may use `NODE_ENV=production` even in non-production clusters, so set the real environment explicitly with `APP_ENV`. Never enable this override in production. The normal signup domain/password rules still apply to synthetic users.
+
+Admin Service must forward its administrator's real `Authorization` header when calling this endpoint. Fake `admin-*` tokens and caller-supplied identity headers do not authenticate an admin. A real admin account must be seeded through the team's privileged deployment process; no public first-admin shortcut is introduced. The optional inverse operation is deliberately not added because reversing verification/credits needs a separate agreed workflow.
+
+### Infrastructure and Admin Service integration review
+
+- User Service uses opaque bearer session tokens, not JWTs. The gateway sends `Authorization` to `/api/v1/user/authorize` (`POST` or the original request method is accepted). It then injects `x-user-id`, `x-is-admin`, and `x-permitted-action` from that response after stripping client-supplied copies early.
+- Gateway authentication proves identity; each service must still check permission. `x-permitted-action=false` is a valid authenticated `Created` account and must not be allowed to create/accept orders. Services must not be publicly reachable through a route that bypasses this trusted gateway boundary.
+- In the fetched Admin branch, `core/security.py` calls `/api/v1/user/me/authorize` and expects `role`/`email`. Change it to `/api/v1/user/authorize` and check `authenticated`, `isAdmin`, and `permittedAction`; only `userId` is guaranteed as identity. Its role/status/search relays also need an agreed User Service contract and forwarded credentials; they are not implemented by these two new endpoints.
+- Rebuild the User image and run the migration Job. Configure the dedicated Order lookup secret. For load tests only, explicitly set the non-production `APP_ENV` and enable the override. Keep the production override disabled. Apply the gateway chart update to block `/api/v1/user/internal` externally.
+- The local machine currently has no selected Kubernetes context. The gateway configuration was reviewed and chart checks run locally; no live Envoy cluster or full service-to-service flow was tested here. Run `helm test` and an authenticated end-to-end order test in the team's cluster before treating integration as complete.
+
+### Isolated lifecycle integration test
+
+With local PostgreSQL running on port 5554 and dependencies installed:
+
+```powershell
+npm.cmd run prisma:generate
+npm.cmd run build
+npm.cmd run test:integration:lifecycle
+```
+
+The script creates a uniquely named temporary database, applies all migrations, starts a test API, and exercises deletion, restoration, cleanup, last-admin concurrency, service-token access, non-admin denial and audited test verification. It then drops only its own temporary database. It neither changes the normal `user_db` records nor sends email/Telegram messages, and does not change your `.env`.

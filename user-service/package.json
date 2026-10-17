@@ -10,6 +10,7 @@
     "test": "tsx --test src/**/*.test.ts",
     "test:integration:password-reset": "node --test scripts/password-reset.integration.cjs",
     "test:integration:onboarding": "node --test scripts/onboarding.integration.cjs",
+    "test:integration:lifecycle": "node --test scripts/lifecycle.integration.cjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
   },

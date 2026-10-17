@@ -119,3 +119,16 @@ model UserVerifiedOutbox {
 
   @@index([publishedAt, createdAt])
 }
+
+// UUID references are intentionally not foreign keys: retain a minimal audit
+// trail after account removal, without retaining email, name or Telegram data.
+model UserAuditLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  actorUserId  String?  @db.Uuid
+  targetUserId String   @db.Uuid
+  action       String
+  reason       String
+  createdAt    DateTime @default(now())
+
+  @@index([targetUserId, createdAt])
+}

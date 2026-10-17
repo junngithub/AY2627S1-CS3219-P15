@@ -45,6 +45,8 @@ describe("HTTP foundation", () => {
     assert.ok(document.paths["/api/v1/user/reset-password"]);
     assert.ok(document.paths["/api/v1/user/verify-telegram"]);
     assert.ok(document.paths["/api/v1/user/request-telegram-verification"]);
+    assert.ok(document.paths["/api/v1/user/internal/users/{userId}/telegram"]);
+    assert.ok(document.paths["/api/v1/user/admin/users/{userId}/verify"]);
     assert.ok(document.paths["/api/v1/user/authorize"]);
   });
 
@@ -68,10 +70,20 @@ describe("HTTP foundation", () => {
 describe("request validation before database access", () => {
   it("requires authentication for Telegram verification and profile password changes", async () => {
     for (const [endpoint, method] of [
-      ["request-telegram-verification", "POST"], ["verify-telegram", "POST"], ["me/password", "PATCH"],
+      ["request-telegram-verification", "POST"], ["verify-telegram", "POST"], ["me/password", "PATCH"], ["me", "DELETE"],
     ]) {
       const response = await fetch(`${baseUrl}/api/v1/user/${endpoint}`, { method });
       assert.equal(response.status, 401);
+    }
+  });
+
+  it("does not accept spoofed identity headers for integration endpoints", async () => {
+    for (const endpoint of ["internal/users/5999fc1e-1496-45a0-af8e-53ebf70669ba/telegram", "admin/users/5999fc1e-1496-45a0-af8e-53ebf70669ba/verify"]) {
+      const response = await fetch(`${baseUrl}/api/v1/user/${endpoint}`, {
+        method: endpoint.startsWith("admin") ? "POST" : "GET",
+        headers: { "x-is-admin": "true", "x-user-id": "5999fc1e-1496-45a0-af8e-53ebf70669ba", "x-permitted-action": "true" },
+      });
+      assert.equal(response.status, 404);
     }
   });
   it("requires an email to request a password reset", async () => {

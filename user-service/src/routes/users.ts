@@ -1,11 +1,14 @@
 import { Prisma } from "@prisma/client";
-import { NextFunction, Request, Response, Router } from "express";
+import { Router } from "express";
+import { authenticatedUser, bearerToken } from "../auth";
+import { deletionIsDue, scheduleAccountDeletion } from "../account-lifecycle";
 import { authorizationResult, identityHeaders } from "../authorization";
 import { config } from "../config";
 import { prisma } from "../db";
 import { DevelopmentEmailSender, EmailSender } from "../email";
 import type { UserEventPublisher } from "../events";
 import { AppError } from "../errors";
+import { asyncHandler } from "../http";
 import {
   generateOtp,
   generatePasswordResetToken,
@@ -26,47 +29,8 @@ import { accountNextSteps, accountStatus } from "../status";
 import { requestTelegramVerification, verifyTelegramOtp } from "../telegram";
 import { enqueueUserVerified, lockVerificationUser, VerificationEventDispatcher } from "../verification-events";
 
-type AsyncHandler = (request: Request, response: Response, next: NextFunction) => Promise<void>;
-
-function asyncHandler(handler: AsyncHandler) {
-  return (request: Request, response: Response, next: NextFunction): void => {
-    handler(request, response, next).catch(next);
-  };
-}
-
 function requiredString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
-}
-
-function bearerToken(request: Request): string {
-  const authorization = request.header("authorization");
-  const match = authorization?.match(/^Bearer\s+(\S+)$/i);
-  if (!match) throw new AppError(401, "UNAUTHORIZED", "Authentication required");
-  return match[1];
-}
-
-async function authenticatedUser(request: Request) {
-  const tokenHash = hashSessionToken(bearerToken(request));
-  const session = await prisma.authSession.findUnique({
-    where: { tokenHash },
-    include: { user: true },
-  });
-
-  if (
-    !session ||
-    session.revokedAt ||
-    session.expiresAt <= new Date() ||
-    session.user.accessStatus === "SUSPENDED"
-  ) {
-    throw new AppError(401, "UNAUTHORIZED", "Authentication required");
-  }
-
-  await prisma.authSession.update({
-    where: { id: session.id },
-    data: { lastUsedAt: new Date() },
-  });
-
-  return session.user;
 }
 
 export function createUsersRouter(
@@ -414,7 +378,8 @@ export function createUsersRouter(
         !user ||
         !passwordMatches ||
         user.lockedAt ||
-        user.accessStatus === "SUSPENDED"
+        user.accessStatus === "SUSPENDED" ||
+        deletionIsDue(user)
       ) {
         if (user && !passwordMatches && !user.lockedAt) {
           const attempts = user.failedLoginAttempts + 1;
@@ -434,6 +399,15 @@ export function createUsersRouter(
       const loggedInAt = new Date();
 
       const updatedUser = await prisma.$transaction(async (transaction) => {
+        await lockVerificationUser(transaction, user.id);
+        const current = await transaction.user.findUnique({ where: { id: user.id } });
+        if (!current || current.passwordHash !== user.passwordHash || current.lockedAt
+          || current.accessStatus === "SUSPENDED" || deletionIsDue(current)) throw genericFailure;
+        if (current.scheduledDeletionAt) {
+          await transaction.userAuditLog.create({ data: {
+            actorUserId: user.id, targetUserId: user.id, action: "ACCOUNT_DELETION_CANCELLED", reason: "Owner logged in before deletion deadline",
+          } });
+        }
         const updated = await transaction.user.update({
           where: { id: user.id },
           data: {
@@ -524,6 +498,21 @@ export function createUsersRouter(
         });
       });
       response.set("Cache-Control", "no-store").json({ message: "Password changed successfully" });
+    }),
+  );
+
+  router.delete(
+    "/me",
+    asyncHandler(async (request, response) => {
+      const user = await authenticatedUser(request);
+      if (request.body?.confirm !== true) {
+        throw new AppError(400, "CONFIRMATION_REQUIRED", "Explicit confirmation is required to delete your account");
+      }
+      const deadline = await scheduleAccountDeletion(user);
+      response.set("Cache-Control", "no-store").status(202).json({
+        message: "Account scheduled for deletion. Log in before the deadline to cancel.",
+        scheduledDeletionAt: deadline.toISOString(),
+      });
     }),
   );
 

@@ -19,6 +19,10 @@ export const openApiDocument = {
   ],
   components: {
     securitySchemes: {
+      orderServiceToken: {
+        type: "apiKey", in: "header", name: "X-Service-Token",
+        description: "Dedicated ORDER_USER_LOOKUP_TOKEN shared only with Order Service. Use private User Service DNS; the gateway blocks this path.",
+      },
       bearerAuth: {
         type: "http",
         scheme: "bearer",
@@ -437,6 +441,23 @@ export const openApiDocument = {
       },
     },
     "/api/v1/user/me": {
+      delete: {
+        tags: ["User"], summary: "Schedule account deletion in six calendar months",
+        description: "Requires explicit confirmation. Revokes sessions immediately; login before the deadline cancels deletion. The last active admin is protected.",
+        security: [{ bearerAuth: [] }],
+        requestBody: { required: true, content: { "application/json": { schema: {
+          type: "object", required: ["confirm"], properties: { confirm: { type: "boolean", enum: [true] } },
+        } } } },
+        responses: {
+          "202": { description: "Scheduled; sessions revoked", content: { "application/json": { schema: {
+            type: "object", required: ["message", "scheduledDeletionAt"],
+            properties: { message: { type: "string" }, scheduledDeletionAt: { type: "string", format: "date-time" } },
+          } } } },
+          "400": { description: "Explicit confirmation missing" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "409": { description: "Last active administrator" },
+        },
+      },
       get: {
         tags: ["User"],
         summary: "Get the signed-in user's profile",
@@ -449,6 +470,45 @@ export const openApiDocument = {
             },
           },
           "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+    "/api/v1/user/internal/users/{userId}/telegram": {
+      get: {
+        tags: ["User"], summary: "Order Service: look up a verified user's Telegram handle",
+        description: "Internal only. Order must authenticate its caller and authorize order participation. This endpoint does not accept gateway identity headers as credentials.",
+        security: [{ orderServiceToken: [] }],
+        parameters: [{ name: "userId", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        responses: {
+          "200": { description: "Minimal contact details", content: { "application/json": { schema: {
+            type: "object", required: ["userId", "telegramHandle"],
+            properties: { userId: { type: "string", format: "uuid" }, telegramHandle: { type: "string", example: "example_user" } },
+          } } } },
+          "400": { description: "Invalid user UUID" },
+          "404": { description: "Missing/invalid service token, or unavailable user" },
+          "409": { description: "User not verified" },
+        },
+      },
+    },
+    "/api/v1/user/admin/users/{userId}/verify": {
+      post: {
+        tags: ["User"], summary: "Admin: verify a non-production load-test user",
+        description: "Disabled by default. Requires ENABLE_TEST_VERIFICATION=true and a non-production APP_ENV, plus a verified admin bearer session. Records an audit reason and queues UserVerified idempotently. Does not promote roles or reinstate suspended accounts.",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "userId", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        requestBody: { required: true, content: { "application/json": { schema: {
+          type: "object", required: ["reason"], properties: { reason: { type: "string", minLength: 3, maxLength: 500, example: "D3 load-test setup" } },
+        } } } },
+        responses: {
+          "200": { description: "Verified or already verified", content: { "application/json": { schema: {
+            type: "object", required: ["userId", "status", "nextSteps", "changed"], properties: {
+              userId: { type: "string", format: "uuid" }, status: { $ref: "#/components/schemas/AccountStatus" },
+              nextSteps: { type: "array", items: { type: "string" } }, changed: { type: "boolean" },
+            },
+          } } } },
+          "400": { description: "Invalid user UUID or audit reason" },
+          "404": { description: "Feature disabled, caller not a verified admin, or target not found" },
+          "409": { description: "Target suspended or pending deletion" },
         },
       },
     },

@@ -1,0 +1,201 @@
+FRIENDS ON CAMPUS - USER SERVICE CONTRACT EDITS
+Based on the API contract pasted on 18 October 2026.
+
+This is a copy-and-paste edit guide, not a replacement for the whole team's
+contract. The shared document itself has NOT been edited. No other service's
+endpoint is changed by these edits. Swagger at /api-docs documents the API.
+
+1. ADD AFTER THE AUTH LINE UNDER "Conventions"
+------------------------------------------------------------
+User Service auth exceptions: POST /api/v1/user/signup, /verify-email,
+/resend-verification, /login, /forgot-password, and /reset-password are public
+(all suffixes above are relative to /api/v1/user). Telegram verification and
+profile operations require the user's bearer session. User Service issues
+opaque session tokens, not JWTs. The internal Telegram lookup instead requires
+the dedicated X-Service-Token described in its row; it is blocked at the public
+gateway. The load-test verification override requires a verified admin bearer
+session and the non-production feature flag described below.
+
+2. IN "1. User Service", REPLACE SIGNUP'S PURPOSE
+------------------------------------------------------------
+Keep method, endpoint and body unchanged. Replace the purpose with:
+
+F1. Public. Validates NUS email domain (F1.1) and password complexity (F1.2),
+and requests an email verification OTP (F1.3). name is required and must contain
+2-100 characters after trimming. Accepts u.nus.edu and nus.edu.sg. Returns
+201 { userId, email, status, nextSteps }. Account starts as Created and becomes
+Verified only after BOTH email and Telegram verification succeed.
+
+Implementation note: real email delivery is not connected yet. The development
+sender prints verification OTPs and password reset links in local server logs.
+Do not describe successful real email delivery as completed functionality.
+
+3. REPLACE THE PURPOSE FOR POST /api/v1/user/verify-email
+------------------------------------------------------------
+Remove the accidental editing text beginning "Activates account via activation
+OTP" and replace the whole purpose with:
+
+F1.3.2/F1.3.3. Public. Verifies email using { email, otp }, where otp is a
+six-digit string. Returns 200 { status, nextSteps }. The account becomes
+Verified only after Telegram is also verified.
+
+4. INSERT THIS ROW IMMEDIATELY BEFORE /verify-telegram
+------------------------------------------------------------
+Method: POST
+Endpoint: /api/v1/user/request-telegram-verification
+Body / Params: No body. Authorization: Bearer <user-session-token>.
+Purpose: F1.4. Creates a Telegram verification challenge. Returns
+202 { telegramBotUrl, expiresAt }. With a configured bot, the user opens the
+link, presses Start in Telegram, and receives a six-digit OTP after their
+Telegram handle is checked. Requests have a resend cooldown. An already-verified
+account returns 202 with both fields null when delivery is configured. Errors
+include 401 (invalid session), 429 (cooldown), and 503 (verification unavailable).
+Local development without a bot returns a null
+telegramBotUrl and logs the OTP; that fallback cannot verify production users.
+
+Replace /verify-telegram's purpose with:
+
+F1.4. Requires the user's bearer session. Confirms the Telegram handle using
+{ otp }, a six-digit string from the preceding challenge. Returns
+200 { status, nextSteps }. The account becomes Verified only when both email
+and Telegram are verified. Queues UserVerified once when verification completes.
+
+5. REPLACE /authorize's PURPOSE; KEEP THE POST ROW
+------------------------------------------------------------
+F4. Internal authorization check, normally called by the gateway using the
+client's bearer token. Returns 200 { authenticated, userId, isAdmin,
+permittedAction } and response headers x-user-id, x-is-admin,
+x-permitted-action. All four JSON fields are present on success. Invalid,
+expired, revoked or suspended sessions, and accounts past their deletion
+deadline, return 401. The gateway may use the original request's HTTP method;
+the endpoint accepts any method. The gateway strips client-supplied identity
+headers before injecting trusted values. permittedAction=false is still a
+valid authenticated session: each backend must check permission for its own
+operations. This route is blocked at the public gateway, but services may call
+it over private service DNS. Tokens are opaque sessions, not JWTs.
+
+6. REPLACE DELETE /api/v1/user/me's PURPOSE
+------------------------------------------------------------
+Keep { confirm: true } as the body. Replace the purpose with:
+
+F5.1. Requires the account owner's bearer session and explicit boolean
+confirm=true. Returns 202 { message, scheduledDeletionAt }, scheduling deletion
+in six calendar months (clamping month-end dates where needed). Revokes all
+sessions, outstanding reset links and verification challenges immediately.
+Correct-password login before the deadline cancels deletion and creates a new
+session; old sessions stay revoked. After the deadline, login and authorization
+are rejected even before cleanup runs. A background worker permanently removes
+expired User Service records. The last active admin cannot request deletion:
+409 LAST_ADMIN. Missing confirmation: 400 CONFIRMATION_REQUIRED. Invalid
+session: 401 UNAUTHORIZED. Other services retain their own records; no new
+cross-service deletion event is introduced by this endpoint.
+
+7. ADD THESE TWO ROWS IN "1. User Service"
+------------------------------------------------------------
+Method: GET
+Endpoint: /api/v1/user/internal/users/{userId}/telegram
+Body / Params: userId is a UUID path parameter. X-Service-Token:
+<dedicated-shared-secret>. No body.
+Purpose: Internal Order-to-User contact lookup. Returns
+200 { userId, telegramHandle } for a verified, non-suspended account that has
+not passed its deletion deadline. Handle has no leading @. Response is
+Cache-Control: no-store. Invalid UUID: 400 INVALID_USER_ID. Missing or incorrect
+service token: 404 NOT_FOUND. Missing/suspended/expired account:
+404 USER_NOT_FOUND. Unverified account: 409 USER_NOT_VERIFIED. User bearer
+tokens or identity headers alone do not authorize this lookup. The dedicated
+secret must never reach the frontend. Order authenticates its own caller,
+derives the acting UUID from trusted identity, and enforces order participation.
+
+Method: POST
+Endpoint: /api/v1/user/admin/users/{userId}/verify
+Body / Params: userId is a UUID path parameter. { reason }, trimmed length
+3-500 characters. Authorization: Bearer <verified-admin-session-token>.
+Purpose: NON-PRODUCTION ONLY. Allows authenticated admins to verify synthetic
+load-test accounts without real email or Telegram OTPs. Disabled unless
+ENABLE_TEST_VERIFICATION=true and the configured environment is one of local,
+development, dev, test, staging, stg. APP_ENV selects the environment, falling
+back to NODE_ENV if absent; production and unknown values are denied. Returns
+200 { userId, status, nextSteps, changed }. Repeated verification is idempotent;
+the first change is audited with actor UUID, target UUID, reason and time, and
+UserVerified is queued through the existing outbox. Does not grant admin roles,
+unlock accounts, reinstate suspended users or fabricate Telegram identity IDs.
+Disabled feature or non-admin/invalid caller: 404 NOT_FOUND. Invalid UUID/reason:
+400 INVALID_USER_ID / INVALID_REASON. Missing/expired target: 404 USER_NOT_FOUND.
+Suspended target or target pending deletion: 409 USER_NOT_ELIGIBLE. A real admin
+account must already exist. No public admin bootstrap or inverse override is
+provided. Admin Service must forward its real administrator's bearer token.
+
+8. ADD AN IMPLEMENTATION-STATUS NOTE UNDER THE USER SERVICE TABLE
+------------------------------------------------------------
+The table includes planned requirements. /me/escalate and all /friends routes
+are not implemented yet. Real email delivery is not connected. Admin
+search/role/suspension integration also needs an agreed User Service contract;
+the test-verification override is not a replacement for those operations.
+
+9. EVENT CATALOG: CONFIRM WITH CREDIT SERVICE OWNER BEFORE CHANGING CONVENTIONS
+------------------------------------------------------------
+The top of the shared document requires { eventId, eventType, version,
+timestamp, payload }, but its later catalog requires flat Order messages.
+It also names User's event user.status.verified. These descriptions do not match
+the CURRENT User publisher and Credit consumer, which both use:
+
+Topic: foc.user.status
+Kafka key: userId (not orderId)
+Body: { eventId, type: "UserVerified", occurredAt, data: { userId, email } }
+Trigger: BOTH email and Telegram verification are complete.
+Delivery: durable outbox and retries; duplicate deliveries are possible, so
+Credit must handle repeated events idempotently.
+
+Proposed clarification for the shared document, to agree with the Credit Service owner:
+
+"The flat event format and orderId partition key in this catalog describe
+Order messages, not all services. User verification currently uses the
+UserVerified envelope specified below, keyed by userId. Admin/Rating message
+formats must be documented against their implementations separately. Do not
+rename or reshape UserVerified without coordinating User and Credit changes."
+
+Proposed current-implementation replacement for the catalog's user row:
+
+Event: UserVerified (current wire type; canonical rename pending agreement)
+Topic: foc.user.status
+Direction: User publishes, Credit consumes
+When: Both email and Telegram verification are complete
+Envelope: { eventId, type: "UserVerified", occurredAt, data: { userId, email } }
+Partition key: userId
+
+This branch does NOT change the existing Kafka wire format. Do not apply the
+Order format to this event by documentation alone, or change only one service.
+
+10. TEAM HANDOFF / DEPLOYMENT CHECKLIST
+------------------------------------------------------------
+Order Service owner: add the private Telegram lookup client in Order. Use trusted caller
+identity and order access checks. Do not trust a frontend-supplied acting UUID.
+
+Infrastructure owner: review the separate gateway commit; rebuild User, run its migration Job,
+configure ORDER_USER_LOOKUP_TOKEN for User and securely provide it to Order.
+Order sends that value in X-Service-Token. Never store this secret in frontend
+configuration. Only for load tests, set APP_ENV to the real non-production
+environment and ENABLE_TEST_VERIFICATION=true. Keep production disabled.
+Plan how to seed the real admin through the privileged deployment process.
+
+Admin Service owner: in the previously fetched Admin branch, core/security.py calls
+/api/v1/user/me/authorize and expects role/email. Use /api/v1/user/authorize and
+check authenticated, isAdmin and permittedAction; userId is the identity field.
+Forward the real admin Authorization header for the new verification override.
+Recheck this finding against the latest Admin code before applying changes.
+
+Frontend owner: reconcile the earlier user-service-frontend-integration proposal with
+latest frontend work. Signup needs name; email verification needs { email, otp },
+not { token }. Wire the Telegram challenge/OTP flow and test with real auth
+enabled; demo mode skips User Service requests. No frontend changes are included
+in this backend batch. Review deletion UI/session behavior as part of testing.
+
+Together: run real sign-in through Envoy, both verification steps, Credit
+onboarding, and Order create/accept with the Telegram lookup. Check ordinary
+users cannot call admin operations and public requests cannot reach the private
+lookup. Local service tests do not prove the complete deployed journey.
+
+Tests already run locally: 47 automated tests, TypeScript build, isolated
+PostgreSQL lifecycle/integration test, Docker build/start/migration and gateway
+chart lint/render. No live Kubernetes gateway test has been run from this laptop.
+The temporary integration database is removed after testing.
