@@ -92,6 +92,14 @@ heal_after_floci_restart() {
         # Wait until it's gone: a pod recreated meanwhile would bind to the
         # dying claim, look ready, then be replaced minutes later.
         kubectl -n "$ns" wait --for=delete "pvc/$claim" --timeout=3m >/dev/null 2>&1 || true
+        # Strimzi creates broker claims only when a reconcile starts. A
+        # reconcile already running keeps rolling a broker that stays Pending
+        # ("persistentvolumeclaim not found"); a fresh one recreates the claim.
+        if [[ "$ns" == "$NS" && "$claim" == data-*kafka* ]] &&
+          kubectl -n "$STRIMZI_NS" get deploy/strimzi-cluster-operator >/dev/null 2>&1; then
+          log "Restarting the Strimzi operator so it recreates $claim"
+          kubectl -n "$STRIMZI_NS" rollout restart deploy/strimzi-cluster-operator >/dev/null
+        fi
       fi
       # The stale volume's cleanup hook can never run on a node that's gone.
       log "Removing stale volume $pv (pinned to missing node $pinned)"
@@ -169,6 +177,8 @@ up() {
   helm upgrade --install gateway "$CHARTS/foc-gateway" -n "$NS"
   kubectl -n "$NS" wait gateway/foc --for=condition=Programmed --timeout=5m
 
+  remesh
+
   # Like Argo CD's prune: remove services whose values file was deleted.
   local release
   for release in $(helm list -n "$NS" -q); do
@@ -179,6 +189,22 @@ up() {
   done
 
   status
+}
+
+# Pods created while Linkerd's injector was down (e.g. right after a Floci
+# restart) start without a proxy: its webhook fails open. Helm sees no change
+# to restart them for, so restart every Deployment with such a pod.
+remesh() {
+  local ns d
+  for ns in "$NS" "$GATEWAY_NS"; do
+    for d in $(kubectl -n "$ns" get pods \
+      -o jsonpath='{range .items[?(@.metadata.annotations.linkerd\.io/inject=="enabled")]}{.metadata.ownerReferences[0].name} {.spec.initContainers[*].name} {.spec.containers[*].name}{"\n"}{end}' |
+      awk '!/linkerd-proxy/ {sub(/-[^-]+$/, "", $1); print $1}' | sort -u); do
+      log "Restarting $ns/deploy/$d (started without the Linkerd proxy)"
+      kubectl -n "$ns" rollout restart "deploy/$d" >/dev/null
+      kubectl -n "$ns" rollout status "deploy/$d" --timeout=3m
+    done
+  done
 }
 
 # Linkerd and the certificates behind it (ADR-0012), before any service pod is
