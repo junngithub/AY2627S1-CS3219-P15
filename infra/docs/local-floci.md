@@ -46,11 +46,8 @@ terraform -chdir=infra/local/aws init && terraform -chdir=infra/local/aws apply
 
 # 3. Build and push images to local ECR (each also pushes <tag>-migrate if
 #    its Dockerfile has a migrate stage)
-deploy/push-local.sh user
-deploy/push-local.sh supplier
-deploy/push-local.sh credit
-deploy/push-local.sh order
-deploy/push-local.sh connectivity-stub     # stands in for rating, badges, admin
+deploy/push-local.sh                       # user, supplier, credit, order + the
+                                           # connectivity stub (rating, badges, admin)
 
 # 4. Deploy everything: databases → Strimzi → Envoy Gateway → Kafka (7 topics,
 #    5 users) → 7 services (each runs its migrations first; order's Flyway
@@ -87,6 +84,8 @@ After restarting Docker or Floci, see
 ### Push an image to local ECR
 
 ```bash
+deploy/push-local.sh                        # every image the local cluster runs
+deploy/push-local.sh credit user            # just these
 deploy/push-local.sh credit                 # build credit-service/, push, restart deploy/credit
 deploy/push-local.sh credit my-feature      # same, with a different tag
 deploy/push-local.sh connectivity-stub      # the stand-in for services without code (tag from its package.json)
@@ -94,12 +93,15 @@ deploy/push-local.sh --no-restart order     # push only
 ```
 
 The script:
+- with no service named, reads the list from
+  `deploy/values/envs/local/services/`: each service running its own image,
+  plus the connectivity stub if any service runs it;
 - finds the build folder (`<svc>-service/`) and the image name (from
   `deploy/values/services/<svc>.yaml`, the same file Helm reads);
 - defaults the tag to the one in `deploy/values/envs/local/services/<svc>.yaml`,
   or `dev`;
 - logs in to Floci's ECR, builds and pushes;
-- restarts every Deployment running that exact image. Local services use
+- restarts every Deployment running one of those exact images, together. Local services use
   `pullPolicy: Always`, so the restart pulls the new build.
 
 It stops with a clear message if the folder or Dockerfile is missing or empty,

@@ -16,7 +16,7 @@ Design: [ADR-0008](../infra/docs/adr/0008-gitops-repo-layout.md),
 ```text
 deploy/
   local.sh                         # local cluster: helm install/upgrade everything (up | status | down)
-  push-local.sh                    # local cluster: build + push an image to Floci ECR, restart what runs it
+  push-local.sh                    # local cluster: build + push images to Floci ECR, restart what runs them
   charts/                          # LEVEL 1: plain Helm charts (work without Argo CD)
     foc-namespace/                 #   ResourceQuota, LimitRange, NetworkPolicy for one env
     strimzi/                       #   wrapper: vendored strimzi-kafka-operator 1.2.0 (charts/*.tgz)
@@ -160,6 +160,7 @@ deploy/local.sh status    # releases, Kafka objects, pods
 deploy/local.sh check     # helm test: database logins, Kafka logins + every ACL, HTTP to every service, requests through the gateway
 deploy/local.sh gateway   # port-forward the gateway to http://localhost:8080 (prints example curls)
 deploy/push-local.sh credit   # rebuild credit-service, push to local ECR, restart deploy/credit
+deploy/push-local.sh          # rebuild and push every image the local cluster runs
 deploy/local.sh down      # uninstall everything, delete namespaces foc + strimzi (and Kafka data)
 ```
 
