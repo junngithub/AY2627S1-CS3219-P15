@@ -95,6 +95,7 @@ class OrderApiTest {
         when(queries.get(any(), eq(id))).thenReturn(order);
         when(queries.pool(any(), eq(1.2), eq(103.8), eq(0), eq(20))).thenReturn(PageResponse.of(List.of(order), 0, 20, 1));
         when(queries.mine(any(), eq(0), eq(20))).thenReturn(PageResponse.empty(0, 20));
+        when(queries.deliveries(any(), eq(0), eq(20))).thenReturn(PageResponse.empty(0, 20));
         when(queries.search(any(), eq("nus-coop"), isNull(), eq(0), eq(20))).thenReturn(PageResponse.empty(0, 20, 0));
         AlertEntity alert = new AlertEntity();
         alert.setId(UUID.randomUUID());
@@ -127,6 +128,7 @@ class OrderApiTest {
                 .andExpect(status().isOk());
         mvc.perform(signed(get("/api/v1/orders").param("latitude", "1.2").param("longitude", "103.8"))).andExpect(status().isOk());
         mvc.perform(signed(get("/api/v1/orders/mine"))).andExpect(status().isOk());
+        mvc.perform(signed(get("/api/v1/orders/deliveries"))).andExpect(status().isOk());
         mvc.perform(signed(get("/api/v1/orders/search").param("pickupLocationId", "nus-coop"))).andExpect(status().isOk());
         mvc.perform(signed(get("/api/v1/orders/alerts"))).andExpect(jsonPath("$.content[0].toStatus").value("CREATED"));
     }
