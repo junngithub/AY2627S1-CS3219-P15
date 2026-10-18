@@ -92,6 +92,15 @@ public class OrderController {
         return queries.pool(caller, latitude, longitude, page, size).map(OrderResponse::from);
     }
 
+    @GetMapping("/deliveries")
+    public PageResponse<OrderResponse> deliveries(
+            UserAccount caller,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        return queries.deliveries(caller, page, size).map(OrderResponse::from);
+    }
+
     @GetMapping("/mine")
     public PageResponse<OrderResponse> mine(
             UserAccount caller,

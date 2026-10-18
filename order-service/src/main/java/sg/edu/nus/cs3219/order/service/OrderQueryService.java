@@ -23,6 +23,13 @@ import java.util.UUID;
 @Service
 public class OrderQueryService {
 
+    private static final List<OrderStatus> COMPLETED_DELIVERIES = List.of(
+            OrderStatus.DELIVERED,
+            OrderStatus.ACKNOWLEDGED,
+            OrderStatus.UNACKNOWLEDGED,
+            OrderStatus.COMPLETED
+    );
+
     private final OrderRepository orders;
     private final AlertRepository alerts;
     private final SupplierClient suppliers;
@@ -95,6 +102,20 @@ public class OrderQueryService {
         }
         Page<OrderEntity> result = orders.findByRequesterIdOrderByRequestTimeDesc(
                 actor.userId(),
+                PageRequest.of(page, size)
+        );
+        return PageResponse.of(result.getContent(), page, size, result.getTotalElements());
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<OrderEntity> deliveries(UserAccount actor, int page, int size) {
+        requirePage(page, size);
+        if (size == 0) {
+            return PageResponse.empty(page, size);
+        }
+        Page<OrderEntity> result = orders.findByCourierIdAndStatusInOrderByUpdatedAtDesc(
+                actor.userId(),
+                COMPLETED_DELIVERIES,
                 PageRequest.of(page, size)
         );
         return PageResponse.of(result.getContent(), page, size, result.getTotalElements());
