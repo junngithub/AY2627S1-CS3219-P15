@@ -63,8 +63,7 @@ blockedPrefixes:
   - /api/v1/user/internal
   # Order's reserve/release calls: the body names the user, so a client could
   # spend anyone's credits or refund any order.
-  - /api/v1/credit/reserve
-  - /api/v1/credit/release
+  - /api/v1/credit/internal
   - /api/v1/badges/internal
 
 # `helm test` pod (not used by Argo CD).

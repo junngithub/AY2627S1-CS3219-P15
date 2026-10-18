@@ -21,5 +21,3 @@ mesh: # who may call credit (ADR-0012)
   internal:
     # Order's reserve/release; nobody else may move credits.
     - { path: /api/v1/credit/internal, callers: [order] }
-    - { path: /api/v1/credit/reserve, callers: [order] } # legacy path, until order moves to /internal
-    - { path: /api/v1/credit/release, callers: [order] } # legacy path, until order moves to /internal

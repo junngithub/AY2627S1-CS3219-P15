@@ -80,7 +80,7 @@ are authenticated; it secures the hops after the gateway.
   | Service | Allowed callers today | Planned (configured in values, not yet coded) |
   |---|---|---|
   | user | gateway (incl. `/internal/*`) | order (Telegram lookup), admin, badges |
-  | credit | gateway; `/api/v1/credit/internal/*` and the legacy `/reserve`, `/release`: **order only** | — |
+  | credit | gateway; `/api/v1/credit/internal/*` (reserve, release): **order only** | — |
   | order | gateway | badges (metrics) |
   | supplier | gateway, order | — |
   | rating | gateway | order (ratings) |
@@ -232,8 +232,7 @@ waves.
   the catch-all, each with its own policy, from the service's `mesh:` values.
   Migration Jobs keep the `default` account (they run as pre-install hooks,
   before the release's ServiceAccount exists) and aren't meshed.
-- **Allow-lists** (`deploy/values/services/*.yaml`): credit `internal` (`/internal`,
-  legacy `/reserve`, `/release`) → order; supplier → gateway, order; user
+- **Allow-lists** (`deploy/values/services/*.yaml`): credit `/internal` → order; supplier → gateway, order; user
   `/internal` → gateway; everything else → gateway (chart default).
 - **`foc-gateway`:** `EnvoyProxy` sets `envoyServiceAccount.name: envoy-<ns>`
   and injects the proxies.

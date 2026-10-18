@@ -120,11 +120,12 @@ class HttpClientsTest {
     void callsCredit() {
         UUID orderId = UUID.randomUUID();
         clients.reserve(orderId, "ada-id", 8, ada);
+        assertEquals("/api/v1/credit/internal/reserve", lastPath.get());
         assertEquals("ada-id", lastUser.get());
         assertTrue(lastBody.get().contains(orderId.toString()));
         assertTrue(lastBody.get().contains("requesterId"));
         clients.returnReserved(orderId, ada);
-        assertEquals("/api/v1/credit/release", lastPath.get());
+        assertEquals("/api/v1/credit/internal/release", lastPath.get());
     }
 
     @Test
