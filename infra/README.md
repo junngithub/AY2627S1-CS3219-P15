@@ -17,6 +17,9 @@ How Friend on Campus is provisioned and deployed across **local**, **dev**,
 - New to Terraform / Kubernetes / Strimzi / Argo CD? Read
   [`docs/concepts.md`](docs/concepts.md) first.
 - Running things on your laptop: [`docs/local-floci.md`](docs/local-floci.md).
+- Hosting the frontend on S3 + CloudFront, and what's missing:
+  [`docs/frontend-s3-cloudfront.md`](docs/frontend-s3-cloudfront.md).
+- What the dev env would cost on AWS: [`docs/dev-cost-estimate.md`](docs/dev-cost-estimate.md).
 - Why things are the way they are: [`docs/adr/`](docs/adr/).
 - Architecture diagram: [`../docs/architecture/foc-architecture.drawio`](../docs/architecture/foc-architecture.drawio).
 
