@@ -1,0 +1,45 @@
+{{- if and .Values.mesh.enabled .Values.healthPath }}
+{{- range $client := list "meshed" "unmeshed" }}
+# `helm test <release>`: the mesh policy (ADR-0012) denies a caller that isn't
+# listed. A {{ $client }} pod running as `default` (allowed nowhere) must get
+# 403 from the proxy on a protected path, while the health path still answers.
+# Argo CD ignores Helm test hooks.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "foc-service.name" $ }}-test-mesh-{{ $client }}
+  labels:
+    app.kubernetes.io/part-of: foc
+    foc.io/test: mesh
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation
+    linkerd.io/inject: {{ if eq $client "meshed" }}enabled{{ else }}disabled{{ end }}
+spec:
+  restartPolicy: Never
+  containers:
+    - name: curl
+      image: {{ $.Values.tests.curlImage }}
+      command: ["sh", "-c"]
+      args:
+        - |
+          BASE="http://{{ include "foc-service.name" $ }}:{{ $.Values.port }}"
+          expect() { # label want path
+            # New pods can be refused for a few seconds while the network policy catches up.
+            for attempt in 1 2 3 4 5 6 7 8 9 10; do
+              code=$(curl -s -o /dev/null -m 3 -w '%{http_code}' "$BASE$3")
+              [ "$code" = "$2" ] && { echo "PASS {{ $client }} $1: GET $3 -> $code"; return 0; }
+              sleep 2
+            done
+            echo "FAIL {{ $client }} $1: GET $3 -> $code (want $2)"; return 1
+          }
+          FAIL=0
+          expect "health path open" 200 "{{ $.Values.healthPath }}" || FAIL=1
+          expect "unlisted caller denied" 403 "/mesh-test-denied" || FAIL=1
+          exit $FAIL
+      resources:
+        requests: { cpu: 10m, memory: 16Mi }
+        limits: { cpu: 100m, memory: 32Mi }
+---
+{{- end }}
+{{- end }}

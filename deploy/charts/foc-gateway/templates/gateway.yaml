@@ -12,6 +12,20 @@ spec:
       envoyService:
         name: {{ include "foc-gateway.envoyServiceName" . }}
         type: LoadBalancer
+      # A fixed name instead of envoy-<ns>-<gateway>-<hash>: it's the proxies'
+      # Linkerd identity, which services' mesh policies name (ADR-0012,
+      # charts/foc-service mesh.gateway.serviceAccount).
+      envoyServiceAccount:
+        name: {{ include "foc-gateway.envoyServiceAccountName" . }}
+      {{- if .Values.mesh.enabled }}
+      envoyDeployment:
+        pod:
+          annotations:
+            # Mesh the proxies so gateway → service traffic is mTLS. Their own
+            # inbound traffic comes from the NLB, outside the mesh, so they keep
+            # the cluster's default inbound policy.
+            linkerd.io/inject: enabled
+      {{- end }}
 ---
 # The entry point: one HTTP listener; routes must be in this namespace.
 apiVersion: gateway.networking.k8s.io/v1

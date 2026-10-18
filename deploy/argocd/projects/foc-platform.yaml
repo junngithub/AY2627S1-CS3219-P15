@@ -1,5 +1,5 @@
-# Cluster-wide platform components (Strimzi operator, Envoy Gateway: CRDs,
-# ClusterRoles, GatewayClass).
+# Cluster-wide platform components (Strimzi operator, Envoy Gateway, cert-manager,
+# trust-manager, Linkerd: CRDs, ClusterRoles, GatewayClass, ClusterIssuers).
 # Admin-level: only reviewed changes should land here.
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
@@ -15,6 +15,10 @@ spec:
       namespace: strimzi
     - server: https://kubernetes.default.svc
       namespace: envoy-gateway-system
+    - server: https://kubernetes.default.svc
+      namespace: cert-manager
+    - server: https://kubernetes.default.svc
+      namespace: linkerd
     # Strimzi creates RoleBindings in the namespaces it watches.
     - server: https://kubernetes.default.svc
       namespace: "foc*"

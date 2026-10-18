@@ -1,0 +1,17 @@
+# Namespace where cert-manager runs and trust-manager reads bundle sources
+# (charts/trust-manager app.trust.namespace). The trust anchor's Secret lives here.
+certManagerNamespace: cert-manager
+
+# Root CA (trust anchor). Linkerd requires ECDSA P-256. Not renewed
+# automatically: a new root must be rolled out next to the old one through the
+# bundle first (ADR-0012). Local and dev clusters are rebuilt long before it
+# expires; prod rotates it by hand.
+trustAnchor:
+  duration: 87600h # 10 years
+  renewBefore: 8760h # cert-manager would renew at 9 years; rotate by hand before that
+
+# Intermediate CA that signs every proxy's certificate. Renewed automatically;
+# Linkerd picks up the new one without restarts.
+issuer:
+  duration: 48h
+  renewBefore: 25h

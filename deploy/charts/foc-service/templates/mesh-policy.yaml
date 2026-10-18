@@ -1,0 +1,112 @@
+{{- if .Values.mesh.enabled }}
+{{- $name := include "foc-service.name" . }}
+# ADR-0012: who may call this service, enforced by its Linkerd proxy.
+#   <name>                 Server: this service's HTTP port
+#   <name>-mesh-probes     GET on the health paths, open to the kubelet's probes
+#   <name>-mesh-internal-N each mesh.internal prefix, its own callers only
+#   <name>-mesh-api        every other path, mesh.callers
+# Policies attach to routes only: a policy on the Server would be unioned with
+# them and widen every route. Routes are parented to the Server, never to the
+# Envoy Gateway (charts/foc-gateway owns ingress routes).
+apiVersion: policy.linkerd.io/v1beta3
+kind: Server
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "foc-service.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "foc-service.selectorLabels" . | nindent 6 }}
+  port: http
+  proxyProtocol: HTTP/1
+{{- $probePaths := list }}
+{{- with .Values.healthPath }}{{ $probePaths = append $probePaths . }}{{ end }}
+{{- if and .Values.database.enabled .Values.database.healthPath }}{{ $probePaths = append $probePaths .Values.database.healthPath }}{{ end }}
+{{- if $probePaths }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ $name }}-mesh-probes
+  labels:
+    {{- include "foc-service.labels" . | nindent 4 }}
+spec:
+  parentRefs:
+    - { group: policy.linkerd.io, kind: Server, name: {{ $name }} }
+  rules:
+    - matches:
+        {{- range $probePaths }}
+        - { path: { type: Exact, value: {{ . }} }, method: GET }
+        {{- end }}
+---
+# The kubelet's probes carry no mesh identity; once routes exist, Linkerd no
+# longer lets them through on its own.
+apiVersion: policy.linkerd.io/v1alpha1
+kind: NetworkAuthentication
+metadata:
+  name: {{ $name }}-mesh-probes
+  labels:
+    {{- include "foc-service.labels" . | nindent 4 }}
+spec:
+  networks:
+    - cidr: 0.0.0.0/0
+    - cidr: ::/0
+---
+apiVersion: policy.linkerd.io/v1alpha1
+kind: AuthorizationPolicy
+metadata:
+  name: {{ $name }}-mesh-probes
+  labels:
+    {{- include "foc-service.labels" . | nindent 4 }}
+spec:
+  targetRef: { group: gateway.networking.k8s.io, kind: HTTPRoute, name: {{ $name }}-mesh-probes }
+  requiredAuthenticationRefs:
+    - { group: policy.linkerd.io, kind: NetworkAuthentication, name: {{ $name }}-mesh-probes }
+{{- end }}
+{{- $routes := list }}
+{{- range $i, $r := .Values.mesh.internal }}
+{{- $routes = append $routes (dict "name" (printf "%s-mesh-internal-%d" $name $i) "path" (required "mesh.internal[].path is required" $r.path) "callers" $r.callers) }}
+{{- end }}
+{{- $routes = append $routes (dict "name" (printf "%s-mesh-api" $name) "path" "/" "callers" .Values.mesh.callers) }}
+{{- range $routes }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ .name }}
+  labels:
+    {{- include "foc-service.labels" $ | nindent 4 }}
+spec:
+  parentRefs:
+    - { group: policy.linkerd.io, kind: Server, name: {{ $name }} }
+  rules:
+    - matches:
+        - { path: { type: PathPrefix, value: {{ .path }} } }
+{{- if .callers }}
+---
+apiVersion: policy.linkerd.io/v1alpha1
+kind: MeshTLSAuthentication
+metadata:
+  name: {{ .name }}
+  labels:
+    {{- include "foc-service.labels" $ | nindent 4 }}
+spec:
+  identityRefs:
+    {{- range .callers }}
+    {{- include "foc-service.meshCaller" (list $ .) | nindent 4 }}
+    {{- end }}
+---
+apiVersion: policy.linkerd.io/v1alpha1
+kind: AuthorizationPolicy
+metadata:
+  name: {{ .name }}
+  labels:
+    {{- include "foc-service.labels" $ | nindent 4 }}
+spec:
+  targetRef: { group: gateway.networking.k8s.io, kind: HTTPRoute, name: {{ .name }} }
+  requiredAuthenticationRefs:
+    - { group: policy.linkerd.io, kind: MeshTLSAuthentication, name: {{ .name }} }
+{{- end }}
+{{- end }}
+{{- end }}

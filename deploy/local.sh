@@ -7,8 +7,10 @@
 #   deploy/local.sh status     show releases, Kafka and pods
 #   deploy/local.sh check      connectivity tests (helm test): database logins,
 #                              Kafka logins and ACLs, HTTP to every service by
-#                              name (and its database, if any), and requests
-#                              through the gateway (routing, auth, header spoofing)
+#                              name (and its database, if any), the Linkerd mesh
+#                              (injection, policy routes accepted, unlisted
+#                              callers denied), and requests through the gateway
+#                              (routing, auth, header spoofing)
 #   deploy/local.sh gateway    port-forward the gateway to http://localhost:8080
 #   deploy/local.sh down       uninstall everything and delete the namespaces
 #                              (deletes Kafka data)
@@ -24,6 +26,8 @@ ENV=local
 NS=foc
 STRIMZI_NS=strimzi
 GATEWAY_NS=envoy-gateway-system
+CERT_NS=cert-manager
+LINKERD_NS=linkerd
 VALUES="$DEPLOY_DIR/values"
 CHARTS="$DEPLOY_DIR/charts"
 PLATFORM_RELEASES=(namespace database kafka gateway) # releases in $NS that are not services
@@ -134,6 +138,8 @@ up() {
   helm upgrade --install envoy-gateway "$CHARTS/envoy-gateway" -n "$GATEWAY_NS" --create-namespace --skip-crds \
     --wait --timeout 5m
 
+  mesh_platform
+
   log "Kafka, topics, users"
   helm upgrade --install kafka "$CHARTS/foc-kafka" -n "$NS" \
     -f "$VALUES/envs/$ENV/kafka.yaml"
@@ -175,11 +181,59 @@ up() {
   status
 }
 
+# Linkerd and the certificates behind it (ADR-0012), before any service pod is
+# created: the proxy is injected when a pod starts.
+mesh_platform() {
+  log "cert-manager in $CERT_NS"
+  helm upgrade --install cert-manager "$CHARTS/cert-manager" -n "$CERT_NS" --create-namespace \
+    --wait --timeout 5m
+
+  log "trust-manager in $CERT_NS"
+  helm upgrade --install trust-manager "$CHARTS/trust-manager" -n "$CERT_NS" --wait --timeout 5m
+
+  log "Linkerd namespace"
+  # Helm doesn't create it with the labels Linkerd needs (its chart only does
+  # for `linkerd install`): no webhooks or injection on the control plane, and
+  # linkerd-init needs privileged pod security.
+  kubectl apply -f - >/dev/null <<NAMESPACE
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: $LINKERD_NS
+  annotations:
+    linkerd.io/inject: disabled
+  labels:
+    linkerd.io/is-control-plane: "true"
+    config.linkerd.io/admission-webhooks: disabled
+    linkerd.io/control-plane-ns: $LINKERD_NS
+    pod-security.kubernetes.io/enforce: privileged
+NAMESPACE
+
+  log "Linkerd CRDs (not Gateway API: Envoy Gateway owns those)"
+  helm upgrade --install linkerd-crds "$CHARTS/linkerd-crds" -n "$LINKERD_NS" --wait --timeout 5m
+
+  log "Linkerd trust anchor and identity issuer (cert-manager), trust bundle (trust-manager)"
+  helm upgrade --install linkerd-identity "$CHARTS/linkerd-identity" -n "$LINKERD_NS" --wait --timeout 5m
+  kubectl -n "$CERT_NS" wait certificate/linkerd-trust-anchor --for=condition=Ready --timeout=3m
+  kubectl -n "$LINKERD_NS" wait certificate/linkerd-identity-issuer --for=condition=Ready --timeout=3m
+  local attempt
+  for attempt in $(seq 60); do
+    kubectl -n "$LINKERD_NS" get configmap linkerd-identity-trust-roots >/dev/null 2>&1 && break
+    sleep 2
+  done
+  kubectl -n "$LINKERD_NS" get configmap linkerd-identity-trust-roots >/dev/null
+
+  log "Linkerd control plane in $LINKERD_NS"
+  helm upgrade --install linkerd "$CHARTS/linkerd" -n "$LINKERD_NS" --wait --timeout 10m
+}
+
 status() {
   require_cluster
   log "Helm releases"
   helm list -n "$STRIMZI_NS"
   helm list -n "$GATEWAY_NS"
+  helm list -n "$CERT_NS"
+  helm list -n "$LINKERD_NS"
   helm list -n "$NS"
   log "Kafka"
   kubectl -n "$NS" get kafka,kafkatopic,kafkauser 2>/dev/null || true
@@ -196,9 +250,11 @@ check() {
   helm test database -n "$NS" --logs --timeout 3m || failed+=(database)
   log "Kafka: logins and ACLs for every KafkaUser (takes ~2 min)"
   helm test kafka -n "$NS" --logs --timeout 10m || failed+=(kafka)
+  log "Mesh: every service pod has a Linkerd proxy and every mesh route is accepted"
+  check_mesh || failed+=(mesh)
   for release in $(helm list -n "$NS" -q); do
     [[ " ${PLATFORM_RELEASES[*]} " == *" $release "* ]] && continue
-    log "HTTP: http://$release (from another pod in $NS)"
+    log "HTTP: http://$release (from another pod in $NS); mesh: unlisted callers get 403"
     helm test "$release" -n "$NS" --logs --timeout 3m || failed+=("$release")
   done
   log "Gateway: routing, auth, header spoofing, public and blocked paths"
@@ -208,6 +264,33 @@ check() {
     exit 1
   fi
   log "All connectivity checks passed"
+}
+
+# Linkerd's controller logs a warning for Envoy Gateway's own routes, so a clean
+# log proves nothing: check each mesh route's status instead (ADR-0012).
+check_mesh() {
+  local ok=0 pod route accepted
+  for pod in $(kubectl -n "$NS" get pods -l app.kubernetes.io/part-of=foc,app.kubernetes.io/name \
+    --field-selector=status.phase=Running -o name); do
+    if kubectl -n "$NS" get "$pod" -o jsonpath='{.spec.initContainers[*].name} {.spec.containers[*].name}' |
+      grep -qw linkerd-proxy; then
+      echo "PASS $pod: meshed"
+    else
+      echo "FAIL $pod: no linkerd-proxy"
+      ok=1
+    fi
+  done
+  for route in $(kubectl -n "$NS" get httproutes.gateway.networking.k8s.io -o name | grep -- '-mesh-'); do
+    accepted=$(kubectl -n "$NS" get "$route" \
+      -o jsonpath='{range .status.parents[?(@.controllerName=="linkerd.io/policy-controller")]}{.conditions[?(@.type=="Accepted")].status}{end}')
+    if [[ "$accepted" == True ]]; then
+      echo "PASS $route: accepted by Linkerd"
+    else
+      echo "FAIL $route: not accepted by Linkerd (${accepted:-no status})"
+      ok=1
+    fi
+  done
+  return $ok
 }
 
 gateway() {
@@ -223,12 +306,19 @@ EOF
 
 down() {
   require_cluster
-  log "Uninstalling services, gateway, Kafka, Strimzi, Envoy Gateway; deleting their namespaces"
+  log "Uninstalling services, gateway, Kafka, Strimzi, Envoy Gateway, Linkerd, cert-manager; deleting their namespaces"
   local release
   for release in $(helm list -n "$NS" -q); do helm uninstall "$release" -n "$NS"; done
   helm uninstall strimzi -n "$STRIMZI_NS" 2>/dev/null || true
   helm uninstall envoy-gateway -n "$GATEWAY_NS" 2>/dev/null || true
-  kubectl delete namespace "$NS" "$STRIMZI_NS" "$GATEWAY_NS" --ignore-not-found --wait=true
+  for release in linkerd linkerd-identity linkerd-crds; do
+    helm uninstall "$release" -n "$LINKERD_NS" 2>/dev/null || true
+  done
+  for release in trust-manager cert-manager; do
+    helm uninstall "$release" -n "$CERT_NS" 2>/dev/null || true
+  done
+  kubectl delete namespace "$NS" "$STRIMZI_NS" "$GATEWAY_NS" "$LINKERD_NS" "$CERT_NS" \
+    --ignore-not-found --wait=true
 }
 
 case "${1:-up}" in

@@ -50,6 +50,24 @@ secretEnv: {}
 # the External Secrets Operator creates the same Secrets (ADR-0010).
 generatedSecrets: {}
 
+# Linkerd service mesh (ADR-0012). The pod gets a proxy, runs as its own
+# ServiceAccount (= its Linkerd identity) and accepts only mesh-authenticated
+# callers listed here; the health paths stay open for the kubelet's probes.
+# Add a caller in the same change that adds the call.
+mesh:
+  enabled: true
+  # Callers allowed on every path not matched under `internal`: "gateway" (the
+  # Envoy Gateway proxies, charts/foc-gateway) or another service's name.
+  callers: [gateway]
+  # Path prefixes with their own, narrower caller list, e.g.
+  #   - { path: /api/v1/credit/internal, callers: [order] }
+  internal: []
+  # Envoy Gateway's proxy ServiceAccount (charts/foc-gateway names it
+  # envoy-<namespace>); "" = envoy-<release namespace>.
+  gateway:
+    namespace: envoy-gateway-system
+    serviceAccount: ""
+
 # HTTP health check path; "" disables the probes and the HTTP test.
 healthPath: /health
 

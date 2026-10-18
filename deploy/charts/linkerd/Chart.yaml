@@ -1,0 +1,13 @@
+apiVersion: v2
+name: linkerd
+description: >-
+  Wrapper around Linkerd's control-plane chart (edge release, vendored under
+  charts/). One per cluster, namespace linkerd. Reads its trust anchor and
+  identity issuer from cert-manager (charts/linkerd-identity) instead of
+  generating its own (ADR-0012).
+type: application
+version: 0.1.0
+dependencies:
+  - name: linkerd-control-plane
+    version: 2026.10.1 # Linkerd edge-26.10.1, the version spiked on 2026-10-18
+    repository: https://helm.linkerd.io/edge

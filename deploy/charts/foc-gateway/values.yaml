@@ -6,6 +6,15 @@ envoyNamespace: envoy-gateway-system
 # Name of this env's Envoy proxy Service there. Default: envoy-<release namespace>.
 envoyServiceName: ""
 
+# ServiceAccount of the Envoy proxies, i.e. their Linkerd identity. Default:
+# envoy-<release namespace>. Services' mesh policies assume that default
+# (charts/foc-service mesh.gateway.serviceAccount); change both together.
+envoyServiceAccountName: ""
+
+# Mesh the Envoy proxies with Linkerd (ADR-0012).
+mesh:
+  enabled: true
+
 listenerPort: 80
 
 # Headers that carry identity from the gateway to services. Removed from every

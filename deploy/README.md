@@ -246,6 +246,53 @@ kubectl -n foc wait --for=condition=complete job/supplier-seed --timeout=5m
 kubectl -n foc logs job/supplier-seed     # "Seeded 21 suppliers with categories."
 ```
 
+## Service mesh (Linkerd, ADR-0012)
+
+Every service pod and the Envoy proxies run a Linkerd proxy, so traffic
+between them is mTLS and each caller has an identity: its ServiceAccount
+(`<svc>` per service, `envoy-<namespace>` for the gateway). Kafka, the database
+setup Job, migration Jobs and test pods are not meshed.
+
+```text
+cert-manager ── self-signed root (trust anchor, 10 y)       charts/linkerd-identity
+     └── linkerd-identity-issuer (48 h, renewed at 25 h)
+           └── per-pod certificates (24 h)                   Linkerd identity
+trust-manager ── linkerd-identity-trust-roots ConfigMap      the anchor, for Linkerd
+```
+
+**Who may call whom** is set per service in `values/services/<svc>.yaml`:
+
+```yaml
+mesh:
+  callers: [gateway, order]          # every path not listed below
+  internal:                          # narrower lists per path prefix
+    - { path: /api/v1/credit/internal, callers: [order] }
+```
+
+`gateway` means the Envoy proxies; anything else is a service name. The chart
+turns this into a Linkerd `Server`, one `HTTPRoute` per entry (named
+`<svc>-mesh-*`, parented to the Server, never to the Envoy Gateway) and its
+`AuthorizationPolicy`. The health paths get their own route, open to the
+kubelet's probes. Callers not listed get **403** from the proxy; pods outside
+the mesh are refused everywhere except the health paths.
+
+**Adding a call between services:** add the caller to the target's `mesh`
+block in the same change. A new call that fails with 403 is a missing entry.
+
+**Charts and order:** `cert-manager` → `trust-manager` → `linkerd-crds`
+(without Gateway API CRDs, which Envoy Gateway owns) → `linkerd-identity` →
+`linkerd` (control plane, external CA, proxy resources 10m/200m CPU,
+32/64 Mi). `deploy/local.sh` installs them before Kafka and the services;
+Argo CD apps retry until the previous step is ready. The injector fails open:
+pods created while Linkerd is down start **unmeshed**. After the first cloud
+bootstrap, restart the services once:
+`kubectl -n foc-<env> rollout restart deploy`.
+
+**Upgrading Linkerd** (edge releases, pinned in `charts/linkerd*/Chart.yaml`):
+bump both charts together, `helm dependency update`, run `deploy/local.sh` and
+`deploy/local.sh check` locally first. Gateway API v1.6.1 is outside Linkerd's
+documented range, so the mesh checks must pass on every upgrade.
+
 ## Connectivity tests (`helm test`)
 
 The charts include Helm tests, which `deploy/local.sh check` runs. Argo CD
@@ -256,6 +303,8 @@ ignores them.
 | `foc-kafka` | `kafka-test-acls` (Kafka CLI, same image as the brokers) | built from the `users` table: every allowed write and read works (consumer group `<user>-conntest`); per user, one forbidden write and one wrong-prefix group are denied; a wrong password is rejected |
 | `foc-database` | `foc-database-test-access` (psql) | each service's login creates and reads a table in its own database, and is refused (`permission denied`) by every other service's database |
 | `foc-service` | `<svc>-test-http` (curl) | `GET http://<svc>:<port><healthPath>` from another pod, plus `database.healthPath` if set (credit: `/health/db`), plus `/health` on each `*_SERVICE_URL` in its `env`, retrying for ~20 s |
+| `foc-service` | `<svc>-test-mesh-meshed`, `<svc>-test-mesh-unmeshed` (curl) | as `default`, which no policy lists: the health path answers 200, any other path gets 403 from the service's Linkerd proxy, both from inside and outside the mesh |
+| (script) | `deploy/local.sh check` → `check_mesh` | every running service pod has a `linkerd-proxy`, and every `*-mesh-*` HTTPRoute shows `Accepted=True` from `linkerd.io/policy-controller` (Linkerd's log warns about Envoy's routes, so a clean log proves nothing) |
 | `foc-gateway` | `foc-gateway-test` (curl) | Requests through Envoy, without logging in: every protected prefix gives 401 without a token, and with a bad token or spoofed `x-user-id` / `x-is-admin`; public routes reach their service without a token; internal authorization/lookup paths, the legacy `/api/v1/user/authorize` alias and unknown paths give 404. It can't check which identity headers reach a backend (real services don't echo them) |
 
 Test pods are kept until the next run, so `kubectl -n foc logs kafka-test-acls`

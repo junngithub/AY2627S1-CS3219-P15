@@ -16,7 +16,14 @@ spec:
       annotations:
         # Restart pods when the ConfigMap changes.
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if .Values.mesh.enabled }}
+        # ADR-0012: mesh this pod; refuse callers without a mesh identity
+        # unless a policy (mesh-policy.yaml) allows them.
+        linkerd.io/inject: enabled
+        config.linkerd.io/default-inbound-policy: all-authenticated
+        {{- end }}
     spec:
+      serviceAccountName: {{ include "foc-service.name" . }}
       # Don't inject legacy <SERVICE>_PORT_* variables for every Service in the
       # namespace (e.g. KAFKA_KAFKA_BOOTSTRAP_*), which clash with KAFKA_* config.
       enableServiceLinks: false
