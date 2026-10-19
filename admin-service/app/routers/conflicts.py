@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.security import AdminDep, CurrentAdmin
-from app.core.service_auth import ServiceDep
 from app.database import get_db
 from app.models.conflict_case import ConflictCase, ConflictStatus
 from app.schemas.conflict import (
@@ -47,7 +46,6 @@ def _parse_status(value: str | None) -> ConflictStatus | None:
 @router.post("", response_model=ConflictDetail, status_code=201)
 async def create_conflict(
     body: CreateConflictRequest,
-    _: None = ServiceDep,  # Order Service, not an admin
     db: AsyncSession = Depends(get_db),
 ):
     """

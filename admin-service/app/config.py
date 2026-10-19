@@ -19,13 +19,12 @@ class Settings(BaseSettings):
     user_service_base_url: str = "http://user-service:8000"
     order_service_base_url: str = "http://order-service:8000"
 
-    # Shared secret Order Service sends as X-Service-Token on the intake call
-    service_api_key: str = ""
-
-    # AI / VLM
-    ai_provider_base_url: str = "https://api.anthropic.com"
+    # AI / VLM — Gemini Flash. Only AI_PROVIDER_API_KEY is required.
+    # 2.5 Flash is closed to new API keys; 3.8 Flash is the current free-tier model.
+    ai_provider_base_url: str = "https://generativelanguage.googleapis.com"
     ai_provider_api_key: str = ""
-    ai_call_timeout_seconds: float = 15.0
+    ai_model: str = "gemini-3.8-flash"
+    ai_call_timeout_seconds: float = 60.0
 
     # Conflict resolution timers (F3.3.1 / F3.7.1)
     resolution_deadline_hours: int = 24 * 7

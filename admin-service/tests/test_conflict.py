@@ -3,8 +3,7 @@ responses, and the Kafka event that a successful call publishes.
 
 Skipped when Admin Service is not reachable. Requires Kafka in this compose
 project (events are read with the broker's console consumer, because the
-broker advertises kafka:9092). Intake uses X-Service-Token dev-service-token,
-matching SERVICE_API_KEY in docker-compose.yml.
+broker advertises kafka:9092). Conflict intake has no service token.
 
 Claim and resolve do not wait on the vision model. After intake, the case is
 seeded in Postgres. The evaluation job only writes while a case is still
@@ -26,7 +25,6 @@ ROOT = Path(__file__).resolve().parents[1]
 ADMIN_HEADERS = {"Authorization": "Bearer admin-sahana"}
 OTHER_ADMIN_HEADERS = {"Authorization": "Bearer admin-other"}
 USER_HEADERS = {"Authorization": "Bearer user-1"}
-SERVICE_HEADERS = {"X-Service-Token": "dev-service-token"}
 
 _MISSING = str(uuid.uuid4())
 CONFLICT_ROUTES = [
@@ -78,6 +76,7 @@ def kafka_events(topic: str) -> list[dict]:
             "--partition", partition,
             "--offset", "earliest",
             "--max-messages", end,
+            "--timeout-ms", "15000",
         )
         if consumed.returncode != 0 and not consumed.stdout.strip():
             pytest.fail(consumed.stderr or consumed.stdout or f"could not read {topic}")
@@ -132,7 +131,7 @@ def create_case(api, photos=None, order_id=None) -> dict:
     }
     if photos is not None:
         body["photos"] = photos
-    resp = api.post("/api/v1/admin/conflicts", json=body, headers=SERVICE_HEADERS)
+    resp = api.post("/api/v1/admin/conflicts", json=body)
     assert resp.status_code == 201, resp.text
     return resp.json()
 
@@ -182,14 +181,14 @@ def timer_ids(case_id: str) -> list[str]:
 
 
 @pytest.mark.parametrize("method,path", CONFLICT_ROUTES)
-@pytest.mark.parametrize("headers", [None, USER_HEADERS, SERVICE_HEADERS])
+@pytest.mark.parametrize("headers", [None, USER_HEADERS])
 def test_conflict_routes_are_hidden_without_admin(api, method, path, headers):
     resp = api.request(method, path, headers=headers, json=RESOLVE_BODY)
     assert resp.status_code == 404
 
 
-@pytest.mark.parametrize("headers", [None, {"X-Service-Token": "nope"}, ADMIN_HEADERS])
-def test_intake_rejects_non_service_callers(api, headers):
+@pytest.mark.parametrize("headers", [None, {"X-Service-Token": "ignored"}])
+def test_intake_does_not_require_a_service_token(api, headers):
     order_id = f"ord-{uuid.uuid4()}"
     body = {
         "orderId": order_id,
@@ -198,8 +197,11 @@ def test_intake_rejects_non_service_callers(api, headers):
         "photos": ["https://example.com/before.jpg"],
     }
     resp = api.post("/api/v1/admin/conflicts", json=body, headers=headers)
-    assert resp.status_code == 404
-    assert events_for("admin.conflict-case-created", orderId=order_id) == []
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["order_id"] == order_id
+    matched = events_for("admin.conflict-case-created", orderId=order_id)
+    assert len(matched) == 1
+    assert_envelope(matched[0], "ConflictCaseCreated", orderId=order_id, caseId=resp.json()["id"])
 
 
 @pytest.mark.parametrize("missing", ["orderId", "reporterUserId", "comment"])
@@ -211,7 +213,7 @@ def test_intake_rejects_incomplete_body(api, missing):
     }
     order_id = body["orderId"]
     del body[missing]
-    resp = api.post("/api/v1/admin/conflicts", json=body, headers=SERVICE_HEADERS)
+    resp = api.post("/api/v1/admin/conflicts", json=body)
     assert resp.status_code == 422
     assert events_for("admin.conflict-case-created", orderId=order_id) == []
 
@@ -230,7 +232,7 @@ def test_conflict_lifecycle_publishes_events(api):
         "comment": "Item arrived damaged",
         "photos": ["https://example.com/before.jpg", "https://example.com/after.jpg"],
     }
-    created = api.post("/api/v1/admin/conflicts", json=body, headers=SERVICE_HEADERS)
+    created = api.post("/api/v1/admin/conflicts", json=body)
     assert created.status_code == 201, created.text
     case = created.json()
     case_id = case["id"]
@@ -239,7 +241,7 @@ def test_conflict_lifecycle_publishes_events(api):
     assert case["comment"] == body["comment"]
     assert case["reporter_user_id"] == "u-1"
 
-    again = api.post("/api/v1/admin/conflicts", json=body, headers=SERVICE_HEADERS)
+    again = api.post("/api/v1/admin/conflicts", json=body)
     assert again.status_code == 201
     assert again.json()["id"] == case_id
     created_events = events_for("admin.conflict-case-created", orderId=order_id)
@@ -328,7 +330,7 @@ def test_concurrent_create_publishes_one_event(api):
 
     def post():
         with httpx.Client(base_url=str(api.base_url), timeout=20.0) as client:
-            return client.post("/api/v1/admin/conflicts", json=body, headers=SERVICE_HEADERS)
+            return client.post("/api/v1/admin/conflicts", json=body)
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         responses = [future.result() for future in (pool.submit(post), pool.submit(post))]

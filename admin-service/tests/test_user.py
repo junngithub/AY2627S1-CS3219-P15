@@ -67,6 +67,7 @@ def kafka_events(topic: str) -> list[dict]:
             "--partition", partition,
             "--offset", "earliest",
             "--max-messages", end,
+            "--timeout-ms", "15000",
         )
         if consumed.returncode != 0 and not consumed.stdout.strip():
             pytest.fail(consumed.stderr or consumed.stdout or f"could not read {topic}")
@@ -98,6 +99,12 @@ def assert_envelope(event: dict, event_type: str, **payload) -> None:
 def test_user_routes_are_hidden_without_admin(api, method, path, headers):
     resp = api.request(method, path, headers=headers)
     assert resp.status_code == 404
+
+
+def test_health(api):
+    resp = api.get("/health")
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "ok"}
 
 
 def test_search_users(api):

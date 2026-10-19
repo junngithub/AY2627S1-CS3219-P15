@@ -24,8 +24,7 @@ admin-service/
 │   ├── config.py                 # env-driven settings (pydantic-settings)
 │   ├── database.py               # async SQLAlchemy engine/session
 │   ├── core/
-│   │   ├── security.py           # require_admin: User Service every request, 404 not 403
-│   │   └── service_auth.py       # X-Service-Token for Order Service intake
+│   │   └── security.py           # require_admin: User Service every request, 404 not 403
 │   ├── models/
 │   │   ├── conflict_case.py      # conflict_cases + ConflictStatus / FaultParty
 │   │   └── audit_log.py          # append-only audit trail
@@ -37,7 +36,8 @@ admin-service/
 │   │   └── conflicts.py          # /api/v1/admin/conflicts*
 │   ├── services/
 │   │   ├── kafka_producer.py     # shared event envelope + topic publishes
-│   │   ├── ai_client.py          # Anthropic VLM fault recommendation
+│   │   ├── kafka_consumer.py     # logs events on those same topics
+│   │   ├── ai_client.py          # Gemini Flash fault recommendation
 │   │   ├── audit.py              # single write path into audit_logs
 │   │   ├── conflict_resolution.py# the only resolve path (manual + auto)
 │   │   └── scheduler.py          # job registration / cancel (APScheduler)
@@ -56,9 +56,8 @@ admin-service/
 
 - **`core/security.py` is the one place admin authorization lives.** Admin routes
   depend on `AdminDep`, so “check User Service on every request, 404 not 403”
-  cannot be skipped or duplicated inconsistently.
-- **`core/service_auth.py` is separate** because Order Service is not an admin.
-  Intake uses `X-Service-Token` (`SERVICE_API_KEY`), still returning 404 on failure.
+  cannot be skipped or duplicated inconsistently. Conflict intake is open:
+  Order Service does not send a shared secret.
 - **`services/` talks to infra outside this service’s DB** — Kafka, the AI
   provider, downstream HTTP. Routers stay thin.
 - **`jobs/` is separate from `services/scheduler.py`:** scheduler only registers
@@ -76,7 +75,7 @@ admin-service/
 | Caller | Mechanism | Failure |
 |---|---|---|
 | Admin UI / admin user | `Authorization: Bearer <token>` → User Service `GET /api/v1/user/me/authorize`; `role` must be `admin` | **404** (never 403) |
-| Order Service (intake) | `X-Service-Token` matching `SERVICE_API_KEY` | **404** |
+| Order Service (intake) | No auth. `POST /api/v1/admin/conflicts` is open | — |
 
 If User Service is unreachable, admin checks fail closed (404).
 
@@ -99,11 +98,10 @@ Health (no auth): `GET /health` → `{ "status": "ok" }`.
 
 ### Conflicts — `/api/v1/admin/conflicts`
 
-**Intake (service token, not admin):**
+**Intake (no auth):**
 
 ```http
 POST /api/v1/admin/conflicts
-X-Service-Token: <SERVICE_API_KEY>
 ```
 
 ```json
@@ -175,6 +173,10 @@ Envelope (all topics):
 Keys: `orderId` for conflict events, `userId` for user events. Intake and
 resolve **commit the DB first**; Kafka failures are logged, not returned as 500.
 
+`kafka_consumer.py` also subscribes to these topics as group `admin-service-listener`
+and logs each event. That copy does not change case or user state. Other services
+keep their own consumer groups.
+
 ## Local port scheme (team convention)
 
 | Service | Host port |
@@ -210,9 +212,6 @@ cp .env.example .env
 pip install -r requirements.txt
 alembic upgrade head
 ```
-
-Set `SERVICE_API_KEY` in `.env` (and in compose `environment` if Order Service
-will call intake against this stack). It is empty by default, which rejects intake.
 
 ## Running the API on the host
 
@@ -260,6 +259,8 @@ stack is down).
 - First admin. Promote requires an existing admin, so this service cannot create
   the first one. The mock treats any `admin-*` bearer token as an admin. There
   is no bootstrap or seed for a real first admin account.
-- AI integration. `ai_client.py` calls the vision model after intake, but Compose
-  sets `AI_PROVIDER_API_KEY` to a dummy key, so evaluation records `ai_failed`
-  until a real provider is wired.
+- AI integration. `ai_client.py` calls Gemini 3.8 Flash after intake and passes
+  each photo as a public URL (`file_data.file_uri`). Gemini fetches the image.
+  Copy `.env.example` to `.env` and set `AI_PROVIDER_API_KEY` to a Google AI
+  Studio key. Compose reads that file. An empty key, a timeout, a non-public
+  URL, or an unusable reply records `ai_failed`.

@@ -53,8 +53,11 @@ services:
       DATABASE_URL: postgresql+asyncpg://admin:admin@db:5432/admin_service
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       USER_SERVICE_BASE_URL: http://mock-user-service:8000
-      SERVICE_API_KEY: dev-service-token
-      AI_PROVIDER_API_KEY: dummy-key-for-local-dev
+      # From admin-service/.env (or the shell). Empty key → cases stay ai_failed.
+      AI_PROVIDER_BASE_URL: ${AI_PROVIDER_BASE_URL:-https://generativelanguage.googleapis.com}
+      AI_MODEL: ${AI_MODEL:-gemini-3.8-flash}
+      AI_PROVIDER_API_KEY: ${AI_PROVIDER_API_KEY:-}
+      AI_CALL_TIMEOUT_SECONDS: ${AI_CALL_TIMEOUT_SECONDS:-60}
     ports:
       - "8084:8084"
 
