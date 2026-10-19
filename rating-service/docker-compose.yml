@@ -1,0 +1,57 @@
+# Service-local dev dependencies for rating-service.
+# Runs Postgres and the app. The app container uses the build stage of the
+# Dockerfile (tsx watch, live reload through the bind mounts) and applies
+# migrations on start. Don't also run `npm run dev` on the host: both want
+# port 8085. To run only Postgres, use `docker compose up -d postgres`.
+#
+#   docker compose up --build   # Postgres + app (port 8085)
+#   docker compose down         # stop (keep data)
+#   docker compose down -v      # stop and wipe the volume
+#
+# Kafka is not started here. With KAFKA_BROKERS unset the app serves HTTP only;
+# set it (e.g. host.docker.internal:9092) to consume grants from a local broker.
+# Postgres is on host port 5433 so it can run beside credit-service's 5432.
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: rating-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-rating}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rating}
+      POSTGRES_DB: ${POSTGRES_DB:-rating_db}
+    ports:
+      - "${RATING_DB_PORT:-5433}:5432"
+    volumes:
+      - rating-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rating} -d ${POSTGRES_DB:-rating_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  rating-service:
+    build:
+      context: .
+      target: build # dev tooling (tsx, drizzle-kit); the default image is the slim runtime
+    ports:
+      - "${RATING_SERVICE_PORT:-8085}:8085"
+    environment:
+      NODE_ENV: development
+      PORT: 8085
+      DATABASE_URL: postgres://${POSTGRES_USER:-rating}:${POSTGRES_PASSWORD:-rating}@postgres:5432/${POSTGRES_DB:-rating_db}
+      # This Postgres has no TLS, and its host is "postgres", not localhost.
+      DB_SSL: "false"
+      KAFKA_BROKERS: ${KAFKA_BROKERS:-}
+    volumes:
+      - ./src:/app/src
+      - ./drizzle:/app/drizzle
+      - ./drizzle.config.ts:/app/drizzle.config.ts
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: sh -c "npm run db:migrate && npm run dev"
+
+volumes:
+  rating-postgres-data:

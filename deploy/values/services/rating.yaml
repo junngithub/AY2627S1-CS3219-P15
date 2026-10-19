@@ -2,7 +2,7 @@
 name: rating
 image:
   name: foc/rating-service
-port: 3000 # placeholder until rating-service exists
+port: 8085 # RATING_SERVICE_PORT default in rating-service/src/config.ts
 healthPath: /health
 kafka:
   user: rating # reads foc.rating.commands, writes foc.user.rating (ADR-0004)
