@@ -16,8 +16,10 @@ import { Link, useParams } from 'react-router-dom';
 import { StatusStepper } from '../components/order/StatusStepper';
 import { Alert } from '../components/ui/Alert';
 import { Button } from '../components/ui/Button';
+import { ConfirmDialog } from '../components/ui/Dialog';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { errorMessage } from '../lib/api';
+import { refreshCreditBalance } from '../lib/credit';
 import { formatWhen } from '../lib/format';
 import { acknowledgeOrder, cancelOrder, type Order } from '../lib/orders';
 import { useLiveOrder } from '../lib/useLiveOrder';
@@ -56,6 +58,7 @@ export function OrderDetailPage() {
 function OrderDetail({ order, onChange }: { order: Order; onChange: (order: Order) => void }) {
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
 
   const secondsLeft = useCountdown(order.acceptanceExpiry.getTime());
   const showExpiry = order.status === 'Created' && secondsLeft > 0;
@@ -75,15 +78,22 @@ function OrderDetail({ order, onChange }: { order: Order; onChange: (order: Orde
         setFailure(errorMessage(error, 'Could not reach the Order Service. Try again in a moment.'));
       } finally {
         setBusy(false);
+        // Cancelling returns the reserved credits; acknowledging settles them.
+        void refreshCreditBalance();
       }
     },
     [order.id, onChange],
   );
 
+  async function confirmCancel() {
+    await run(cancelOrder);
+    setConfirmingCancel(false);
+  }
+
   const actions = canCancel ? (
     // Order F2.8: the requester may cancel only while Created, and F2.8.3
-    // releases the reservation synchronously.
-    <Button variant="secondary" fullWidth loading={busy} onClick={() => run(cancelOrder)}>
+    // releases the reservation synchronously. NFR9.1.1: confirm first.
+    <Button variant="secondary" fullWidth loading={busy} onClick={() => setConfirmingCancel(true)}>
       Cancel request
     </Button>
   ) : canAcknowledge ? (
@@ -225,6 +235,24 @@ function OrderDetail({ order, onChange }: { order: Order; onChange: (order: Orde
       </div>
 
       {actions ? <div className={styles.mobileActions}>{actions}</div> : null}
+
+      <ConfirmDialog
+        open={confirmingCancel}
+        title="Cancel this request?"
+        consequence={
+          <>
+            Couriers will no longer see it, and your {order.credits} credits go back to your
+            balance straight away. This cannot be undone; post a new request if you change your
+            mind.
+          </>
+        }
+        confirmLabel="Cancel request"
+        cancelLabel="Keep request"
+        destructive
+        busy={busy}
+        onConfirm={() => void confirmCancel()}
+        onCancel={() => setConfirmingCancel(false)}
+      />
     </div>
   );
 }

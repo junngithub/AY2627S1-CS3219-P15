@@ -429,7 +429,9 @@
     left: 0;
     right: 0;
     bottom: 0;
-    display: block;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
     padding: var(--space-3) var(--space-4) calc(var(--space-3) + env(safe-area-inset-bottom));
     background: var(--color-bg);
     border-top: 1px solid var(--color-border);
@@ -437,5 +439,10 @@
 
   .mobileActions:empty {
     display: none;
+  }
+
+  /* "Release task" adds a second button to the bar; keep content clear of it. */
+  .page:has(.mobileActions > :nth-child(2)) {
+    padding-bottom: calc(2 * var(--touch-target) + var(--space-2) + var(--space-7));
   }
 }
