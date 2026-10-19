@@ -28,46 +28,6 @@ export async function resendVerification(email: string): Promise<void> {
   await api.post('/user/resend-verification', { email });
 }
 
-/** What GET /user/me/status and POST /user/verify-telegram return. */
-export interface AccountStatus {
-  status: 'Created' | 'Verified' | 'Suspended';
-  /** e.g. VERIFY_EMAIL, VERIFY_TELEGRAM, CANCEL_PENDING_DELETION, CONTACT_ADMIN. */
-  nextSteps: string[];
-}
-
-/** User F6: the signed-in user's status and what is left to do. */
-export async function fetchAccountStatus(): Promise<AccountStatus> {
-  return api.get<AccountStatus>('/user/me/status');
-}
-
-/**
- * User F1.4: starts a Telegram challenge for the signed-in user.
- *
- * - telegramBotUrl set: the user opens it and presses Start; the bot checks
- *   their handle and sends a six-digit code.
- * - telegramBotUrl null, expiresAt set: no bot is configured, so the service
- *   printed the code to its own log (development only).
- * - Both null: Telegram is already verified.
- *
- * 429 TELEGRAM_RESEND_COOLDOWN if asked again within the cooldown, 503
- * TELEGRAM_NOT_CONFIGURED if verification is unavailable.
- */
-export async function requestTelegramVerification(): Promise<{
-  telegramBotUrl: string | null;
-  expiresAt: string | null;
-}> {
-  return api.post('/user/request-telegram-verification');
-}
-
-/**
- * User F1.4.2: confirms the code from the bot. 400 INVALID_OTP for a wrong or
- * expired code, 409 TELEGRAM_ALREADY_REGISTERED if that Telegram account is
- * linked to someone else.
- */
-export async function verifyTelegram(otp: string): Promise<AccountStatus> {
-  return api.post<AccountStatus>('/user/verify-telegram', { otp });
-}
-
 /** User F2.1: sends a time-limited reset link. */
 export async function requestPasswordReset(email: string): Promise<void> {
   await api.post('/user/forgot-password', { email });

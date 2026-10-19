@@ -82,8 +82,6 @@ interface ConfirmDialogProps {
   /** NFR9.1.2: say plainly what happens if they go ahead. */
   consequence: ReactNode;
   confirmLabel: string;
-  /** The dismiss button. Override when "Cancel" would be ambiguous, e.g. when cancelling an order. */
-  cancelLabel?: string;
   /** Destructive actions get the danger button. */
   destructive?: boolean;
   busy?: boolean;
@@ -93,15 +91,13 @@ interface ConfirmDialogProps {
 
 /**
  * NFR9.1.1: irreversible or high-impact actions ask first. Used by the
- * supplier approval queue, order cancellation and releasing a task, and later by
- * escalation.
+ * supplier approval queue and, later, by order cancellation and escalation.
  */
 export function ConfirmDialog({
   open,
   title,
   consequence,
   confirmLabel,
-  cancelLabel = 'Cancel',
   destructive = false,
   busy = false,
   onConfirm,
@@ -115,7 +111,7 @@ export function ConfirmDialog({
       footer={
         <>
           <Button variant="secondary" onClick={onCancel} disabled={busy}>
-            {cancelLabel}
+            Cancel
           </Button>
           <Button variant={destructive ? 'danger' : 'primary'} loading={busy} onClick={onConfirm}>
             {confirmLabel}

@@ -15,8 +15,6 @@ export interface CurrentUser {
   userId: string;
   name: string;
   email: string;
-  /** Without the leading @. */
-  telegramHandle: string;
   status: 'Created' | 'Verified' | 'Suspended';
   isAdmin: boolean;
 }
@@ -56,7 +54,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         userId: me.id,
         name: me.name,
         email: me.email,
-        telegramHandle: me.telegramHandle,
         status: me.status,
         isAdmin: me.isAdmin,
       });

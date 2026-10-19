@@ -15,21 +15,18 @@
  * COLLECTED or DELIVERED.
  */
 
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useRef, useState, type ChangeEvent } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import { StatusStepper } from '../components/order/StatusStepper';
 import { Alert } from '../components/ui/Alert';
 import { Button } from '../components/ui/Button';
-import { ConfirmDialog } from '../components/ui/Dialog';
 import { Icon } from '../components/ui/Icon';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { errorMessage } from '../lib/api';
-import { refreshCreditBalance } from '../lib/credit';
 import { formatWhen } from '../lib/format';
 import {
   PHOTO_ACCEPT,
   PHOTO_MAX_BYTES,
-  cancelOrder,
   collectOrder,
   deliverOrder,
   type Order,
@@ -143,42 +140,6 @@ function CourierTask({ task, onChange }: { task: Order; onChange: (task: Order) 
   const [uploading, setUploading] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
-  const navigate = useNavigate();
-
-  // The courier is paid when the order settles: acknowledged by the requester
-  // or the deadline passing. Credit applies it shortly after, from Kafka, so
-  // re-read the balance now and once more a few seconds later.
-  const settled = task.status === 'Acknowledged' || task.status === 'Unacknowledged';
-  useEffect(() => {
-    if (!settled) return undefined;
-    void refreshCreditBalance();
-    const again = setTimeout(() => void refreshCreditBalance(), 4_000);
-    return () => clearTimeout(again);
-  }, [settled]);
-
-  // Order F2.9: the courier may release the task while Accepted and inside the
-  // collection window. The server checks the window too and answers 409.
-  const collectionSecondsLeft = useCountdown(task.collectionDeadline?.getTime() ?? null);
-  const canRelease = accepted && collectionSecondsLeft > 0;
-  const [confirmingRelease, setConfirmingRelease] = useState(false);
-  const [releasing, setReleasing] = useState(false);
-
-  async function handleRelease() {
-    setReleasing(true);
-    setFailure(null);
-    try {
-      // Same endpoint as the requester's cancel; Order tells them apart by
-      // who is calling. The task goes back to Created with no courier.
-      await cancelOrder(task.id);
-      // No longer the assigned courier, so this order is not readable any
-      // more: leave rather than poll it.
-      navigate('/browse', { replace: true });
-    } catch (error) {
-      setFailure(errorMessage(error, 'Could not reach the Order Service. Try again in a moment.'));
-      setConfirmingRelease(false);
-      setReleasing(false);
-    }
-  }
 
   // Order F2.3.3 and F2.4.3: a photo is required to mark collected or
   // delivered, so the button opens the picker and the upload is the action.
@@ -211,16 +172,6 @@ function CourierTask({ task, onChange }: { task: Order; onChange: (task: Order) 
         {uploadLabel}
       </Button>
     ) : null;
-  const releaseButton = canRelease ? (
-    <Button
-      variant="secondary"
-      fullWidth
-      disabled={uploading}
-      onClick={() => setConfirmingRelease(true)}
-    >
-      Release task
-    </Button>
-  ) : null;
 
   /*
    * TODO(order-service): the mockup subtitles give the times you accepted,
@@ -354,7 +305,6 @@ function CourierTask({ task, onChange }: { task: Order; onChange: (task: Order) 
 
           <div className={styles.actions}>
             {uploadButton}
-            {releaseButton}
             {delivered ? (
               <>
                 {/* TODO(rating): the courier may rate the requester from
@@ -372,29 +322,7 @@ function CourierTask({ task, onChange }: { task: Order; onChange: (task: Order) 
         </aside>
       </div>
 
-      {uploadButton ? (
-        <div className={styles.mobileActions}>
-          {uploadButton}
-          {releaseButton}
-        </div>
-      ) : null}
-
-      <ConfirmDialog
-        open={confirmingRelease}
-        title="Release this task?"
-        consequence={
-          <>
-            It goes back to the pool for another courier to accept, and you will not earn the{' '}
-            {task.credits} credits. Only do this before you have collected the item.
-          </>
-        }
-        confirmLabel="Release task"
-        cancelLabel="Keep task"
-        destructive
-        busy={releasing}
-        onConfirm={() => void handleRelease()}
-        onCancel={() => setConfirmingRelease(false)}
-      />
+      {uploadButton ? <div className={styles.mobileActions}>{uploadButton}</div> : null}
     </div>
   );
 }

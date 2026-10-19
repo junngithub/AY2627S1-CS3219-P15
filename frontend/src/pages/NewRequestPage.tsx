@@ -18,7 +18,7 @@ import { Alert } from '../components/ui/Alert';
 import { Button } from '../components/ui/Button';
 import { CreditStepper, DateTimeField, SelectField, TextAreaField } from '../components/ui/Inputs';
 import { errorMessage } from '../lib/api';
-import { refreshCreditBalance, useCreditBalance } from '../lib/credit';
+import { useCreditBalance } from '../lib/credit';
 import { formatUntil, formatWhen, parseLocalInput, toLocalInput } from '../lib/format';
 import { createOrder } from '../lib/orders';
 import { fetchSuppliers, type Supplier } from '../lib/suppliers';
@@ -142,9 +142,6 @@ export function NewRequestPage() {
       setFailure(errorMessage(error, 'Could not reach the Order Service. Try again in a moment.'));
     } finally {
       setSubmitting(false);
-      // The reservation lowered the balance. On failure, refresh anyway: a
-      // rejection for insufficient credits means the shown figure was stale.
-      void refreshCreditBalance();
     }
   }
 

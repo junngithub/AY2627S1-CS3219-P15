@@ -11,7 +11,6 @@
 
 import { useState, type FormEvent } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { useAuth } from '../auth/AuthProvider';
 import { Alert } from '../components/ui/Alert';
 import { Button } from '../components/ui/Button';
 import { Icon } from '../components/ui/Icon';
@@ -30,9 +29,6 @@ const OTP_PATTERN = /^\d{6}$/;
 
 export function VerifyEmailPage() {
   const location = useLocation();
-  // Signed in when sent here from the Telegram step with email still to do.
-  const { status: sessionStatus, refresh } = useAuth();
-  const signedIn = sessionStatus === 'authenticated';
   const emailFromSignUp = (location.state as { email?: string } | null)?.email ?? null;
 
   // Opened directly rather than from sign-up, the page has no address, so it
@@ -66,8 +62,6 @@ export function VerifyEmailPage() {
     setNotice(null);
     try {
       await verifyEmail(email, otp);
-      // Email may have been the last step; the guard reads the new status.
-      if (signedIn) await refresh();
       setVerified(true);
     } catch (error) {
       setFailure(errorMessage(error, 'Could not reach the server. Try again in a moment.'));
@@ -103,24 +97,10 @@ export function VerifyEmailPage() {
           <Icon name="check" size={22} />
         </span>
         <h1 className={styles.title}>Your email is verified</h1>
-        {signedIn ? (
-          <>
-            <p className={styles.body}>Carry on to the app, or finish any step that is left.</p>
-            {/* /browse sends an unfinished account on to /verify-telegram. */}
-            <Link to="/browse" className={styles.fullWidth}>
-              <Button fullWidth>Continue</Button>
-            </Link>
-          </>
-        ) : (
-          <>
-            <p className={styles.body}>
-              Log in to link your Telegram account, the last step before you can use FoC.
-            </p>
-            <Link to="/login" className={styles.fullWidth}>
-              <Button fullWidth>Log in</Button>
-            </Link>
-          </>
-        )}
+        <p className={styles.body}>Log in to finish setting up your account.</p>
+        <Link to="/login" className={styles.fullWidth}>
+          <Button fullWidth>Log in</Button>
+        </Link>
       </div>
     );
   }
