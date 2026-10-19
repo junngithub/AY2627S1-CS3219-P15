@@ -217,10 +217,17 @@ export async function fetchMyRequests(): Promise<OrderPage> {
   return toPage(await api.get<PageResponse<OrderResponse>>('/orders/mine?page=0&size=100'));
 }
 
-/*
- * TODO(order-service): no endpoint lists the orders you are delivering.
- * GET /orders/mine is requester-only, so My deliveries has no data source.
+/**
+ * The signed-in courier's deliveries, most recently updated first.
+ *
+ * TODO(order-service): GET /orders/deliveries returns only Delivered,
+ * Acknowledged, Unacknowledged and Completed orders. Tasks still Accepted or
+ * Collected are left out, so an in-progress task is reachable only from the
+ * link on Browse right after accepting it.
  */
+export async function fetchMyDeliveries(): Promise<OrderPage> {
+  return toPage(await api.get<PageResponse<OrderResponse>>('/orders/deliveries?page=0&size=100'));
+}
 
 /** One order; only its requester or assigned courier may read it. */
 export async function fetchOrder(orderId: string): Promise<Order> {
