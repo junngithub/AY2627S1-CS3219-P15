@@ -4,6 +4,7 @@ import { errorHandler } from "./errors";
 import type { UserEventPublisher } from "./events";
 import { openApiDocument } from "./openapi";
 import { createUsersRouter } from "./routes/users";
+import { createUserIntegrationRouter } from "./routes/user-integration";
 
 export function createApp(eventPublisher?: UserEventPublisher) {
   const app = express();
@@ -28,6 +29,7 @@ export function createApp(eventPublisher?: UserEventPublisher) {
   );
 
   app.use("/api/v1/user", createUsersRouter(undefined, eventPublisher));
+  app.use("/api/v1/user", createUserIntegrationRouter());
 
   app.use((_request, response) => {
     response.status(404).json({ error: "Endpoint not found", code: "NOT_FOUND" });

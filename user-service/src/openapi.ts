@@ -19,6 +19,10 @@ export const openApiDocument = {
   ],
   components: {
     securitySchemes: {
+      orderServiceToken: {
+        type: "apiKey", in: "header", name: "X-Service-Token",
+        description: "Dedicated ORDER_USER_LOOKUP_TOKEN shared only with Order Service. Use private User Service DNS; the gateway blocks this path.",
+      },
       bearerAuth: {
         type: "http",
         scheme: "bearer",
@@ -105,6 +109,24 @@ export const openApiDocument = {
           email: { type: "string", format: "email", example: "e1234567@u.nus.edu" },
           password: { type: "string", format: "password", example: "SecurePass1" },
         },
+      },
+      ResetPasswordRequest: {
+        type: "object",
+        required: ["token", "newPassword"],
+        properties: {
+          token: { type: "string", description: "Opaque token from the password reset link" },
+          newPassword: { type: "string", format: "password", example: "NewSecurePass1" },
+        },
+      },
+      NewPasswordRequest: {
+        type: "object",
+        required: ["newPassword"],
+        properties: { newPassword: { type: "string", format: "password", example: "NewSecurePass1" } },
+      },
+      TelegramOtpRequest: {
+        type: "object",
+        required: ["otp"],
+        properties: { otp: { type: "string", pattern: "^[0-9]{6}$", example: "123456" } },
       },
       UserSummary: {
         type: "object",
@@ -281,6 +303,90 @@ export const openApiDocument = {
         },
       },
     },
+    "/api/v1/user/request-telegram-verification": {
+      post: {
+        tags: ["Authentication"],
+        summary: "Request a Telegram verification code",
+        description: "Requires login. Returns a private bot start link; in development without a bot, the OTP is logged. Requests have a 60-second cooldown.",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          "202": {
+            description: "Verification challenge prepared (or already verified)",
+            content: { "application/json": { schema: {
+              type: "object", required: ["telegramBotUrl", "expiresAt"],
+              properties: {
+                telegramBotUrl: { type: "string", nullable: true, format: "uri" },
+                expiresAt: { type: "string", nullable: true, format: "date-time" },
+              },
+            } } },
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "429": { description: "Verification request cooldown" },
+          "503": { description: "A production Telegram bot has not been configured" },
+        },
+      },
+    },
+    "/api/v1/user/verify-telegram": {
+      post: {
+        tags: ["Authentication"],
+        summary: "Verify the signed-in user's Telegram OTP",
+        description: "The user becomes Verified only when email is also verified. OTPs expire and have an attempt limit.",
+        security: [{ bearerAuth: [] }],
+        requestBody: { required: true, content: {
+          "application/json": { schema: { $ref: "#/components/schemas/TelegramOtpRequest" } },
+        } },
+        responses: {
+          "200": { description: "Telegram verified or already verified", content: {
+            "application/json": { schema: { $ref: "#/components/schemas/StatusResponse" } },
+          } },
+          "400": { description: "Invalid or expired OTP", content: {
+            "application/json": { schema: { $ref: "#/components/schemas/Error" } },
+          } },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "409": { description: "Telegram account already linked to another user" },
+        },
+      },
+    },
+    "/api/v1/user/forgot-password": {
+      post: {
+        tags: ["Authentication"],
+        summary: "Request a password reset link",
+        description: "Returns the same response whether the account exists or not. In development, the link is logged by User Service.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": { schema: { $ref: "#/components/schemas/EmailRequest" } },
+          },
+        },
+        responses: {
+          "202": { description: "Request accepted; account existence is not disclosed" },
+          "400": {
+            description: "Email missing",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
+        },
+      },
+    },
+    "/api/v1/user/reset-password": {
+      post: {
+        tags: ["Authentication"],
+        summary: "Set a new password using a single-use reset token",
+        description: "Consumes a 30-minute token (configurable), unlocks the account and revokes existing sessions.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": { schema: { $ref: "#/components/schemas/ResetPasswordRequest" } },
+          },
+        },
+        responses: {
+          "200": { description: "Password reset successful" },
+          "400": {
+            description: "Missing fields, invalid password, or invalid/expired token",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
+        },
+      },
+    },
     "/api/v1/user/login": {
       post: {
         tags: ["Authentication"],
@@ -310,12 +416,12 @@ export const openApiDocument = {
         },
       },
     },
-    "/api/v1/user/authorize": {
+    "/api/v1/user/internal/authorize": {
       post: {
         tags: ["User"],
         summary: "Validate a session for another service",
         description:
-          "Called by the API gateway for every protected request, with the client's HTTP method and no body, so every method is accepted (POST shown). The gateway reads only the status and the identity headers. Responses are never cached.",
+          "Internal only: blocked at public proxies. Called directly by the API gateway for every protected request, with the client's HTTP method and no body, so every method is accepted (POST shown). Requires the user's bearer session, not the Order lookup service token. The gateway reads only the status and the identity headers. Responses are never cached. /api/v1/user/authorize remains a temporary, externally blocked compatibility alias during caller migration.",
         security: [{ bearerAuth: [] }],
         responses: {
           "200": {
@@ -335,6 +441,23 @@ export const openApiDocument = {
       },
     },
     "/api/v1/user/me": {
+      delete: {
+        tags: ["User"], summary: "Schedule account deletion in six calendar months",
+        description: "Requires explicit confirmation. Revokes sessions immediately; login before the deadline cancels deletion. The last active admin is protected.",
+        security: [{ bearerAuth: [] }],
+        requestBody: { required: true, content: { "application/json": { schema: {
+          type: "object", required: ["confirm"], properties: { confirm: { type: "boolean", enum: [true] } },
+        } } } },
+        responses: {
+          "202": { description: "Scheduled; sessions revoked", content: { "application/json": { schema: {
+            type: "object", required: ["message", "scheduledDeletionAt"],
+            properties: { message: { type: "string" }, scheduledDeletionAt: { type: "string", format: "date-time" } },
+          } } } },
+          "400": { description: "Explicit confirmation missing" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "409": { description: "Last active administrator" },
+        },
+      },
       get: {
         tags: ["User"],
         summary: "Get the signed-in user's profile",
@@ -346,6 +469,62 @@ export const openApiDocument = {
               "application/json": { schema: { $ref: "#/components/schemas/Profile" } },
             },
           },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+    "/api/v1/user/internal/users/{userId}/telegram": {
+      get: {
+        tags: ["User"], summary: "Order Service: look up a verified user's Telegram handle",
+        description: "Internal only. Order must authenticate its caller and authorize order participation. This endpoint does not accept gateway identity headers as credentials.",
+        security: [{ orderServiceToken: [] }],
+        parameters: [{ name: "userId", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        responses: {
+          "200": { description: "Minimal contact details", content: { "application/json": { schema: {
+            type: "object", required: ["userId", "telegramHandle"],
+            properties: { userId: { type: "string", format: "uuid" }, telegramHandle: { type: "string", example: "example_user" } },
+          } } } },
+          "400": { description: "Invalid user UUID" },
+          "404": { description: "Missing/invalid service token, or unavailable user" },
+          "409": { description: "User not verified" },
+        },
+      },
+    },
+    "/api/v1/user/admin/users/{userId}/verify": {
+      post: {
+        tags: ["User"], summary: "Admin: verify a non-production load-test user",
+        description: "Disabled by default. Requires ENABLE_TEST_VERIFICATION=true and a non-production APP_ENV, plus a verified admin bearer session. Records an audit reason and queues UserVerified idempotently. Does not promote roles or reinstate suspended accounts.",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "userId", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        requestBody: { required: true, content: { "application/json": { schema: {
+          type: "object", required: ["reason"], properties: { reason: { type: "string", minLength: 3, maxLength: 500, example: "D3 load-test setup" } },
+        } } } },
+        responses: {
+          "200": { description: "Verified or already verified", content: { "application/json": { schema: {
+            type: "object", required: ["userId", "status", "nextSteps", "changed"], properties: {
+              userId: { type: "string", format: "uuid" }, status: { $ref: "#/components/schemas/AccountStatus" },
+              nextSteps: { type: "array", items: { type: "string" } }, changed: { type: "boolean" },
+            },
+          } } } },
+          "400": { description: "Invalid user UUID or audit reason" },
+          "404": { description: "Feature disabled, caller not a verified admin, or target not found" },
+          "409": { description: "Target suspended or pending deletion" },
+        },
+      },
+    },
+    "/api/v1/user/me/password": {
+      patch: {
+        tags: ["User"], summary: "Change the signed-in user's password",
+        description: "Keeps the current session, revokes other sessions and invalidates outstanding reset links.",
+        security: [{ bearerAuth: [] }],
+        requestBody: { required: true, content: {
+          "application/json": { schema: { $ref: "#/components/schemas/NewPasswordRequest" } },
+        } },
+        responses: {
+          "200": { description: "Password changed" },
+          "400": { description: "Missing or invalid new password", content: {
+            "application/json": { schema: { $ref: "#/components/schemas/Error" } },
+          } },
           "401": { $ref: "#/components/responses/Unauthorized" },
         },
       },

@@ -2,7 +2,7 @@
  * AI Assistance Disclosure
  * Tool: Claude Code (Claude Opus 5)
  * Scope: Generated the profile page from the mockup.
- * Author review: Ngooi Jun Sen to validate before merge.
+ * Reviewed by Ngooi Jun Sen.
  *
  * Covers UI FR12.1.1 (name, email, credit balance), FR12.1.2 (change
  * password, through PATCH /api/v1/user/me/password), User F5.1 (delete
@@ -10,10 +10,6 @@
  * desktop, account and credits left) and FR12.3.2 (one stacked column on
  * mobile).
  *
- * FR12.2.1 ratings and FR12.2.2 badges are deliberately not built yet: the
- * Rating Service is unwritten, the Badges Service has no metrics to work
- * from, and the two requirements land on 23 October and 6 November. Both are
- * shown as coming soon rather than filled with invented numbers.
  */
 
 import { useState } from 'react';
@@ -28,6 +24,7 @@ import { TextField } from '../components/ui/TextField';
 import { errorMessage } from '../lib/api';
 import { changePassword, deleteAccount } from '../lib/user';
 import { checkPasswordRules, isValidPassword } from '../lib/validation';
+import { useCreditBalance } from '../lib/credit';
 import styles from './ProfilePage.module.css';
 
 function initials(name: string): string {
@@ -41,6 +38,7 @@ function initials(name: string): string {
 
 export function ProfilePage() {
   const { user, signOut } = useAuth();
+  const creditBalance = useCreditBalance();
   const navigate = useNavigate();
 
   const [changingPassword, setChangingPassword] = useState(false);
@@ -140,17 +138,30 @@ export function ProfilePage() {
             </div>
           </section>
 
-          {/* TODO(credit): FR12.1.1's balance and GET /api/v1/credit/me/ledger
-              history, once the Credit Service exists. */}
           <section className={styles.card}>
-            <div className={styles.soonHead}>
-              <h2 className={styles.cardTitle}>Credit balance</h2>
-              <span className={styles.soonTag}>Coming soon</span>
-            </div>
-            <p className={styles.soonBody}>
-              Credits available and reserved, and how they were earned and spent. Waiting on the
-              Credit Service.
+            <h2 className={styles.cardTitle}>Credit balance</h2>
+
+            <p className={styles.balance}>
+              <span className={styles.balanceNumber}>{creditBalance ?? '--'}</span>
+              <span className={styles.balanceNote}>
+                {creditBalance === null ? 'balance unavailable' : 'available'}
+                {/* TODO(credit): "· N reserved" - the balance endpoint returns
+                    the available figure only. */}
+              </span>
             </p>
+
+            {/*
+              TODO(credit): the mockup's breakdown (earned as a courier, spent
+              as a requester, granted at signup) and the credit history button
+              need GET /api/v1/credit/me/ledger, which is in the contract but
+              not implemented.
+
+            <p className={styles.breakdown}>
+              Earned {earnedAsCourier} as a courier &middot; spent {spentAsRequester} as a
+              requester &middot; {grantedAtSignup} granted at signup.
+            </p>
+            <Button variant="secondary" fullWidth>View credit history</Button>
+            */}
           </section>
         </div>
 
@@ -195,7 +206,7 @@ export function ProfilePage() {
         title="Delete your account?"
         consequence={
           <>
-            Your account is marked for deletion and removed for good after six months (User F5.1).
+            Your account is marked for deletion and removed for good after six months.
             You are signed out now. If you are the only admin, the service may refuse, since
             nobody would be left to run the platform.
           </>

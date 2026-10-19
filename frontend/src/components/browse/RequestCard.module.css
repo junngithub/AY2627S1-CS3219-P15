@@ -1,0 +1,143 @@
+/*
+ * AI-generated (Claude Code);
+ * Reviewed by Ngooi Jun Sen.
+ */
+
+.card {
+  display: grid;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.route {
+  grid-area: route;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.meta {
+  grid-area: meta;
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-subtle);
+}
+
+.item {
+  grid-area: item;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+}
+
+.reward {
+  grid-area: reward;
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 2px;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.amount {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.unit {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.expiry {
+  grid-area: expiry;
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+.expiryUrgent {
+  color: var(--color-warning);
+}
+
+.footer {
+  grid-area: footer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.requester {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--color-text);
+}
+
+.ownTag {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-subtle);
+}
+
+.accept {
+  min-width: 108px;
+}
+
+/* Desktop: route first, item as the headline, reward in the top right. */
+@media (min-width: 768px) {
+  .card {
+    grid-template-areas:
+      'route reward'
+      'meta reward'
+      'item item'
+      'expiry expiry'
+      'footer footer';
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .routeSuffix,
+  .footerElapsed {
+    display: none;
+  }
+}
+
+/* Mobile: item and reward lead, the route carries the distance. */
+@media (max-width: 767px) {
+  .card {
+    grid-template-areas:
+      'item reward'
+      'route route'
+      'expiry expiry'
+      'footer footer';
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .meta {
+    display: none;
+  }
+
+  .item {
+    align-self: center;
+  }
+}
