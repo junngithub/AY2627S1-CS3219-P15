@@ -67,6 +67,12 @@ spec:
           code=$(req -X POST "$GW{{ . }}")
           [ "$code" = 404 ] && pass "{{ . }} (internal) → 404 at the gateway" || fail "{{ . }} → HTTP $code"
           {{- end }}
+          {{- range .Values.blockedPrefixes }}
+          code=$(req -X POST -H "Authorization: Bearer not-a-valid-token" "$GW{{ . }}/authorize")
+          [ "$code" = 404 ] && pass "{{ . }}/authorize (internal) → 404 at the gateway" || fail "{{ . }}/authorize → HTTP $code"
+          code=$(req -H "X-Service-Token: client-supplied-token" "$GW{{ . }}/users/00000000-0000-0000-0000-000000000000/telegram")
+          [ "$code" = 404 ] && pass "{{ . }} (internal prefix) → 404 at the gateway" || fail "{{ . }} → HTTP $code"
+          {{- end }}
           code=$(req "$GW/not-a-route")
           [ "$code" = 404 ] && pass "unknown path → 404" || fail "unknown path → HTTP $code"
 

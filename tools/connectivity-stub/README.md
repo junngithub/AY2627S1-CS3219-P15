@@ -9,7 +9,7 @@ no business logic and no dependencies.
 |---|---|
 | `GET /health` | `{"status":"ok","service":"<SERVICE_NAME>"}` |
 | anything else | `{"service":"…","stub":true,"method":"…","path":"…","userId":…,"isAdmin":…}`. `userId`/`isAdmin` echo the `x-user-id`/`x-is-admin` headers the gateway added, so tests can see what reached the backend. |
-| `* /api/v1/user/authorize` (only as `user`) | stands in for User's auth endpoint (ADR-0007). `Authorization: Bearer stub:<name>@u.nus.edu` (or `@nus.edu.sg`) gives `200` with headers `x-user-id: <email>` and `x-is-admin: true` if `<name>` starts with `admin`. Anything else gives `401`. |
+| `* /api/v1/user/internal/authorize` (only as `user`) | stands in for User's auth endpoint (ADR-0007). `Authorization: Bearer stub:<name>@u.nus.edu` (or `@nus.edu.sg`) gives `200` with headers `x-user-id: <email>` and `x-is-admin: true` if `<name>` starts with `admin`. Anything else gives `401`. The legacy `/api/v1/user/authorize` alias is temporarily supported for existing callers. |
 
 Env: `PORT` (default 3000) and `SERVICE_NAME`. The `foc-service` chart sets both
 for every service.

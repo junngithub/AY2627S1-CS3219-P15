@@ -93,9 +93,9 @@ export class KafkaUserEventPublisher implements UserEventPublisher {
     this.connected = false;
   }
 
-  async publishUserVerified(event: UserVerifiedEvent): Promise<void> {
+  async publishUserVerified(event: UserVerifiedEvent, eventId?: string, occurredAt?: string): Promise<void> {
     await this.connect();
-    const envelope = buildUserVerifiedEnvelope(event);
+    const envelope = buildUserVerifiedEnvelope(event, { eventId, occurredAt });
     await this.producer.send({
       topic: config.kafka.topic,
       // Key by userId: co-partitions a user's events so future status

@@ -32,11 +32,14 @@ spec:
         - name: {{ .service }}
           port: {{ .port }}
     {{- end }}
-    {{- if .Values.blockedPaths }}
+    {{- if or .Values.blockedPaths .Values.blockedPrefixes }}
     # Internal-only endpoints: answered with 404 here, never forwarded.
     - matches:
         {{- range .Values.blockedPaths }}
         - path: { type: Exact, value: {{ . }} }
+        {{- end }}
+        {{- range .Values.blockedPrefixes }}
+        - path: { type: PathPrefix, value: {{ . }} }
         {{- end }}
       filters:
         - type: ExtensionRef
@@ -56,4 +59,4 @@ spec:
     contentType: application/json
     body:
       type: Inline
-      inline: '{"error":"Not found"}'
+      inline: '{"error":"Endpoint not found","code":"NOT_FOUND"}'

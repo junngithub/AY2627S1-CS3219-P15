@@ -25,11 +25,17 @@ export function Dialog({ open, title, onClose, footer, children }: DialogProps) 
   const titleId = useId();
   const panel = useRef<HTMLDivElement>(null);
 
+  // Callers usually pass a new onClose on every render. Read it through a ref
+  // so the effect below runs only on open and close: re-running it on each
+  // render would pull focus out of whatever field the user is typing in.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!open) return undefined;
 
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') onCloseRef.current();
     }
 
     const previousFocus = document.activeElement as HTMLElement | null;
@@ -44,7 +50,7 @@ export function Dialog({ open, title, onClose, footer, children }: DialogProps) 
       document.removeEventListener('keydown', onKeyDown);
       previousFocus?.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -76,6 +82,8 @@ interface ConfirmDialogProps {
   /** NFR9.1.2: say plainly what happens if they go ahead. */
   consequence: ReactNode;
   confirmLabel: string;
+  /** The dismiss button. Override when "Cancel" would be ambiguous, e.g. when cancelling an order. */
+  cancelLabel?: string;
   /** Destructive actions get the danger button. */
   destructive?: boolean;
   busy?: boolean;
@@ -85,13 +93,15 @@ interface ConfirmDialogProps {
 
 /**
  * NFR9.1.1: irreversible or high-impact actions ask first. Used by the
- * supplier approval queue and, later, by order cancellation and escalation.
+ * supplier approval queue, order cancellation and releasing a task, and later by
+ * escalation.
  */
 export function ConfirmDialog({
   open,
   title,
   consequence,
   confirmLabel,
+  cancelLabel = 'Cancel',
   destructive = false,
   busy = false,
   onConfirm,
@@ -105,7 +115,7 @@ export function ConfirmDialog({
       footer={
         <>
           <Button variant="secondary" onClick={onCancel} disabled={busy}>
-            Cancel
+            {cancelLabel}
           </Button>
           <Button variant={destructive ? 'danger' : 'primary'} loading={busy} onClick={onConfirm}>
             {confirmLabel}

@@ -1,0 +1,220 @@
+/*
+ * AI-generated (Claude Code);
+ * Reviewed by Ngooi Jun Sen.
+ */
+
+.page {
+  width: 100%;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-5);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+}
+
+.subtitle {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.offline {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-warning-bg);
+  border: 1px solid var(--color-warning);
+  border-radius: var(--radius-md);
+  color: var(--color-warning);
+  font-size: var(--font-size-sm);
+}
+
+.browseLink {
+  color: var(--color-accent);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4) var(--space-5);
+  align-items: start;
+}
+
+.lower {
+  display: grid;
+  gap: var(--space-4) var(--space-5);
+  align-items: start;
+  grid-template-columns: 1fr 1fr;
+  grid-template-areas:
+    'credits deadline'
+    'expiry summary';
+}
+
+/* Grid children shrink to their column instead of setting its width. */
+.areaCredits,
+.areaDeadline,
+.areaExpiry {
+  min-width: 0;
+}
+
+.areaCredits {
+  grid-area: credits;
+}
+
+.areaDeadline {
+  grid-area: deadline;
+}
+
+.areaExpiry {
+  grid-area: expiry;
+}
+
+.summary {
+  grid-area: summary;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-1);
+}
+
+.summaryLabel {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.summaryValue,
+.summaryNegative {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.summaryValue {
+  color: var(--color-text);
+}
+
+.summaryNegative {
+  color: var(--color-danger);
+}
+
+.mobileHeader,
+.mobileActions {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .page {
+    padding: 0;
+    padding-bottom: calc(var(--touch-target) + var(--space-7));
+  }
+
+  /* The app nav is hidden on this route, so the page carries its own bar. */
+  .mobileHeader {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    height: var(--nav-height);
+    padding: 0 var(--space-4);
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .back {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--touch-target);
+    height: var(--touch-target);
+    margin-left: calc(var(--space-3) * -1);
+    color: var(--color-text);
+    font-size: var(--font-size-xl);
+    line-height: 1;
+  }
+
+  .back:hover {
+    text-decoration: none;
+  }
+
+  .mobileTitle {
+    margin: 0;
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-bold);
+  }
+
+  .mobileBalance {
+    margin-left: auto;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+  }
+
+  .card {
+    gap: var(--space-4);
+    padding: var(--space-4);
+    background: transparent;
+    border: none;
+    border-radius: 0;
+  }
+
+  /* Heading and summary block belong to the desktop layout only. */
+  .header,
+  .summary {
+    display: none;
+  }
+
+  .row {
+    grid-template-columns: 1fr;
+  }
+
+  /*
+   * DEPARTS FROM THE MOCKUP, and for a measurable reason: the mockup pairs
+   * "Delivery by" and "Expires" across one row because it draws them as the
+   * short text "Today 15:30". A native datetime control renders the full
+   * "28/09/2026, 02:09 am" plus a picker button, which needs roughly 210px;
+   * two of those will not fit inside a 360-412px phone and clipped the fields
+   * and the stepper's + button. Stacked until either a compact custom picker
+   * is built or the mockup accepts one per row.
+   */
+  .lower {
+    gap: var(--space-4);
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      'credits'
+      'deadline'
+      'expiry';
+  }
+
+  .mobileActions {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: block;
+    padding: var(--space-3) var(--space-4) calc(var(--space-3) + env(safe-area-inset-bottom));
+    background: var(--color-bg);
+    border-top: 1px solid var(--color-border);
+  }
+}

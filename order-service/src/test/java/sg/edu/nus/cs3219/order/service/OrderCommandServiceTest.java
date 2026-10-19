@@ -16,12 +16,16 @@ import sg.edu.nus.cs3219.order.client.RatingClient;
 import sg.edu.nus.cs3219.order.client.SupplierClient;
 import sg.edu.nus.cs3219.order.client.UserAccount;
 import sg.edu.nus.cs3219.order.config.OrderProperties;
+import sg.edu.nus.cs3219.order.domain.OrderAction;
 import sg.edu.nus.cs3219.order.domain.OrderStatus;
 import sg.edu.nus.cs3219.order.messaging.OrderMessageFactory;
 import sg.edu.nus.cs3219.order.messaging.OutboxWriter;
 import sg.edu.nus.cs3219.order.persistence.AlertEntity;
 import sg.edu.nus.cs3219.order.persistence.AlertRepository;
 import sg.edu.nus.cs3219.order.persistence.OrderEntity;
+import sg.edu.nus.cs3219.order.persistence.OrderLogEntity;
+import sg.edu.nus.cs3219.order.persistence.OrderLogRepository;
+import sg.edu.nus.cs3219.order.persistence.OrderLogWriter;
 import sg.edu.nus.cs3219.order.persistence.OrderRepository;
 import sg.edu.nus.cs3219.order.persistence.OutboxEntity;
 import sg.edu.nus.cs3219.order.persistence.OutboxRepository;
@@ -68,6 +72,7 @@ class OrderCommandServiceTest {
     @Mock private RatingClient ratings;
     @Mock private AdminClient admins;
     @Mock private OutboxRepository outboxRepository;
+    @Mock private OrderLogRepository orderLog;
     @Mock private PhotoStore photos;
 
     private OrderCommandService service;
@@ -84,6 +89,7 @@ class OrderCommandServiceTest {
                 admins,
                 new OrderMessageFactory(new ObjectMapper()),
                 new OutboxWriter(outboxRepository),
+                new OrderLogWriter(orderLog),
                 photos,
                 new OrderProperties(),
                 Clock.fixed(now, ZoneOffset.UTC)
@@ -117,6 +123,32 @@ class OrderCommandServiceTest {
         verify(credits).reserve(created.getId(), "11111111-1111-1111-1111-111111111111", 8, requester);
         verify(alerts).save(any(AlertEntity.class));
         verify(outboxRepository).save(any(OutboxEntity.class));
+        ArgumentCaptor<OrderLogEntity> logged = ArgumentCaptor.forClass(OrderLogEntity.class);
+        verify(orderLog).save(logged.capture());
+        assertEquals(created.getId(), logged.getValue().getOrderId());
+        assertEquals(OrderAction.CREATED.name(), logged.getValue().getAction());
+        assertNull(logged.getValue().getFromStatus());
+        assertEquals(OrderStatus.CREATED.name(), logged.getValue().getToStatus());
+        assertEquals(requester.userId(), logged.getValue().getActorId());
+        assertEquals(now, logged.getValue().getOccurredAt());
+    }
+
+    @Test
+    void systemExpiryIsAppendedWithoutAnActor() {
+        OrderEntity expiring = openOrder();
+        expiring.setAcceptanceExpiry(now.minusSeconds(1));
+        when(orders.lockById(id)).thenReturn(Optional.of(expiring));
+
+        service.expire(id, now);
+
+        ArgumentCaptor<OrderLogEntity> logged = ArgumentCaptor.forClass(OrderLogEntity.class);
+        verify(orderLog).save(logged.capture());
+        assertEquals(id, logged.getValue().getOrderId());
+        assertEquals(OrderAction.ACCEPTANCE_EXPIRED.name(), logged.getValue().getAction());
+        assertEquals(OrderStatus.CREATED.name(), logged.getValue().getFromStatus());
+        assertEquals(OrderStatus.EXPIRED.name(), logged.getValue().getToStatus());
+        assertNull(logged.getValue().getActorId());
+        assertEquals(now, logged.getValue().getOccurredAt());
     }
 
     @Test

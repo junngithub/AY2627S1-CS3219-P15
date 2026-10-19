@@ -16,7 +16,7 @@ identityHeaders: [x-user-id, x-is-admin, x-permitted-action]
 auth:
   service: user
   port: 8080
-  path: /api/v1/user/authorize
+  path: /api/v1/user/internal/authorize
 
 # Protected routes (auth required): path prefix → service. Paths from the API
 # contract; ports must match deploy/values/services/<svc>.yaml.
@@ -40,9 +40,13 @@ publicRoutes:
   - { method: POST, path: /api/v1/user/reset-password, service: user, port: 8080 }
   - { method: GET, path: /api/v1/supplier, service: supplier, port: 8081 }
 
-# Internal-only paths: answered with 404 at the gateway, never forwarded.
+# Legacy compatibility path: keep blocked until every caller has migrated.
 blockedPaths:
   - /api/v1/user/authorize
+
+# Service-token APIs are called directly over private service DNS, never by clients.
+blockedPrefixes:
+  - /api/v1/user/internal
 
 # `helm test` pod (not used by Argo CD).
 tests:
