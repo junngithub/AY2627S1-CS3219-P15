@@ -6,6 +6,8 @@ import { TelegramBotClient, TelegramPoller } from "./telegram";
 import { VerificationEventDispatcher } from "./verification-events";
 import { deleteExpiredAccounts } from "./account-lifecycle";
 
+console.log(`Email delivery provider: ${config.email.provider}`);
+if (config.email.provider === "disabled") console.warn("Email delivery is disabled; configure SES before enabling real signup/password recovery.");
 const publisher = config.kafka.enabled ? new KafkaUserEventPublisher() : undefined;
 const dispatcher = publisher ? new VerificationEventDispatcher(publisher) : undefined;
 const telegram = config.telegram.botToken && process.env.TELEGRAM_POLLING_ENABLED !== "false"

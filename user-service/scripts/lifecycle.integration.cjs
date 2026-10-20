@@ -17,6 +17,7 @@ test("account lifecycle and service integration in an isolated PostgreSQL databa
     createdDatabase = true;
     process.env.DATABASE_URL = databaseUrl + databaseName;
     process.env.NODE_ENV = "development";
+    process.env.EMAIL_PROVIDER = "development"; // Never send real email from this fixture.
     process.env.APP_ENV = "test";
     process.env.ENABLE_TEST_VERIFICATION = "true";
     process.env.ORDER_USER_LOOKUP_TOKEN = randomBytes(32).toString("base64url");

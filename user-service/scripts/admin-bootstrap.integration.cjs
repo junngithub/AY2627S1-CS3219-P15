@@ -20,6 +20,7 @@ test("first-admin CLI, atomic audit and concurrency in isolated PostgreSQL", asy
     createdDatabase = true;
     process.env.DATABASE_URL = baseDatabaseUrl + databaseName;
     process.env.NODE_ENV = "development";
+    process.env.EMAIL_PROVIDER = "development"; // Never send real email from this fixture.
     process.env.APP_ENV = "test";
     process.env.KAFKA_BROKERS = "";
     process.env.TELEGRAM_BOT_TOKEN = "";

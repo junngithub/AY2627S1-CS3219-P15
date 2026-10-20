@@ -5,7 +5,7 @@ import { deletionIsDue, scheduleAccountDeletion } from "../account-lifecycle";
 import { authorizationResult, identityHeaders } from "../authorization";
 import { config } from "../config";
 import { prisma } from "../db";
-import { DevelopmentEmailSender, EmailSender } from "../email";
+import { createEmailSender, EmailSender } from "../email";
 import type { UserEventPublisher } from "../events";
 import { AppError } from "../errors";
 import { asyncHandler } from "../http";
@@ -34,7 +34,7 @@ function requiredString(value: unknown): string | null {
 }
 
 export function createUsersRouter(
-  emailSender: EmailSender = new DevelopmentEmailSender(),
+  emailSender: EmailSender = createEmailSender(config.email),
   eventPublisher?: UserEventPublisher,
 ): Router {
   const router = Router();
@@ -235,7 +235,12 @@ export function createUsersRouter(
         }),
       ]);
 
-      await emailSender.sendVerificationOtp(email, otp, config.otpTtlMinutes);
+      try {
+        await emailSender.sendVerificationOtp(email, otp, config.otpTtlMinutes);
+      } catch {
+        // Preserve the generic response even if delivery fails for a real account.
+        console.error("[user email] verification resend failed; a new request is required");
+      }
       response.status(202).json(acceptedResponse);
     }),
   );
@@ -292,9 +297,9 @@ export function createUsersRouter(
         link.searchParams.set("token", token);
         try {
           await emailSender.sendPasswordResetLink(email, link.toString(), config.passwordResetTtlMinutes);
-        } catch (error) {
+        } catch {
           // Do not reveal account existence through a delivery failure.
-          console.error("[user email] failed to send password reset link:", error);
+          console.error("[user email] password reset delivery failed; a new request is required");
         }
       }
 

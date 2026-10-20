@@ -34,9 +34,17 @@ and requests an email verification OTP (F1.3). name is required and must contain
 201 { userId, email, status, nextSteps }. Account starts as Created and becomes
 Verified only after BOTH email and Telegram verification succeed.
 
-Implementation note: real email delivery is not connected yet. The development
-sender prints verification OTPs and password reset links in local server logs.
-Do not describe successful real email delivery as completed functionality.
+Implementation note: SES delivery is implemented when EMAIL_PROVIDER=ses and
+the sender, region and AWS access are configured. Local development logging is
+still available. Manual local frontend signup/OTP, Telegram verification, login
+and emailed password recovery passed on 20 October 2026. Deployed-environment
+configuration and acceptance still need testing. Automated tests use fake SES
+clients and send no real messages. No endpoint or
+request-body change is required. Signup may return 503 EMAIL_DELIVERY_FAILED or
+EMAIL_NOT_CONFIGURED after saving an unverified account: use resend-verification
+after fixing delivery rather than repeating signup. Resend and forgot-password
+keep generic 202 responses even if sending fails, so account existence is not
+disclosed. No raw AWS errors, OTPs or reset links are logged in SES mode.
 
 3. REPLACE THE PURPOSE FOR POST /api/v1/user/verify-email
 ------------------------------------------------------------
@@ -150,7 +158,8 @@ provided. Admin Service must forward its real administrator's bearer token.
 8. ADD AN IMPLEMENTATION-STATUS NOTE UNDER THE USER SERVICE TABLE
 ------------------------------------------------------------
 The table includes planned requirements. /me/escalate and all /friends routes
-are not implemented yet. Real email delivery is not connected. Admin
+are not implemented yet. SES email delivery passed manual local frontend tests;
+deployed-environment setup/testing remains. Login-lockout email is still missing. Admin
 search/role/suspension integration also needs an agreed User Service contract;
 the test-verification override is not a replacement for those operations.
 
