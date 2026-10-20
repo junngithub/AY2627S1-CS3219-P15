@@ -1,0 +1,8 @@
+# rating-service: settings that are the same in every environment.
+name: rating
+image:
+  name: foc/rating-service
+port: 3000 # placeholder until rating-service exists
+healthPath: /health
+kafka:
+  user: rating # reads foc.rating.commands, writes foc.user.rating (ADR-0004)

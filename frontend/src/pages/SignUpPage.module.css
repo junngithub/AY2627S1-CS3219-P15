@@ -1,0 +1,61 @@
+/* 
+ * AI-generated (Claude Code); 
+ * Reviewed by Ngooi Jun Sen.
+ */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+}
+
+.subtitle {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.loginPrompt {
+  margin: 0;
+  text-align: center;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.loginPrompt a {
+  font-weight: var(--font-weight-semibold);
+}
+
+.actions {
+  margin-top: var(--space-1);
+}
+
+/* Mobile: the prompt sits above a button pinned to the bottom of the viewport. */
+@media (max-width: 767px) {
+  .form {
+    /* Leave room for the pinned button so the last field stays reachable. */
+    padding-bottom: calc(var(--touch-target) + var(--space-6));
+  }
+
+  .actions {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: var(--space-3) var(--space-4) calc(var(--space-3) + env(safe-area-inset-bottom));
+    background: var(--color-bg);
+    border-top: 1px solid var(--color-border);
+  }
+}

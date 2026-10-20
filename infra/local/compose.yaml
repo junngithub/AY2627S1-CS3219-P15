@@ -1,0 +1,36 @@
+# Floci: local AWS emulator for the `local` environment.
+# See ../docs/local-floci.md.
+#
+#   docker compose up -d        # start Floci on http://localhost:4566
+#   docker compose logs -f      # follow emulator logs
+#   docker compose down         # stop (keeps state in the floci-data volume)
+#   docker compose down -v      # stop and wipe all local AWS state
+#
+# EKS (k3s) and the ECR registry run as sibling containers that Floci starts
+# through the host Docker socket. `docker compose down` does not remove them;
+# list them with: docker ps --filter label=floci=true
+
+services:
+  floci:
+    image: floci/floci:2.1.0 # pinned; bump deliberately
+    container_name: floci
+    ports:
+      - "4566:4566" # every AWS API + ECR push/pull
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock # required for EKS (k3s) and ECR
+      - floci-data:/app/data
+    environment:
+      FLOCI_STORAGE_MODE: persistent
+      FLOCI_STORAGE_PERSISTENT_PATH: /app/data
+      # k3s image behind the EKS API. Pinned so local Kubernetes doesn't change
+      # under us (Floci defaults to rancher/k3s:latest).
+      FLOCI_SERVICES_EKS_DEFAULT_IMAGE: rancher/k3s:v1.34.1-k3s1
+      # Terraform, the AWS CLI, docker and kubectl all run on the host, so URLs
+      # Floci returns must stay on `localhost`. Leave FLOCI_HOSTNAME unset.
+      #
+      # Uncomment only if Floci logs a permission error on the Docker socket:
+      # FLOCI_RUN_AS_ROOT: "true"
+    restart: unless-stopped
+
+volumes:
+  floci-data:

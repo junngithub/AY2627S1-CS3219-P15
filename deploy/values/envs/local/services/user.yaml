@@ -1,0 +1,7 @@
+image:
+  tag: dev
+replicas: 1
+# Local: the chart generates Secret user-otp (random, stable across upgrades).
+# The cloud gets the same Secret from External Secrets (ADR-0010).
+generatedSecrets:
+  user-otp: [OTP_SECRET]

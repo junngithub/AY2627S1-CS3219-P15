@@ -1,0 +1,28 @@
+meta {
+  name: Collect
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/collect
+  body: multipartForm
+  auth: none
+}
+
+headers {
+  X-User-Id: 5f5ce989-a038-3f69-9aa4-54b24d8cfa63
+  X-Permitted-Action: true
+  X-User-Telegram: flow-courier
+}
+
+body:multipart-form {
+  photo: @file(C:\Users\varun\Pictures\CS2109s Report\NN train p1.png) @contentType(image/png)
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().status).to.equal("COLLECTED");
+  });
+}

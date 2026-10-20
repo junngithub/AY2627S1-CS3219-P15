@@ -1,0 +1,16 @@
+# user-service: settings that are the same in every environment.
+name: user
+image:
+  name: foc/user-service
+port: 8080 # PORT default in user-service/src/config.ts
+healthPath: /health
+database:
+  enabled: true # DATABASE_URL from Secret user-db (charts/foc-database, ADR-0010)
+kafka:
+  user: user # writes foc.user.status (ADR-0004)
+migrate:
+  enabled: true # runs before each deploy (ADR-0011); image: the Dockerfile's `migrate` stage
+  command: ["node_modules/.bin/prisma", "migrate", "deploy"]
+secretEnv:
+  # Signs one-time passwords; the app refuses to start in production without it.
+  OTP_SECRET: { secret: user-otp, key: OTP_SECRET }

@@ -1,0 +1,12 @@
+apiVersion: v2
+name: envoy-gateway
+description: >-
+  Wrapper around the official Envoy Gateway chart (vendored under charts/),
+  plus the cluster's GatewayClass. One per cluster; each env adds its own
+  Gateway and routes with charts/foc-gateway.
+type: application
+version: 0.1.0
+dependencies:
+  - name: gateway-helm
+    version: 1.9.2 # Envoy Gateway v1.9.2, Gateway API v1.6.1 CRDs
+    repository: oci://docker.io/envoyproxy

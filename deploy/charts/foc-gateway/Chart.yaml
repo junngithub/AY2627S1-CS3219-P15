@@ -1,0 +1,7 @@
+apiVersion: v2
+name: foc-gateway
+description: >-
+  One FoC environment's entry point (ADR-0007): Gateway, routes to the 7
+  services, auth via User's /authorize, identity-header stripping.
+type: application
+version: 0.1.0

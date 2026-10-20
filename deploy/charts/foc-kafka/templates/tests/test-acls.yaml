@@ -1,0 +1,119 @@
+{{- /*
+`helm test <release>`: checks every KafkaUser against the ACL table in
+.Values.users, from inside the cluster, with the Kafka CLI:
+  1. each allowed write succeeds
+  2. each allowed read receives a message (group "<user>-conntest")
+  3. per user, a forbidden write and a wrong-prefix consumer group are denied
+  4. a wrong password is rejected
+Expectations come from the same values that create the users.
+Argo CD ignores Helm test hooks.
+*/ -}}
+{{- $topics := list }}
+{{- range .Values.topics }}{{ $topics = append $topics .name }}{{ end }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ .Values.clusterName }}-test-acls
+  labels:
+    app.kubernetes.io/part-of: foc
+    foc.io/test: kafka-acls
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  restartPolicy: Never
+  containers:
+    - name: kafka-cli
+      image: {{ .Values.tests.image }}
+      env:
+        - name: KAFKA_HEAP_OPTS
+          value: "-Xmx256m"
+      command: ["bash", "-c"]
+      args:
+        - |
+          set -u
+          B={{ .Values.clusterName }}-kafka-bootstrap:9093
+          PASS=0; FAIL=0
+          pass() { echo "PASS $*"; PASS=$((PASS + 1)); }
+          fail() { echo "FAIL $*"; FAIL=$((FAIL + 1)); }
+
+          props() { # user password-file → /tmp/<user>.properties
+            cat > "/tmp/$1.properties" <<EOF
+          bootstrap.servers=$B
+          security.protocol=SASL_SSL
+          sasl.mechanism=SCRAM-SHA-512
+          sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required username="$1" password="$(cat "$2")";
+          ssl.truststore.type=PEM
+          ssl.truststore.location=/ca/ca.crt
+          EOF
+          }
+          produce() { # user topic
+            echo "conntest from $1 at $(date +%s)" |
+              timeout 40 bin/kafka-console-producer.sh --bootstrap-server "$B" \
+                --command-config "/tmp/$1.properties" --topic "$2" 2>&1
+          }
+          consume() { # user topic group
+            timeout 60 bin/kafka-console-consumer.sh --bootstrap-server "$B" \
+              --command-config "/tmp/$1.properties" --topic "$2" --group "$3" \
+              --from-beginning --max-messages 1 --timeout-ms 30000 2>&1
+          }
+          expect_write() { out=$(produce "$1" "$2"); rc=$?
+            if [ $rc -eq 0 ] && ! grep -q Exception <<<"$out"; then pass "$1 writes $2"
+            else fail "$1 writes $2: $(grep -m1 -o '[A-Za-z]*Exception[^.]*' <<<"$out")"; fi; }
+          expect_read() { out=$(consume "$1" "$2" "$1-conntest")
+            if grep -q "Processed a total of 1 messages" <<<"$out"; then pass "$1 reads $2 (group $1-conntest)"
+            else fail "$1 reads $2: $(grep -m1 -o '[A-Za-z]*Exception[^.]*' <<<"$out")"; fi; }
+          expect_denied() { # description, command output
+            if grep -q -E "AuthorizationException|AuthenticationException|Authentication failed" <<<"$2"; then
+              pass "$1 denied ($(grep -m1 -o -E '[A-Za-z]*(Authorization|Authentication)Exception|Authentication failed' <<<"$2"))"
+            else fail "$1 was NOT denied"; fi; }
+
+          sleep 3 # new pods are briefly blocked by the network policy
+          {{- range $user, $acl := .Values.users }}
+          props {{ $user }} /users/{{ $user }}/password
+          {{- end }}
+          echo "== 1. allowed writes"
+          {{- range $user, $acl := .Values.users }}
+          {{- range $acl.write }}
+          expect_write {{ $user }} {{ . }}
+          {{- end }}
+          {{- end }}
+          echo "== 2. allowed reads"
+          {{- range $user, $acl := .Values.users }}
+          {{- range $acl.read }}
+          expect_read {{ $user }} {{ . }}
+          {{- end }}
+          {{- end }}
+          echo "== 3. forbidden actions"
+          {{- range $user, $acl := .Values.users }}
+          {{- $forbidden := "" }}
+          {{- range $topics }}{{ if and (not $forbidden) (not (has . $acl.write)) }}{{ $forbidden = . }}{{ end }}{{ end }}
+          {{- if $forbidden }}
+          expect_denied "{{ $user }} writing {{ $forbidden }}" "$(produce {{ $user }} {{ $forbidden }})"
+          {{- end }}
+          {{- $readTopic := first (concat $acl.read $topics) }}
+          expect_denied "{{ $user }} reading {{ $readTopic }} with group conntest-{{ $user }}" "$(consume {{ $user }} {{ $readTopic }} conntest-{{ $user }})"
+          {{- end }}
+          echo "== 4. wrong password"
+          {{- $anyUser := first (keys .Values.users | sortAlpha) }}
+          echo wrong > /tmp/wrong-password
+          props {{ $anyUser }} /tmp/wrong-password && mv /tmp/{{ $anyUser }}.properties /tmp/bad.properties
+          expect_denied "{{ $anyUser }} with a wrong password" "$(timeout 40 bin/kafka-topics.sh --bootstrap-server "$B" --command-config /tmp/bad.properties --list 2>&1)"
+
+          echo "== $PASS passed, $FAIL failed"
+          [ "$FAIL" -eq 0 ]
+      volumeMounts:
+        - { name: ca, mountPath: /ca, readOnly: true }
+        {{- range $user, $_ := .Values.users }}
+        - { name: user-{{ $user }}, mountPath: /users/{{ $user }}, readOnly: true }
+        {{- end }}
+      resources:
+        requests: { cpu: 100m, memory: 256Mi }
+        limits: { cpu: "1", memory: 512Mi }
+  volumes:
+    - name: ca
+      secret: { secretName: {{ .Values.clusterName }}-cluster-ca-cert }
+    {{- range $user, $_ := .Values.users }}
+    - name: user-{{ $user }}
+      secret: { secretName: {{ $user }} }
+    {{- end }}

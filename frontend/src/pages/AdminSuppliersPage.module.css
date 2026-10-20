@@ -1,0 +1,204 @@
+/* 
+ * AI-generated (Claude Code); 
+ * Reviewed by Ngooi Jun Sen.
+ */
+
+.page {
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.title {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+}
+
+.subtitle {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-subtle);
+}
+
+.filters {
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.filter {
+  min-height: var(--touch-target);
+  padding: 0 var(--space-3);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.filter:hover {
+  color: var(--color-text);
+}
+
+.filterActive {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* NFR11.1.2: the table scrolls inside its own box on a narrow screen. */
+.tableWrap {
+  overflow-x: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+}
+
+.table th {
+  text-align: left;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--color-border);
+  vertical-align: top;
+  color: var(--color-text-muted);
+}
+
+.table tbody tr:first-child td {
+  border-top: none;
+}
+
+.name {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.sub {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-subtle);
+}
+
+.mono {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pending,
+.approved,
+.rejected {
+  display: inline-flex;
+  padding: 2px var(--space-3);
+  border-radius: var(--radius-pill);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: capitalize;
+}
+
+.pending {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.approved {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.rejected {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.rowActions {
+  display: flex;
+  gap: var(--touch-gap);
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-7) var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.emptyTitle {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+  text-transform: capitalize;
+}
+
+.emptyBody {
+  margin: 0;
+}
+
+.gap {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-subtle);
+}
+
+/* NFR11.1.1: readable text on a narrow screen, no collapsed grid. */
+@media (max-width: 767px) {
+  .page {
+    padding: var(--space-4);
+  }
+
+  .title {
+    font-size: var(--font-size-lg);
+  }
+
+  .filters {
+    width: 100%;
+  }
+
+  .filter {
+    flex: 1;
+  }
+}

@@ -1,0 +1,11 @@
+# supplier-service: settings that are the same in every environment.
+name: supplier
+image:
+  name: foc/supplier-service
+port: 8081 # origin/supplier-service listens on PORT, default 8081
+healthPath: /health
+database:
+  enabled: true # DATABASE_URL from Secret supplier-db (charts/foc-database, ADR-0010)
+migrate:
+  enabled: true # runs before each deploy (ADR-0011); image: the Dockerfile's `migrate` stage
+  command: ["node_modules/.bin/prisma", "migrate", "deploy"]

@@ -1,0 +1,287 @@
+/*
+ * AI-generated (Claude Code);
+ * Reviewed by Ngooi Jun Sen.
+ *
+ * Shared by My requests and My deliveries. UI FR9 writes one set of rules for
+ * both lists - Active and History tabs, a desktop table, mobile cards with
+ * prominent status pills - so they share a stylesheet rather than drifting.
+ */
+
+.page {
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+}
+
+.subtitle {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-subtle);
+}
+
+.newButton {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--touch-target);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.newButton:hover {
+  background: var(--color-accent-hover);
+  text-decoration: none;
+}
+
+.tabs {
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  align-self: flex-start;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--touch-target);
+  padding: 0 var(--space-4);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--color-text);
+}
+
+.tabActive {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+}
+
+.tabCount {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+.tabActive .tabCount {
+  color: var(--color-text-muted);
+}
+
+.table {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.headRow,
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 2.2fr) minmax(0, 1.2fr) minmax(0, 1fr) auto;
+  gap: var(--space-4);
+  align-items: center;
+  padding: var(--space-4) var(--space-5);
+}
+
+.headRow {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.rewardHead {
+  text-align: right;
+}
+
+.row {
+  color: var(--color-text);
+  border-top: 1px solid var(--color-border);
+}
+
+.row:first-of-type {
+  border-top: none;
+}
+
+.row:hover {
+  background: var(--color-surface-raised);
+  text-decoration: none;
+}
+
+.itemCell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.item {
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.route {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
+.statusDetail {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.courier {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  min-width: 0;
+}
+
+.reward {
+  text-align: right;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Column headings carry the meaning on desktop; the cards repeat them. */
+.cellLabel {
+  display: none;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-7) var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.emptyTitle {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+}
+
+.emptyBody {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+/*
+ * INFERRED: no mobile mockup exists for this page. A four-column table cannot
+ * work at 400px, so each row becomes a card carrying the same four facts,
+ * following the pattern the task pool cards already set.
+ */
+@media (max-width: 767px) {
+  .page {
+    padding: var(--space-4);
+  }
+
+  .title {
+    font-size: var(--font-size-lg);
+  }
+
+  .tabs {
+    align-self: stretch;
+  }
+
+  .tab {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .table {
+    background: transparent;
+    border: none;
+    gap: var(--space-3);
+  }
+
+  .headRow {
+    display: none;
+  }
+
+  .row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-2) var(--space-4);
+    padding: var(--space-4);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+  }
+
+  .itemCell {
+    grid-column: 1;
+  }
+
+  .reward {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
+  }
+
+  .courier {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: var(--space-2);
+  }
+
+  .cellLabel {
+    display: inline;
+    color: var(--color-text-subtle);
+  }
+
+  /* The reward number needs no label on mobile; the status does not either. */
+  .reward .cellLabel {
+    display: none;
+  }
+}

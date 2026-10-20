@@ -1,0 +1,58 @@
+{{- if gt (int .Values.replication.factor) (int .Values.brokers.replicas) }}
+{{- fail "replication.factor cannot exceed brokers.replicas" }}
+{{- end }}
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaNodePool
+metadata:
+  name: dual-role
+  labels:
+    {{- include "foc-kafka.clusterLabel" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.brokers.replicas }}
+  roles:
+    - controller
+    - broker
+  storage:
+    type: jbod
+    volumes:
+      - id: 0
+        type: persistent-claim
+        size: {{ .Values.brokers.storage.size }}
+        {{- with .Values.brokers.storage.class }}
+        class: {{ . }}
+        {{- end }}
+        deleteClaim: {{ .Values.brokers.storage.deleteClaim }}
+        kraftMetadata: shared
+  {{- with .Values.brokers.resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+---
+apiVersion: kafka.strimzi.io/v1
+kind: Kafka
+metadata:
+  name: {{ .Values.clusterName }}
+spec:
+  kafka:
+    version: {{ .Values.kafka.version }}
+    metadataVersion: {{ .Values.kafka.metadataVersion }}
+    listeners:
+      # The only client listener: TLS + a username/password per service.
+      - name: tls
+        port: 9093
+        type: internal
+        tls: true
+        authentication:
+          type: scram-sha-512
+    authorization:
+      type: simple
+    config:
+      default.replication.factor: {{ .Values.replication.factor }}
+      min.insync.replicas: {{ .Values.replication.minInsync }}
+      offsets.topic.replication.factor: {{ .Values.replication.factor }}
+      transaction.state.log.replication.factor: {{ .Values.replication.factor }}
+      transaction.state.log.min.isr: {{ .Values.replication.minInsync }}
+      auto.create.topics.enable: false # topics exist only if declared in Git
+  entityOperator:
+    topicOperator: {}
+    userOperator: {}

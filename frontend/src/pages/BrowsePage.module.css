@@ -1,0 +1,245 @@
+/*
+ * AI-generated (Claude Code);
+ * Reviewed by Ngooi Jun Sen.
+ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+}
+
+.locationBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.location {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.locationChange {
+  border: none;
+  background: none;
+  padding: 0;
+  margin-left: var(--space-2);
+  color: var(--color-accent);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.locationChange:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.locationChange:disabled {
+  color: var(--color-text-subtle);
+  cursor: default;
+}
+
+.locationTools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--touch-target);
+  width: 300px;
+  padding: 0 var(--space-3);
+  background: var(--color-field);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-subtle);
+}
+
+.search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+}
+
+.search input::placeholder {
+  color: var(--color-placeholder);
+}
+
+.search input:focus {
+  outline: none;
+}
+
+.allSuppliers {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--touch-target);
+  padding: 0 var(--space-2);
+  color: var(--color-accent);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+}
+
+.filterButton {
+  min-height: var(--touch-target);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.body {
+  display: flex;
+  gap: var(--space-6);
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: var(--space-5);
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--space-6);
+  width: 220px;
+  flex: none;
+}
+
+.ownNote {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-danger-bg);
+  border-radius: var(--radius-md);
+  color: var(--color-accent);
+  font-size: var(--font-size-sm);
+}
+
+.results {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.resultsHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.count {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+}
+
+.countMeta {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-subtle);
+}
+
+.accepted {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-success-bg);
+  border: 1px solid var(--color-success);
+  border-radius: var(--radius-md);
+  color: var(--color-success);
+  font-size: var(--font-size-sm);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--space-4);
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-6);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.reset {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--color-accent);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+/* Desktop: sidebar carries the filters, so the sheet trigger is not needed. */
+@media (min-width: 768px) {
+  .filterButton,
+  .locationShort {
+    display: none;
+  }
+}
+
+@media (max-width: 767px) {
+  /*
+   * FR5.6.4: sticky directly below the navigation header. The nav is itself
+   * sticky at height var(--nav-height), so this sits at that offset.
+   */
+  .locationBar {
+    position: sticky;
+    top: var(--nav-height);
+    z-index: 9;
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .locationLong,
+  .search,
+  .allSuppliers,
+  .sidebar {
+    display: none;
+  }
+
+  .body {
+    padding: var(--space-4);
+  }
+
+  .count {
+    font-size: var(--font-size-md);
+  }
+
+  .countMeta {
+    font-size: var(--font-size-xs);
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

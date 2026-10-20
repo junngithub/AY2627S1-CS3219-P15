@@ -1,0 +1,98 @@
+/*
+ * AI Assistance Disclosure
+ * Tool: Claude Code (Claude Opus 5), date: 2026-09-22
+ * Scope: Generated base styles and reset.
+ * Reviewed by Ngooi Jun Sen.
+ *
+ * Breakpoint (UI FR20.1.1): >= 768px desktop, < 768px mobile. CSS custom
+ * properties cannot be used inside media queries, so 767px/768px is written
+ * literally wherever it appears.
+ */
+
+@import './tokens.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-md);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/*
+ * Browsers repaint an autofilled field in their own colours, which on a dark
+ * theme reads as a bug: Firefox lays a yellow filter over it, Chrome and Safari
+ * force a pale blue background. The two need different treatment.
+ *
+ * Firefox applies a filter, so turning the filter off restores the field.
+ * Kept in its own rule: a browser drops the whole rule if it does not
+ * understand one selector in the list, and only some understand the other one.
+ */
+input:autofill,
+textarea:autofill,
+select:autofill {
+  filter: none;
+  background-image: none;
+}
+
+/*
+ * Chrome and Safari ignore background-color on an autofilled field, so the
+ * surface has to be painted with an inset shadow instead, and the text colour
+ * set through -webkit-text-fill-color rather than color.
+ */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--color-text);
+  caret-color: var(--color-text);
+  box-shadow: 0 0 0 100px var(--color-field) inset;
+}
+
+/* UI NFR8.1.1: keyboard users must always see where focus is. */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}

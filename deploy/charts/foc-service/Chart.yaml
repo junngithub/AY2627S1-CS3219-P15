@@ -1,0 +1,5 @@
+apiVersion: v2
+name: foc-service
+description: Generic chart for any FoC service (Deployment, Service, ConfigMap, optional Kafka credentials).
+type: application
+version: 0.1.0

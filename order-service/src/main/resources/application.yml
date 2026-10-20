@@ -1,0 +1,74 @@
+spring:
+  application:
+    name: order-service
+  profiles:
+    default: local
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 12MB
+  jackson:
+    datatype:
+      datetime:
+        write-dates-as-timestamps: false
+  kafka:
+    consumer:
+      group-id: order-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+    listener:
+      missing-topics-fatal: false
+
+server:
+  port: 8083
+
+springdoc:
+  show-actuator: true
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: alpha
+    tags-sorter: alpha
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+order:
+  api:
+    base-path: /api/v1/orders
+  photos:
+    mode: file
+    directory: ./data/photos
+    bucket: order-photos
+    region: us-east-1
+    path-style: true
+  ranking:
+    radius-km: 5
+  deadlines:
+    sweep-interval: 5s
+    collection-window: 5m
+    acknowledgement-window: 1d
+    completion-window: 7d
+  clients:
+    timeout: 2s
+    user-base-url: ${USER_SERVICE_URL:http://user-service:8080}
+    credit-base-url: ${CREDIT_SERVICE_URL:http://credit-service:8080}
+    supplier-base-url: ${SUPPLIER_SERVICE_URL:http://supplier-service:8080}
+    rating-base-url: ${RATING_SERVICE_URL:http://rating-service:8080}
+    admin-base-url: ${ADMIN_SERVICE_URL:http://admin-service:8080}
+  kafka:
+    replicas: 1
+    partitions: 3

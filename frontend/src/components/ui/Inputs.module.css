@@ -1,0 +1,137 @@
+/*
+ * AI-generated (Claude Code);
+ * Reviewed by Ngooi Jun Sen.
+ */
+
+/*
+ * min-width:0 matters: as a grid or flex child this box defaults to its
+ * content's intrinsic width, and a datetime input's intrinsic width is wide
+ * enough to push a phone layout sideways.
+ */
+.control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: var(--touch-target);
+  background: var(--color-field);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  transition: border-color 120ms ease;
+}
+
+.control:focus-within {
+  border-color: var(--color-accent);
+}
+
+.invalid {
+  border-color: var(--color-danger);
+}
+
+.select,
+.input,
+.textarea {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  padding: var(--space-3);
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+}
+
+.select:focus,
+.input:focus,
+.textarea:focus {
+  outline: none;
+}
+
+/* Native arrow removed so the drawn chevron matches the rest of the app. */
+.select {
+  appearance: none;
+  padding-right: var(--space-6);
+  cursor: pointer;
+}
+
+.selectIcon {
+  position: absolute;
+  right: var(--space-3);
+  display: flex;
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 92px;
+  line-height: 1.5;
+}
+
+/* The picker button the browser draws is dark-on-dark by default. */
+.input::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 0.6;
+  cursor: pointer;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: var(--space-2);
+  padding: var(--space-1);
+  background: var(--color-field);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.stepper:focus-within {
+  border-color: var(--color-accent);
+}
+
+.stepButton {
+  width: var(--touch-target);
+  height: var(--touch-target);
+  flex: none;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  font-size: var(--font-size-lg);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.stepButton:hover:not(:disabled) {
+  border-color: var(--color-text-subtle);
+}
+
+.stepButton:disabled {
+  background: var(--color-disabled-bg);
+  color: var(--color-disabled-text);
+  cursor: not-allowed;
+}
+
+.stepValue {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  appearance: textfield;
+}
+
+.stepValue::-webkit-outer-spin-button,
+.stepValue::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.stepValue:focus {
+  outline: none;
+}

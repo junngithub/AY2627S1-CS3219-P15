@@ -1,0 +1,10 @@
+brokers:
+  replicas: 1
+  storage:
+    size: 2Gi
+  resources:
+    requests: { cpu: 250m, memory: 1Gi }
+    limits: { cpu: "1", memory: 1536Mi }
+replication:
+  factor: 1
+  minInsync: 1

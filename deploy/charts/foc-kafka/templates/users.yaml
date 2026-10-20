@@ -1,0 +1,44 @@
+{{- $topics := list }}
+{{- range .Values.topics }}{{ $topics = append $topics .name }}{{ end }}
+{{- range $user, $acl := .Values.users }}
+{{- range (concat $acl.write $acl.read) }}
+{{- if not (has . $topics) }}
+{{- fail (printf "user %q references topic %q, which is not in .Values.topics" $user .) }}
+{{- end }}
+{{- end }}
+---
+# Strimzi creates Secret "{{ $user }}" (key: password) for this user.
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaUser
+metadata:
+  name: {{ $user }}
+  labels:
+    {{- include "foc-kafka.clusterLabel" $ | nindent 4 }}
+spec:
+  authentication:
+    type: scram-sha-512
+  authorization:
+    type: simple
+    acls:
+      {{- range $acl.write }}
+      - resource:
+          type: topic
+          name: {{ . }}
+          patternType: literal
+        operations: [Describe, Write]
+      {{- end }}
+      {{- range $acl.read }}
+      - resource:
+          type: topic
+          name: {{ . }}
+          patternType: literal
+        operations: [Describe, Read]
+      {{- end }}
+      {{- if $acl.read }}
+      - resource:
+          type: group
+          name: {{ $user }}
+          patternType: prefix
+        operations: [Read]
+      {{- end }}
+{{- end }}

@@ -1,0 +1,25 @@
+# Total resources every pod in the namespace may request / use together.
+quota:
+  requests.cpu: "2"
+  requests.memory: 4Gi
+  limits.cpu: "4"
+  limits.memory: 8Gi
+  persistentvolumeclaims: "10"
+  pods: "40"
+
+# Applied to any container that doesn't set its own requests/limits,
+# so the quota above can always be enforced.
+defaultContainer:
+  request:
+    cpu: 50m
+    memory: 128Mi
+  limit:
+    cpu: 500m
+    memory: 512Mi
+
+networkPolicy:
+  # Deny traffic from other namespaces; pods in this namespace can still talk
+  # to each other. Strimzi adds its own policies for the Kafka pods.
+  enabled: true
+  # Extra namespaces allowed in (e.g. the API gateway, monitoring).
+  allowFromNamespaces: []

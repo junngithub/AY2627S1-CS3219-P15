@@ -1,0 +1,10 @@
+quota:
+  requests.cpu: "4"
+  requests.memory: 6Gi
+  limits.cpu: "8"
+  limits.memory: 12Gi
+  persistentvolumeclaims: "10"
+  pods: "40"
+networkPolicy:
+  # Envoy proxies (charts/foc-gateway) route traffic in and call User's /authorize.
+  allowFromNamespaces: [envoy-gateway-system]

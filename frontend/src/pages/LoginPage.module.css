@@ -1,0 +1,110 @@
+/* 
+ * AI-generated (Claude Code); 
+ * Reviewed by Ngooi Jun Sen.
+ */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+}
+
+/* The mockups use different headings per viewport. Only one is rendered at a
+   time via display:none, so screen readers announce a single heading. */
+.titleMobile {
+  display: inline;
+}
+
+.titleDesktop {
+  display: none;
+}
+
+.subtitle {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.forgot {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.forgotShort {
+  display: inline;
+}
+
+.forgotLong {
+  display: none;
+}
+
+.signupPrompt {
+  margin: 0;
+  text-align: center;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.signupPrompt a {
+  font-weight: var(--font-weight-semibold);
+}
+
+.actions {
+  margin-top: var(--space-1);
+}
+
+/* Desktop: card title, longer link text, button inside the card. */
+@media (min-width: 768px) {
+  .titleMobile {
+    display: none;
+  }
+
+  .titleDesktop {
+    display: inline;
+  }
+
+  .subtitle {
+    display: none;
+  }
+
+  .forgotShort {
+    display: none;
+  }
+
+  .forgotLong {
+    display: inline;
+  }
+
+  .title {
+    font-size: var(--font-size-lg);
+  }
+}
+
+/* Mobile: the prompt sits above a button pinned to the bottom. */
+@media (max-width: 767px) {
+  .form {
+    padding-bottom: calc(var(--touch-target) + var(--space-6));
+  }
+
+  .actions {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: var(--space-3) var(--space-4) calc(var(--space-3) + env(safe-area-inset-bottom));
+    background: var(--color-bg);
+    border-top: 1px solid var(--color-border);
+  }
+}

@@ -1,0 +1,19 @@
+meta {
+  name: accept missing auth
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/accept
+  body: none
+  auth: none
+}
+
+tests {
+  test("status is 401", function() {
+    expect(res.getStatus()).to.equal(401);
+    expect(res.getBody().error).to.include("Sign in is required");
+  });
+}
+
