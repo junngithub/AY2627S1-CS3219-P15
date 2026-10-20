@@ -7,10 +7,12 @@
     "dev": "ts-node-dev --respawn --transpile-only --poll src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
+    "bootstrap:admin": "node dist/bootstrap-admin.js",
     "test": "tsx --test src/**/*.test.ts",
     "test:integration:password-reset": "node --test scripts/password-reset.integration.cjs",
     "test:integration:onboarding": "node --test scripts/onboarding.integration.cjs",
     "test:integration:lifecycle": "node --test scripts/lifecycle.integration.cjs",
+    "test:integration:admin-bootstrap": "node --test scripts/admin-bootstrap.integration.cjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
   },

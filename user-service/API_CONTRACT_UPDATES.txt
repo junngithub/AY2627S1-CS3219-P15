@@ -198,7 +198,14 @@ configure ORDER_USER_LOOKUP_TOKEN for User and securely provide it to Order.
 Order sends that value in X-Service-Token. Never store this secret in frontend
 configuration. Only for load tests, set APP_ENV to the real non-production
 environment and ENABLE_TEST_VERIFICATION=true. Keep production disabled.
-Plan how to seed the real admin through the privileged deployment process.
+The first real admin can now be established through the deployment-only command
+node dist/bootstrap-admin.js --user-id <verified-user-uuid> --confirm
+Run it only against the intended environment with approved operator access and
+existing migrations applied. It rejects existing admins or a previous bootstrap
+audit marker, audits the promotion and revokes the target's old sessions/reset
+links. The promoted account must sign in again. This is not an HTTP endpoint;
+there is no new bootstrap route to add to the contract. See the README for the
+full operational procedure. Normal role-management APIs remain separate work.
 
 Admin Service owner: in the previously fetched Admin branch, core/security.py calls
 /api/v1/user/me/authorize and expects role/email. Use /api/v1/user/internal/authorize and
