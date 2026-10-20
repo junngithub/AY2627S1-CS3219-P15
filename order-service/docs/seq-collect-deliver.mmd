@@ -1,0 +1,18 @@
+sequenceDiagram
+    actor Courier
+    participant Orders as Order service
+    participant Photos as Photo store
+    participant DB as Postgres
+
+    Courier->>Orders: POST /{orderId}/collect with photo
+    Note over Orders: assigned courier, ACCEPTED, collection window still open
+    Orders->>Photos: store JPEG, PNG, or WebP
+    Orders->>DB: COLLECTED, acknowledgement deadline is delivery deadline plus 1 day
+    Orders-->>Courier: 200 COLLECTED
+
+    Courier->>Orders: POST /{orderId}/deliver with photo
+    Note over Orders: assigned courier, COLLECTED, before the delivery deadline
+    Orders->>Photos: store delivery photo
+    Orders->>DB: DELIVERED, status outbox, rating.permission.granted
+    Note over DB: courier may rate the requester
+    Orders-->>Courier: 200 DELIVERED

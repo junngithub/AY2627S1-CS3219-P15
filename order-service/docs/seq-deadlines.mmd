@@ -1,0 +1,19 @@
+sequenceDiagram
+    participant Sweep as Deadline sweeper
+    participant Orders as Order service
+    participant DB as Postgres
+    participant Kafka as Kafka
+
+    loop every 5 seconds
+        Sweep->>Orders: ACCEPTED past the collection window
+        Orders->>DB: clear courier, back to CREATED
+        Sweep->>Orders: CREATED past acceptance expiry
+        Orders->>DB: EXPIRED, outbox credit.reservation.return
+        Sweep->>Orders: COLLECTED past the delivery deadline
+        Orders->>DB: ESCALATED, outbox admin.escalation.opened
+        Sweep->>Orders: DELIVERED past the acknowledgement window
+        Orders->>DB: UNACKNOWLEDGED, credit release, rating permission
+        Sweep->>Orders: settled 7 days ago
+        Orders->>DB: delete photos, COMPLETED, requester is not notified
+        Sweep->>Kafka: publish up to 50 unpublished outbox rows
+    end

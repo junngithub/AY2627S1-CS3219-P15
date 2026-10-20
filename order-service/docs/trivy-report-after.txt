@@ -1,0 +1,67 @@
+Trivy 0.66.0 results after fixes
+Scanned: 2026-10-10
+Repo: AY2627S1-CS3219-P15
+Image: order-service-order-service:latest
+
+1. Secrets
+   Command: trivy fs --scanners secret --skip-dirs .git
+   Log: No issues detected. scanners=[secret]
+   The summary dash means the report has no findings.
+
+2. Misconfiguration
+   Command: trivy fs --scanners misconfig --skip-dirs .git --skip-dirs order-service/target
+   order-service/Dockerfile and order-service/Dockerfile.local: 0 findings.
+   Parse errors (empty Dockerfiles, not findings): credit-service/Dockerfile, supplier-service/Dockerfile, user-service/Dockerfile
+
+3. Image vulnerabilities
+   Command: trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed
+   Ubuntu base: 0. app/app.jar: 0. pebble is no longer in the image.
+
+========== 1. SECRETS ==========
+
+
+Report Summary
+
+┌────────┬──────┬─────────┐
+│ Target │ Type │ Secrets │
+├────────┼──────┼─────────┤
+│   -    │  -   │    -    │
+└────────┴──────┴─────────┘
+Legend:
+- '-': Not scanned
+- '0': Clean (no security findings detected)
+
+
+========== 2. MISCONFIGURATION ==========
+
+
+Report Summary
+
+┌────────────────────────────────┬────────────┬───────────────────┐
+│             Target             │    Type    │ Misconfigurations │
+├────────────────────────────────┼────────────┼───────────────────┤
+│ order-service/Dockerfile       │ dockerfile │         0         │
+├────────────────────────────────┼────────────┼───────────────────┤
+│ order-service/Dockerfile.local │ dockerfile │         0         │
+└────────────────────────────────┴────────────┴───────────────────┘
+Legend:
+- '-': Not scanned
+- '0': Clean (no security findings detected)
+
+
+========== 3. IMAGE VULNERABILITIES ==========
+
+
+Report Summary
+
+┌───────────────────────────────────────────────────┬────────┬─────────────────┐
+│                      Target                       │  Type  │ Vulnerabilities │
+├───────────────────────────────────────────────────┼────────┼─────────────────┤
+│ order-service-order-service:latest (ubuntu 26.04) │ ubuntu │        0        │
+├───────────────────────────────────────────────────┼────────┼─────────────────┤
+│ app/app.jar                                       │  jar   │        0        │
+└───────────────────────────────────────────────────┴────────┴─────────────────┘
+Legend:
+- '-': Not scanned
+- '0': Clean (no security findings detected)
+

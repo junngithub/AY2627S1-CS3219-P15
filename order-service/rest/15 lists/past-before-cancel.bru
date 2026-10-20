@@ -1,0 +1,24 @@
+meta {
+  name: Open order is not a past request
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/v1/orders/requests/past
+  body: none
+  auth: none
+}
+headers {
+  X-User-Id: c0e8ac0d-6089-31b0-a013-fa4f0061ad3f
+  X-Permitted-Action: true
+  X-User-Telegram: deliver-req
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+    const listed = res.getBody().content.some(order => order.id === bru.getVar("orderId"));
+    expect(listed).to.equal(false);
+  });
+}

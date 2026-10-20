@@ -2,6 +2,8 @@
 
 Backend for Friend on Campus errand requests.
 
+Design notes are in [`docs/`](docs/README.md): state diagram, sequence diagrams, database schema, and the HTTP and Kafka interfaces.
+
 ## Profiles
 
 - `application.yml` holds shared settings. The default profile is `local`.
