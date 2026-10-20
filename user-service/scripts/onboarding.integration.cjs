@@ -44,6 +44,8 @@ function loggedResetToken(email) {
 
 test("complete local verification and profile password workflow", async () => {
   assert.equal(docker(["exec", "-T", "user-service", "printenv", "NODE_ENV"]).trim(), "development");
+  assert.equal(docker(["exec", "-T", "user-service", "printenv", "EMAIL_PROVIDER"]).trim(), "development",
+    "Refuse to run against SES: synthetic accounts must never receive real emails");
   assert.equal(docker(["exec", "-T", "user-service", "printenv", "TELEGRAM_BOT_TOKEN"]).trim(), "",
     "This automated test uses development delivery only");
   const created = [];

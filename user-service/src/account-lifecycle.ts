@@ -2,6 +2,7 @@ import { Prisma, type User } from "@prisma/client";
 import { prisma } from "./db";
 import { AppError } from "./errors";
 import { lockVerificationUser } from "./verification-events";
+import { lockAdminRoleChanges } from "./admin-role-lock";
 
 export function deletionDeadline(requestedAt: Date): Date {
   const deadline = new Date(requestedAt);
@@ -17,11 +18,6 @@ export function deletionIsDue(user: { scheduledDeletionAt: Date | null }, now = 
   return user.scheduledDeletionAt !== null && user.scheduledDeletionAt <= now;
 }
 
-async function lockAdminDeletion(transaction: Prisma.TransactionClient): Promise<void> {
-  // Serialize last-admin checks across concurrent deletion requests/workers.
-  await transaction.$executeRaw`SELECT pg_advisory_xact_lock(3219, 15)`;
-}
-
 async function otherActiveAdmins(transaction: Prisma.TransactionClient, userId: string): Promise<number> {
   return transaction.user.count({ where: {
     id: { not: userId }, role: "ADMIN", accessStatus: "ACTIVE", scheduledDeletionAt: null,
@@ -30,7 +26,7 @@ async function otherActiveAdmins(transaction: Prisma.TransactionClient, userId: 
 
 export async function scheduleAccountDeletion(user: User): Promise<Date> {
   return prisma.$transaction(async (transaction) => {
-    await lockAdminDeletion(transaction);
+    await lockAdminRoleChanges(transaction);
     await lockVerificationUser(transaction, user.id);
     const current = await transaction.user.findUniqueOrThrow({ where: { id: user.id } });
     if (deletionIsDue(current)) throw new AppError(401, "UNAUTHORIZED", "Authentication required");
@@ -60,7 +56,7 @@ export async function deleteExpiredAccounts(options: { now?: Date; limit?: numbe
   const limit = Math.min(100, Math.max(1, options.limit ?? 100));
   if (options.userIds?.length === 0) return 0;
   return prisma.$transaction(async (transaction) => {
-    await lockAdminDeletion(transaction);
+    await lockAdminRoleChanges(transaction);
     const filter = options.userIds ? Prisma.sql`AND "id" IN (${Prisma.join(options.userIds.map((id) => Prisma.sql`${id}::uuid`))})` : Prisma.empty;
     const candidates = await transaction.$queryRaw<{ id: string; role: string }[]>(Prisma.sql`
       SELECT "id", "role" FROM "User"

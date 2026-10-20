@@ -5,8 +5,9 @@ import type { UserEventPublisher } from "./events";
 import { openApiDocument } from "./openapi";
 import { createUsersRouter } from "./routes/users";
 import { createUserIntegrationRouter } from "./routes/user-integration";
+import type { EmailSender } from "./email";
 
-export function createApp(eventPublisher?: UserEventPublisher) {
+export function createApp(eventPublisher?: UserEventPublisher, emailSender?: EmailSender) {
   const app = express();
 
   app.disable("x-powered-by");
@@ -28,7 +29,7 @@ export function createApp(eventPublisher?: UserEventPublisher) {
     }),
   );
 
-  app.use("/api/v1/user", createUsersRouter(undefined, eventPublisher));
+  app.use("/api/v1/user", createUsersRouter(emailSender, eventPublisher));
   app.use("/api/v1/user", createUserIntegrationRouter());
 
   app.use((_request, response) => {
