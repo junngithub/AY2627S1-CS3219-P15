@@ -16,6 +16,8 @@ Owns user registration, verification, authentication, profile status, account li
 
 Email and Telegram verification, password recovery/change, and account deletion are implemented. Order can look up Telegram handles through a service-authenticated endpoint. An audited admin verification override is available for non-production load tests. Email delivery still uses the development logger. Telegram uses a real verification bot when configured, or a development logger locally without a bot. Account escalation and friendship management remain to be implemented.
 
+A deployment-only first-admin bootstrap command is available. It promotes an explicitly selected verified account; it is not an HTTP endpoint and never runs automatically.
+
 ## Swagger API documentation
 
 While the User Service is running, open:
@@ -316,6 +318,55 @@ Returns `202 { message, scheduledDeletionAt }`. The deadline is six calendar mon
 
 Correct-password login before the deadline cancels deletion and creates a new session; old sessions remain revoked. Login and authorization reject an account whose deadline has passed, even if the cleanup worker has not run yet. The worker runs every `USER_DELETION_SWEEP_INTERVAL_SECONDS` (default 3600), removes up to 100 expired accounts per run, and uses database locks to coordinate with login and other workers. User-owned sessions, OTPs, challenges and verification outbox rows are removed through foreign-key cascades. A minimal audit trail stores UUIDs/action/reason, not profile fields. Other services retain their own records; no unagreed cross-service deletion event is invented here.
 
+## First-admin bootstrap (deployment only)
+
+This resolves the initial setup problem: normal Admin APIs require an existing admin, but a fresh User database has none. The privileged deployment operator uses this command to promote a specific existing user. The command does not call Admin Service, create an account, bypass verification, or expose a public/internal HTTP endpoint. Normal signup always creates an ordinary user.
+
+1. Have the intended administrator register and complete both email and Telegram verification. Obtain that account's UUID from signup or authenticated `GET /api/v1/user/me`.
+2. Deploy/rebuild the updated User image and apply existing migrations, including `UserAuditLog`. No new migration is required by bootstrap itself.
+3. Confirm the environment/database and exact user UUID with the deployment owner. Only an operator with approved container-exec/database access should run the command. Do not expose execution through a web form or ordinary user's token.
+4. Replace `REPLACE_WITH_USER_UUID` below with that UUID and run **once in the intended environment**.
+
+Local Docker Compose, from `user-service` with the updated service container running:
+
+```powershell
+docker compose exec -T user-service node dist/bootstrap-admin.js --user-id "REPLACE_WITH_USER_UUID" --confirm
+```
+
+Kubernetes, using the approved namespace and deployment access:
+
+```text
+kubectl -n <namespace> exec deployment/user -- node dist/bootstrap-admin.js --user-id <user-uuid> --confirm
+```
+
+For a compiled host run, `npm run bootstrap:admin -- --user-id <user-uuid> --confirm` uses `DATABASE_URL` from the process environment or the ignored `.env`. Check the database target before using it. Prefer execution inside the intended deployment to avoid pointing at the wrong database. Do not paste database credentials into chat or commit them.
+
+Safe help, which does not change any account:
+
+```powershell
+npm.cmd run build
+node dist/bootstrap-admin.js --help
+```
+
+The command requires explicit `--confirm`. It refuses missing/invalid UUIDs, missing users, unverified users, locked/suspended users and accounts with deletion requested or scheduled. It also refuses if **any** admin already exists, including an inactive one, or if a `FIRST_ADMIN_BOOTSTRAPPED` audit marker exists. The marker remains after account deletion, so this is not an automatic account-recovery backdoor. Recovery after lost admin access needs a separate privileged, reviewed procedure.
+
+Promotion, revocation of the account's existing sessions and outstanding password-reset links, and the audit record commit in one transaction. Failure rolls back the whole change. Concurrent commands coordinate using the same database advisory lock as last-admin lifecycle checks, so only one can succeed. Future role-changing operations must use `lockAdminRoleChanges` as well. Names, password hashes, email/Telegram verification and other users are unchanged; the command does not publish verification events or award credits.
+
+Audit action: `FIRST_ADMIN_BOOTSTRAPPED`, with target UUID, reason and time. `actorUserId` is null because this is an out-of-band deployment operation, not an authenticated application admin; retain platform access logs to identify the human operator. Success/help exits `0`; rejected setup or database failure exits nonzero, without printing connection credentials. Successful output includes the target UUID and role, not profile or password fields.
+
+After success, the promoted account must **sign in again** using its existing password. `/api/v1/user/internal/authorize` then returns `isAdmin: true` and `permittedAction: true`. This fixes first-admin creation only: Admin Service must still use the agreed authorization URL/fields, and normal User-side role/search/suspension APIs remain separate integration work. There is no new bootstrap API row to add to the shared contract.
+
+### Isolated bootstrap integration test
+
+With local development PostgreSQL running on port 5554:
+
+```powershell
+npm.cmd run build
+npm.cmd run test:integration:admin-bootstrap
+```
+
+The test creates its own uniquely named database, applies migrations, runs the real compiled CLI, tests rejection, atomic rollback, fresh admin login and concurrent processes, then drops only its disposable database. It does not promote any account in the normal `user_db`, send email/Telegram messages, or start the real service/bot. It requires permission to create/drop temporary databases on that local development server; never point this fixture at a shared or production database.
+
 ## New integration endpoints
 
 Copy these rows into the shared API contract; keep the standard `{ error, code }` convention.
@@ -351,7 +402,7 @@ This sets missing email/Telegram verification timestamps on synthetic non-produc
 
 It defaults to `404` unless `ENABLE_TEST_VERIFICATION=true` and `APP_ENV` is explicitly a permitted non-production environment (`local`, `development`, `dev`, `test`, `staging`, `stg`). When `APP_ENV` is absent it falls back to `NODE_ENV`; production/unknown environments remain disabled. Runtime Node images may use `NODE_ENV=production` even in non-production clusters, so set the real environment explicitly with `APP_ENV`. Never enable this override in production. The normal signup domain/password rules still apply to synthetic users.
 
-Admin Service must forward its administrator's real `Authorization` header when calling this endpoint. Fake `admin-*` tokens and caller-supplied identity headers do not authenticate an admin. A real admin account must be seeded through the team's privileged deployment process; no public first-admin shortcut is introduced. The optional inverse operation is deliberately not added because reversing verification/credits needs a separate agreed workflow.
+Admin Service must forward its administrator's real `Authorization` header when calling this endpoint. Fake `admin-*` tokens and caller-supplied identity headers do not authenticate an admin. Use the deployment-only first-admin bootstrap command above to establish the first real admin; this test-verification endpoint does not grant roles. No public first-admin shortcut is introduced. The optional inverse operation is deliberately not added because reversing verification/credits needs a separate agreed workflow.
 
 ### Infrastructure and Admin Service integration review
 
