@@ -37,6 +37,14 @@ services:
       ORDER_USER_LOOKUP_TOKEN: ${ORDER_USER_LOOKUP_TOKEN:-}
       ENABLE_TEST_VERIFICATION: ${ENABLE_TEST_VERIFICATION:-false}
       USER_DELETION_SWEEP_INTERVAL_SECONDS: ${USER_DELETION_SWEEP_INTERVAL_SECONDS:-3600}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-development}
+      SES_FROM_EMAIL: ${SES_FROM_EMAIL:-}
+      AWS_REGION: ${AWS_REGION:-ap-southeast-1}
+      # Optional temporary AWS credentials for local SES testing only.
+      # No host AWS directory is mounted or copied into the image.
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
     depends_on:
       db:
         condition: service_healthy

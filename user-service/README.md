@@ -14,7 +14,7 @@ Owns user registration, verification, authentication, profile status, account li
 - Interactive Swagger/OpenAPI documentation
 - Docker Compose configuration for the service and its own PostgreSQL database
 
-Email and Telegram verification, password recovery/change, and account deletion are implemented. Order can look up Telegram handles through a service-authenticated endpoint. An audited admin verification override is available for non-production load tests. Email delivery still uses the development logger. Telegram uses a real verification bot when configured, or a development logger locally without a bot. Account escalation and friendship management remain to be implemented.
+Email and Telegram verification, password recovery/change, and account deletion are implemented. Order can look up Telegram handles through a service-authenticated endpoint. An audited admin verification override is available for non-production load tests. Email delivery supports AWS SES when configured, with a development logger for local work. Local frontend signup, real SES OTP delivery, email/Telegram verification, login and password recovery were manually exercised on 20 October 2026; deployed-environment configuration and integration still need testing. Telegram uses a real verification bot when configured, or a development logger locally without a bot. Account escalation and friendship management remain to be implemented.
 
 A deployment-only first-admin bootstrap command is available. It promotes an explicitly selected verified account; it is not an HTTP endpoint and never runs automatically.
 
@@ -79,7 +79,7 @@ Content-Type: application/json
 }
 ```
 
-In development, the OTP is printed in the User Service log. A real email provider has not been selected yet.
+With `EMAIL_PROVIDER=ses`, SES sends the OTP to the registered NUS address. With local `EMAIL_PROVIDER=development`, it is printed in the User Service log instead. See the SES setup below. Signup returns a sanitized `503 EMAIL_DELIVERY_FAILED` if SES rejects the request, or `503 EMAIL_NOT_CONFIGURED` if email is disabled. The account can already have been saved and remains unverified: use resend-verification after resolving delivery, rather than repeating signup.
 
 ### Resend verification OTP
 
@@ -92,7 +92,7 @@ Content-Type: application/json
 }
 ```
 
-The response does not reveal whether an account exists.
+The response does not reveal whether an account exists. A supplied email receives the same `202` even when sending fails; the service logs a sanitized failure and a new request is needed after recovery.
 
 ### Forgot/reset password
 
@@ -103,7 +103,69 @@ Content-Type: application/json
 {"email":"student@u.nus.edu"}
 ```
 
-The service always responds with `202` for a supplied email, whether or not the account exists. In development, it prints a reset link to the User Service log. The link points to `FRONTEND_BASE_URL/reset-password?token=...`; set `FRONTEND_BASE_URL` to the deployed frontend origin outside local development. Links expire after 30 minutes by default and a new request invalidates older links.
+The service responds with the same `202` for a supplied email whether or not the account exists, including when email sending fails. SES sends the link when configured; development mode prints it to the User Service log. The link points to `FRONTEND_BASE_URL/reset-password?token=...`; set `FRONTEND_BASE_URL` to the deployed frontend origin outside local development. Links expire after 30 minutes by default and a new request invalidates older links.
+
+### Email delivery: AWS SES
+
+Only User Service sends account emails. No database migration, frontend change or new public endpoint is required. The official AWS SDK uses its default credential chain; no AWS keys, Gmail password or SMTP password are embedded in the application.
+
+| Setting | Meaning |
+| --- | --- |
+| `EMAIL_PROVIDER=ses` | Send OTPs and reset links using SES API v2. |
+| `SES_FROM_EMAIL` | One bare sender address verified in the selected AWS account and region. Not the recipient domain restriction. |
+| `AWS_REGION=ap-southeast-1` | Singapore; must match the verified SES identities. |
+| `FRONTEND_BASE_URL` | Reachable frontend origin for password-reset links. |
+| `EMAIL_PROVIDER=development` | Local/test only: logs OTPs/reset links. Rejected outside `NODE_ENV=development/test`. |
+| `EMAIL_PROVIDER=disabled` | No sending or secret logging. Default outside development/test if the provider is unset; auth/profile endpoints can still run. |
+
+Local development/test defaults to the development provider for compatibility. Selecting SES never falls back to logging on errors. Startup logs the provider name; SES acceptance/failure logs never contain addresses, OTPs, reset URLs or raw AWS errors. SES acceptance is not proof of final delivery; check the inbox and bounce feedback.
+
+#### Local setup, step by step
+
+1. In SES Singapore, verify the sender. In sandbox mode, also verify every intended demo recipient. A Gmail sender has been tested manually, but we cannot authenticate `gmail.com` for SES: delivery can still be filtered/rejected. Prefer a team-controlled domain with DKIM for production. Request SES production access in Singapore before sending to unverified recipients; approval is separate from IAM permissions.
+2. Edit the existing ignored `user-service/.env` locally; do not replace it or erase existing bot/database settings. Set:
+
+   ```dotenv
+   EMAIL_PROVIDER=ses
+   SES_FROM_EMAIL=YOUR_VERIFIED_SENDER@gmail.com
+   AWS_REGION=ap-southeast-1
+   FRONTEND_BASE_URL=http://localhost:5173
+   ```
+
+3. Supply AWS access securely. For a host Node run, use an AWS CLI v2 SSO profile (`aws configure sso`, `aws sso login --profile <profile>`, then set `AWS_PROFILE` in the process environment), or short-lived credentials. Do not create permanent IAM keys just for this demo. For the local Compose container, the host's console login/profile is not automatically available. Obtain temporary programmatic credentials from the approved AWS access portal/profile, if permitted, and put **all three** values (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`) only in the ignored `.env`. Compose forwards these at runtime, not image-build time. Never paste them into chat or run a configuration dump that displays them. Temporary values expire; refresh them when needed. If the portal does not offer programmatic access, ask the infrastructure owner rather than weakening account policy.
+4. The AWS principal needs `ses:SendEmail` scoped to the approved identity, e.g. `arn:aws:ses:ap-southeast-1:<account-id>:identity/<verified-sender-address>`. The infrastructure owner must check IAM and university organization restrictions. Console sending success does not prove the container has permission. AWS region/account must match the identities; sandbox restrictions still apply.
+5. From `user-service`, rebuild/recreate the service with `docker compose up -d --build user-service`. This also starts its database if needed. **Only one running process may poll the configured Telegram bot**; do not also start a host copy using that bot. To work without starting its poller, set `TELEGRAM_POLLING_ENABLED=false` locally before starting this email test.
+6. In Swagger (`http://localhost:8080/api-docs`) or the real frontend, sign up using a verified NUS recipient and an unused Telegram handle. Retrieve the OTP from the inbox and submit `/verify-email`. Then request `/forgot-password`, open the emailed link in the frontend and reset the password. Check junk/bounce messages too. This is a live test: perform it only with the recipient owner's approval. If the account already exists, resend its OTP instead of signing up again.
+
+For deployed containers, the infrastructure owner should supply `EMAIL_PROVIDER`, `SES_FROM_EMAIL`, `AWS_REGION` and the frontend origin via environment configuration, and grant the workload an email-only IAM role (or approved secret mechanism). Do not rely on a developer's login or temporary local credentials for an always-running deployment. No cluster/IAM/SES settings are changed by this code patch.
+
+#### Local acceptance evidence - 20 October 2026
+
+- A single explicitly approved test email was sent from the local User Service container through SES Singapore; the recipient confirmed inbox delivery.
+- The operator then used the real local frontend to sign up with a sandbox-verified NUS recipient, receive/submit the SES email OTP, complete Telegram verification through the real bot and log in.
+- The operator confirmed that the frontend forgot-password/reset flow worked using the real emailed reset link.
+- Telegram polling was temporarily disabled for the isolated email check, then re-enabled for the full onboarding test. Keep exactly one active poller per bot.
+- These are manual local acceptance results, separate from the automated fake-SES tests. They do not prove deployed credentials, the gateway, Kafka-to-Credit allocation or the complete Order workflow. No personal email addresses, bot tokens, passwords or AWS credentials are recorded here.
+
+#### Failure handling and limitations
+
+- The SDK makes at most three attempts per call, with a 3-second connection timeout and a 10-second request timeout per attempt. A network timeout may mean SES accepted a message even though the response was lost, so duplicate emails are possible; codes/links remain subject to existing expiry/single-use checks.
+- Signup delivery failures return sanitized `503`; the saved account stays unverified. Resend and password recovery keep their generic `202` even on delivery failures to avoid account enumeration. After resolving the issue, request a new code/link. Neither sending nor receiving an email automatically verifies a user.
+- Email sending is synchronous and is **not** the durable Kafka verification outbox. A failed send is not queued across restarts; the user must request another message. Durable email jobs, application-level resend throttling and bounce/complaint automation remain production-hardening work. SES quotas apply, including the sandbox limit of one email per second; do not use real email for load-test users.
+- Login-lockout notification emails are not implemented by this patch.
+- Troubleshooting: `CredentialsProviderError` usually means missing AWS access; `AccessDeniedException` means permission/policy failure; `MessageRejected` may indicate identity/sandbox issues; `TooManyRequestsException` means throttling. Raw errors are deliberately not logged. Inspect AWS configuration with the infrastructure owner without exposing secrets.
+
+References: [SES SendEmail](https://docs.aws.amazon.com/ses/latest/APIReference-V2/API_SendEmail.html), [AWS SDK credentials](https://docs.aws.amazon.com/sdk-for-javascript/v3/developer-guide/setting-credentials-node.html), [SES sandbox](https://docs.aws.amazon.com/ses/latest/dg/request-production-access.html), [DMARC alignment](https://docs.aws.amazon.com/ses/latest/dg/send-email-authentication-dmarc.html).
+
+#### Automated email checks (no real messages)
+
+```powershell
+npm.cmd test
+npm.cmd run build
+npm.cmd run test:integration:email
+```
+
+The unit tests use fake SES clients, including real SDK serialization/signing with an in-memory HTTP handler. The integration test uses its own randomly named local database on port `5554`, applies migrations, and drops only that database afterward. It tests signup failures/recovery via resend, OTP validation, password reset, session revocation and generic delivery-failure responses without sending email/Telegram or modifying normal accounts. Start only the existing local database with `docker compose start db` if necessary. Other local Compose onboarding/reset scripts now refuse SES mode before creating any synthetic accounts.
 
 ```http
 POST /api/v1/user/reset-password
@@ -301,8 +363,9 @@ See [API_CONTRACT_UPDATES.txt](API_CONTRACT_UPDATES.txt) for exact edits to the 
 - Add authenticated `POST /api/v1/user/request-telegram-verification`, no body, response `202 { telegramBotUrl, expiresAt }`; errors include `401`, `429`, and `503`.
 - Keep `POST /api/v1/user/verify-telegram` authenticated with `{ otp }`, response `{ status, nextSteps }`. Keep the existing password recovery and profile password endpoints.
 - Infrastructure and Credit Service owners: run the normal migration Job with the new image, then test that Credit grants 20 credits only after both verification steps. The event format is unchanged; delivery now retries from the database.
-- Frontend owner: the earlier proposed frontend changes are isolated on the already-pushed `user-service-frontend-integration` branch for review. Signup `name` and email OTP requests are now aligned on `main`; review the remaining Telegram verification/status screens against the latest frontend before bringing them over. The current authorization-route migration changes nginx proxy configuration and documentation only, not React pages or forms.
-- Still outstanding: real email delivery (including the login-lockout email), account escalation to Admin, Admin search/role/suspension endpoints and integration, and friendships. The complete frontend/Order/Credit/Admin journey has not been demonstrated by these service-level tests. The latest fetched `main` also has new frontend changes; the older isolated frontend proposal must be reconciled with those before merging.
+- Frontend owner: the current frontend's signup, email verification, Telegram verification, login and password recovery were exercised locally on 20 October 2026 without frontend source changes. The older `user-service-frontend-integration` proposal should not be merged wholesale over the current pages. The reported logout-control discoverability issue remains for frontend review.
+- Infrastructure owner: rebuild the User image and configure `EMAIL_PROVIDER=ses`, `SES_FROM_EMAIL`, `AWS_REGION=ap-southeast-1` and the deployed `FRONTEND_BASE_URL`. Supply approved workload AWS access with `ses:SendEmail` scoped to the sender identity, not a developer's expiring local credentials. Configure bot secrets and one poller per bot as well. SES is still sandboxed: verify demo recipients in the same account/region. Do not enable development email logging in production.
+- Still outstanding: deployed-environment email configuration/testing, login-lockout notification email, account escalation to Admin, Admin search/role/suspension endpoints and integration, and friendships. The complete frontend/Order/Credit/Admin journey has not been demonstrated by the local onboarding and service-level tests.
 
 ## Account deletion (F5)
 

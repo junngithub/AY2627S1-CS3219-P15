@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { testVerificationAllowed } from "./integration-access";
+import { readEmailConfiguration } from "./email-config";
 
 function positiveInteger(name: string, fallback: number): number {
   const parsed = Number.parseInt(process.env[name] ?? "", 10);
@@ -30,6 +31,7 @@ const kafkaBrokers = (process.env.KAFKA_BROKERS ?? "")
 export const config = {
   nodeEnv,
   appEnv,
+  email: readEmailConfiguration(process.env),
   orderUserLookupToken: process.env.ORDER_USER_LOOKUP_TOKEN ?? "",
   testVerificationEnabled: testVerificationAllowed(process.env.ENABLE_TEST_VERIFICATION, appEnv),
   deletionSweepIntervalSeconds: positiveInteger("USER_DELETION_SWEEP_INTERVAL_SECONDS", 3600),
