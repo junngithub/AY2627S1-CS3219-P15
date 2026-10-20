@@ -92,13 +92,37 @@ class OrderQueryServiceTest {
         assertEquals(1, service.mine(requester, 0, 20).content().size());
         assertTrue(service.mine(requester, 0, 0).content().isEmpty());
 
-        when(orders.findByCourierIdAndStatusInOrderByUpdatedAtDesc(
+        when(orders.findByCourierIdAndStatusInOrderByRequestTimeDesc(
                 eq("22222222-2222-2222-2222-222222222222"),
                 eq(List.of(OrderStatus.DELIVERED, OrderStatus.ACKNOWLEDGED, OrderStatus.UNACKNOWLEDGED, OrderStatus.COMPLETED)),
                 any()))
                 .thenReturn(new PageImpl<>(List.of(order())));
-        assertEquals(1, service.deliveries(courier, 0, 20).content().size());
-        assertTrue(service.deliveries(courier, 0, 0).content().isEmpty());
+        assertEquals(1, service.pastDeliveries(courier, 0, 20).content().size());
+        assertTrue(service.pastDeliveries(courier, 0, 0).content().isEmpty());
+
+        when(orders.findByCourierIdAndStatusInOrderByRequestTimeDesc(
+                eq("22222222-2222-2222-2222-222222222222"),
+                eq(List.of(OrderStatus.ACCEPTED, OrderStatus.COLLECTED, OrderStatus.ESCALATED, OrderStatus.UNDER_REVIEW)),
+                any()))
+                .thenReturn(new PageImpl<>(List.of(order())));
+        assertEquals(1, service.activeDeliveries(courier, 0, 20).content().size());
+        assertTrue(service.activeDeliveries(courier, 0, 0).content().isEmpty());
+
+        when(orders.findByRequesterIdAndStatusInOrderByRequestTimeDesc(
+                eq("11111111-1111-1111-1111-111111111111"),
+                eq(List.of(OrderStatus.ACCEPTED, OrderStatus.COLLECTED, OrderStatus.DELIVERED, OrderStatus.ESCALATED, OrderStatus.UNDER_REVIEW)),
+                any()))
+                .thenReturn(new PageImpl<>(List.of(order())));
+        assertEquals(1, service.activeRequests(requester, 0, 20).content().size());
+        assertTrue(service.activeRequests(requester, 0, 0).content().isEmpty());
+
+        when(orders.findByRequesterIdAndStatusInOrderByRequestTimeDesc(
+                eq("11111111-1111-1111-1111-111111111111"),
+                eq(List.of(OrderStatus.ACKNOWLEDGED, OrderStatus.UNACKNOWLEDGED, OrderStatus.COMPLETED, OrderStatus.EXPIRED, OrderStatus.CANCELLED)),
+                any()))
+                .thenReturn(new PageImpl<>(List.of(order())));
+        assertEquals(1, service.pastRequests(requester, 0, 20).content().size());
+        assertTrue(service.pastRequests(requester, 0, 0).content().isEmpty());
 
         when(suppliers.requirePlace(eq("nus-coop"), any())).thenReturn(new Place("nus-coop", "NUS Co-op", 1.0, 103.0));
         when(suppliers.requirePlace(eq("cool-spot"), any())).thenReturn(new Place("cool-spot", "Cool Spot", 1.0, 103.0));

@@ -1,0 +1,29 @@
+stateDiagram-v2
+    direction TB
+    [*] --> CREATED: requester creates
+
+    CREATED --> ACCEPTED: courier accepts
+    CREATED --> CANCELLED: requester cancels
+    CREATED --> EXPIRED: acceptance time reached
+
+    ACCEPTED --> COLLECTED: courier collects, with photo
+    ACCEPTED --> CREATED: courier releases, or collection window ends
+
+    COLLECTED --> DELIVERED: courier delivers, with photo
+    COLLECTED --> ACKNOWLEDGED: requester acknowledges
+    COLLECTED --> ESCALATED: requester escalates, or delivery deadline missed
+
+    DELIVERED --> ACKNOWLEDGED: requester acknowledges
+    DELIVERED --> ESCALATED: requester escalates
+    DELIVERED --> UNACKNOWLEDGED: acknowledgement window ends
+
+    ACKNOWLEDGED --> COMPLETED: 7 days after settlement
+    UNACKNOWLEDGED --> COMPLETED: 7 days after settlement
+
+    ESCALATED --> UNDER_REVIEW: admin review started
+    ESCALATED --> COMPLETED: admin case resolved
+    UNDER_REVIEW --> COMPLETED: admin case resolved
+
+    CANCELLED --> [*]
+    EXPIRED --> [*]
+    COMPLETED --> [*]
