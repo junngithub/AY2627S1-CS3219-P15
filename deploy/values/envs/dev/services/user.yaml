@@ -9,7 +9,10 @@ env:
   # verified address (infra/nonprod/aws/ses.tf, node-permissions.tf). While SES is
   # in the sandbox, only verified recipients get mail.
   EMAIL_PROVIDER: ses
-  SES_FROM_EMAIL: e1398329@u.nus.edu
+  # Not u.nus.edu: its DMARC policy is p=reject, so mail SES sends "from" it
+  # is refused (550 5.7.509). gmail.com is p=none: delivered, often to Junk.
+  # A domain we own, DKIM-verified in SES, would fix that.
+  SES_FROM_EMAIL: donleehh420@gmail.com
   AWS_REGION: ap-southeast-1
   # Until the Telegram bot exists, an admin can mark users verified
   # (POST /api/v1/user/admin/users/{id}/verify). Never in prod.
