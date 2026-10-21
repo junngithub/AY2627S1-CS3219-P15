@@ -17,8 +17,8 @@ sequenceDiagram
     Supplier-->>Orders: approved place
     Orders->>Rating: rating for requester
     Rating-->>Orders: 5.0
-    Orders->>Credit: POST /api/v1/credit/reserve
+    Orders->>Credit: POST /api/v1/credit/internal/reserve
     Credit-->>Orders: reserved
     Orders->>DB: insert CREATED order, log, alert, status outbox
     Orders-->>Requester: 201 CREATED
-    Note over Orders,Credit: If the insert fails, POST /api/v1/credit/release returns the reservation
+    Note over Orders,Credit: If the insert fails, POST /api/v1/credit/internal/release returns the reservation

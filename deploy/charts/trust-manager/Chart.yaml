@@ -1,0 +1,13 @@
+apiVersion: v2
+name: trust-manager
+description: >-
+  Wrapper around the official trust-manager chart (vendored under charts/). One
+  per cluster, namespace cert-manager, installed after charts/cert-manager (its
+  webhook certificate is a cert-manager Certificate). Publishes Linkerd's trust
+  anchor to the linkerd namespace (ADR-0012).
+type: application
+version: 0.1.0
+dependencies:
+  - name: trust-manager
+    version: v0.25.0
+    repository: oci://quay.io/jetstack/charts

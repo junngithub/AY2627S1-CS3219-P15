@@ -1,0 +1,132 @@
+# Build changed services for dev, push them to ECR as foc/<service>:<git sha>,
+# then commit the new tags to deploy/values/envs/dev/services/; Argo CD syncs
+# dev from there (ADR-0005). Promotion to stg/prod copies a tag in a PR.
+name: deploy-dev
+
+# Manual only for now: the NUS AWS account's service control policy denies
+# GitHub OIDC (sts:AssumeRoleWithWebIdentity), so the AWS login step fails.
+# Deploys run from a laptop (infra/docs/cloud-dev.md, step 6). In an account
+# without that limit, restore the push trigger:
+#   push: { branches: [main], paths: ["*-service/**", tools/connectivity-stub/**, .github/workflows/deploy-dev.yml] }
+on:
+  workflow_dispatch:
+    inputs:
+      services:
+        description: "Services to build, space-separated (blank = every image dev runs)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write # the tag-bump commit
+  id-token: write # OIDC → AWS role foc-ci (infra/global/github-oidc)
+
+# One deploy at a time, so tag-bump commits don't race.
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      images: ${{ steps.plan.outputs.images }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: plan
+        env:
+          REQUESTED: ${{ inputs.services }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          # Same rule as deploy/push-local.sh: every service with a dev values
+          # file runs its own image, unless it overrides image.name (the stub).
+          services=() stub=false
+          for f in deploy/values/envs/dev/services/*.yaml; do
+            svc="$(basename "$f" .yaml)"
+            if [[ "$(yq '.image.name // ""' "$f")" == foc/connectivity-stub ]]; then stub=true; else services+=("$svc"); fi
+          done
+
+          if [[ -n "$REQUESTED" ]]; then
+            wanted=($REQUESTED)
+          elif [[ "${{ github.event_name }}" == workflow_dispatch || -z "$BEFORE" || "$BEFORE" =~ ^0+$ ]]; then
+            wanted=("${services[@]}"); $stub && wanted+=(connectivity-stub)
+          else
+            changed="$(git diff --name-only "$BEFORE" "$GITHUB_SHA")"
+            wanted=()
+            for svc in "${services[@]}"; do grep -q "^$svc-service/" <<<"$changed" && wanted+=("$svc"); done
+            if $stub && grep -q '^tools/connectivity-stub/' <<<"$changed"; then wanted+=(connectivity-stub); fi
+          fi
+
+          images='[]'
+          for svc in ${wanted[@]+"${wanted[@]}"}; do
+            if [[ "$svc" == connectivity-stub ]]; then
+              ctx=tools/connectivity-stub image=foc/connectivity-stub
+              tag="$(jq -r .version "$ctx/package.json")" bump=false # referenced by version, not SHA
+            else
+              [[ -f "deploy/values/envs/dev/services/$svc.yaml" ]] || { echo "::error::no deploy/values/envs/dev/services/$svc.yaml"; exit 1; }
+              ctx="$svc-service" image="$(yq '.image.name' "deploy/values/services/$svc.yaml")"
+              tag="$GITHUB_SHA" bump=true
+            fi
+            images="$(jq -c --arg s "$svc" --arg c "$ctx" --arg i "$image" --arg t "$tag" --argjson b "$bump" \
+              '. + [{svc: $s, context: $c, image: $i, tag: $t, bump: $b}]' <<<"$images")"
+          done
+          echo "images=$images" >> "$GITHUB_OUTPUT"
+          echo "Building: $images"
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.images != '[]'
+    # Native arm64: the EKS nodes are Graviton (infra/nonprod/aws/eks.tf).
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.images) }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: cat .github/cloud/dev.env | grep -v '^#' >> "$GITHUB_ENV"
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Build and push
+        env:
+          REF: ${{ steps.ecr.outputs.registry }}/${{ matrix.image }}:${{ matrix.tag }}
+        run: |
+          # Tags are immutable: an existing one is already the right image.
+          if aws ecr describe-images --repository-name "${{ matrix.image }}" --image-ids imageTag="${{ matrix.tag }}" >/dev/null 2>&1; then
+            echo "$REF exists, skipping"; exit 0
+          fi
+          docker build -t "$REF" "${{ matrix.context }}"
+          docker push "$REF"
+          # The pre-deploy migration Job's image (ADR-0011), as in deploy/push-local.sh.
+          if grep -qiE '^FROM .* AS migrate$' "${{ matrix.context }}/Dockerfile"; then
+            docker build --target migrate -t "$REF-migrate" "${{ matrix.context }}"
+            docker push "$REF-migrate"
+          fi
+
+  bump:
+    needs: [plan, build]
+    if: contains(needs.plan.outputs.images, '"bump":true')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - env:
+          IMAGES: ${{ needs.plan.outputs.images }}
+        run: |
+          for svc in $(jq -r '.[] | select(.bump) | .svc' <<<"$IMAGES"); do
+            yq -i ".image.tag = \"$GITHUB_SHA\"" "deploy/values/envs/dev/services/$svc.yaml"
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add deploy/values/envs/dev/services
+          git diff --cached --quiet && exit 0
+          git commit -m "chore(dev): deploy $(jq -r '[.[] | select(.bump) | .svc] | join(" ")' <<<"$IMAGES") at ${GITHUB_SHA::7} [skip ci]"
+          # Someone may have pushed meanwhile: rebase and retry.
+          for i in 1 2 3; do git push && exit 0; git pull --rebase origin main; done
+          exit 1

@@ -1,0 +1,17 @@
+# gp3 (EBS CSI add-on, infra/<cluster>/aws/eks.tf): cheaper and faster than
+# EKS's gp2. WaitForFirstConsumer creates the volume in the pod's AZ.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ .Values.storageClass.name }}
+  {{- if .Values.storageClass.default }}
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+  {{- end }}
+provisioner: ebs.csi.aws.com
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+reclaimPolicy: Delete
+parameters:
+  type: gp3
+  encrypted: "true"

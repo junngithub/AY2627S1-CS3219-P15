@@ -48,8 +48,28 @@ spec:
                 secretKeyRef:
                   name: {{ include "foc-service.name" . }}-db # created by charts/foc-database
                   key: DATABASE_URL
+            {{- if .Values.databaseCa.configMap }}
+            - name: NODE_EXTRA_CA_CERTS
+              value: /etc/db-ca/ca.crt
+          volumeMounts:
+            - name: db-ca
+              mountPath: /etc/db-ca
+              readOnly: true
+            {{- end }}
           resources:
             {{- toYaml .Values.migrate.resources | nindent 12 }}
           securityContext:
             allowPrivilegeEscalation: false
+      {{- with .Values.databaseCa }}
+      {{- if .configMap }}
+      volumes:
+        # Not created by this release, so it exists before this hook runs.
+        - name: db-ca
+          configMap:
+            name: {{ .configMap }}
+            items:
+              - key: {{ .key }}
+                path: ca.crt
+      {{- end }}
+      {{- end }}
 {{- end }}

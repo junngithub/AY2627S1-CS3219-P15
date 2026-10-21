@@ -1,0 +1,17 @@
+# Values passed to the vendored chart.
+external-secrets:
+  installCRDs: true
+  serviceAccount:
+    name: external-secrets
+  # AWS credentials: the node role (infra/nonprod/aws/node-permissions.tf, ADR-0013).
+  resources:
+    requests: { cpu: 10m, memory: 64Mi }
+    limits: { memory: 256Mi }
+  webhook:
+    resources:
+      requests: { cpu: 10m, memory: 32Mi }
+      limits: { memory: 128Mi }
+  certController:
+    resources:
+      requests: { cpu: 10m, memory: 32Mi }
+      limits: { memory: 128Mi }

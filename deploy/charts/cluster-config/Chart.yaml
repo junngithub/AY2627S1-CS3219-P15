@@ -1,0 +1,9 @@
+apiVersion: v2
+name: cluster-config
+description: >-
+  Per-cluster AWS glue that isn't part of any one env's release: the default
+  gp3 StorageClass, one Secrets Manager store per env, the RDS CA bundle in
+  each env namespace, and the TargetGroupBinding that puts each env's Envoy
+  proxies behind its NLB. Cloud clusters only (ADR-0013).
+type: application
+version: 0.1.0

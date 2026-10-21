@@ -16,3 +16,8 @@ env:
 migrate:
   enabled: true # runs before each deploy (ADR-0011); image: the Dockerfile's `migrate` stage
   command: ["npm", "run", "db:migrate"]
+mesh: # who may call credit (ADR-0012)
+  callers: [gateway] # /api/v1/credit/me/... for the logged-in user
+  internal:
+    # Order's reserve/release; nobody else may move credits.
+    - { path: /api/v1/credit/internal, callers: [order] }

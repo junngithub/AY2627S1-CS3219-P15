@@ -20,6 +20,13 @@ application-local.properties
 # Test coverage
 coverage/
 
+# TypeScript incremental build cache
+*.tsbuildinfo
+
+# draw.io desktop: unsaved-edit temp files and backups
+.$*.dtmp
+*.drawio.bkp
+
 # Environment / secrets
 .env
 .env.local

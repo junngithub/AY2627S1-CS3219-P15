@@ -6,7 +6,7 @@ sequenceDiagram
 
     Caller->>Orders: POST /api/v1/orders/{orderId}/cancel
     alt requester and status is CREATED
-        Orders->>Credit: POST /api/v1/credit/release
+        Orders->>Credit: POST /api/v1/credit/internal/release
         Credit-->>Orders: released
         Orders->>DB: CANCELLED, log, alert, status outbox
         Orders-->>Caller: 200 CANCELLED

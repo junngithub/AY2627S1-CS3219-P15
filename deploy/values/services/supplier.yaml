@@ -9,3 +9,5 @@ database:
 migrate:
   enabled: true # runs before each deploy (ADR-0011); image: the Dockerfile's `migrate` stage
   command: ["node_modules/.bin/prisma", "migrate", "deploy"]
+mesh: # who may call supplier (ADR-0012)
+  callers: [gateway, order] # order validates pickup/dropoff locations

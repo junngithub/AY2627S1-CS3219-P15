@@ -1,0 +1,8 @@
+apiVersion: v2
+name: linkerd-identity
+description: >-
+  Linkerd's trust anchor and identity issuer, issued by cert-manager, and the
+  trust bundle trust-manager publishes for Linkerd (ADR-0012). One per cluster;
+  release namespace linkerd. Needs charts/cert-manager and charts/trust-manager.
+type: application
+version: 0.1.0

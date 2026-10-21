@@ -1,3 +1,4 @@
+{{- $dbCa := and .Values.database.enabled .Values.databaseCa.configMap }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -16,7 +17,14 @@ spec:
       annotations:
         # Restart pods when the ConfigMap changes.
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if .Values.mesh.enabled }}
+        # ADR-0012: mesh this pod; refuse callers without a mesh identity
+        # unless a policy (mesh-policy.yaml) allows them.
+        linkerd.io/inject: enabled
+        config.linkerd.io/default-inbound-policy: all-authenticated
+        {{- end }}
     spec:
+      serviceAccountName: {{ include "foc-service.name" . }}
       # Don't inject legacy <SERVICE>_PORT_* variables for every Service in the
       # namespace (e.g. KAFKA_KAFKA_BOOTSTRAP_*), which clash with KAFKA_* config.
       enableServiceLinks: false
@@ -49,6 +57,9 @@ spec:
                 secretKeyRef:
                   name: {{ $ref.secret }}
                   key: {{ $ref.key }}
+                  {{- if $ref.optional }}
+                  optional: true # missing Secret = variable unset, pod still starts
+                  {{- end }}
           {{- end }}
           {{- with .Values.kafka.user }}
             - name: KAFKA_BROKERS
@@ -64,10 +75,25 @@ spec:
                   key: password
             - name: KAFKA_CA_CERT
               value: /etc/kafka/ca/ca.crt
+          {{- end }}
+          {{- if $dbCa }}
+            # Node trusts these CAs on top of its own, so node-postgres can
+            # verify the RDS certificate without code changes.
+            - name: NODE_EXTRA_CA_CERTS
+              value: /etc/db-ca/ca.crt
+          {{- end }}
+          {{- if or .Values.kafka.user $dbCa }}
           volumeMounts:
+            {{- if .Values.kafka.user }}
             - name: kafka-ca
               mountPath: /etc/kafka/ca
               readOnly: true
+            {{- end }}
+            {{- if $dbCa }}
+            - name: db-ca
+              mountPath: /etc/db-ca
+              readOnly: true
+            {{- end }}
           {{- end }}
           {{- with .Values.healthPath }}
           readinessProbe:
@@ -86,8 +112,9 @@ spec:
             {{- toYaml .Values.resources | nindent 12 }}
           securityContext:
             allowPrivilegeEscalation: false
-      {{- if .Values.kafka.user }}
+      {{- if or .Values.kafka.user $dbCa }}
       volumes:
+        {{- if .Values.kafka.user }}
         - name: kafka-ca
           secret:
             # Kafka's TLS certificate authority, created by Strimzi.
@@ -95,4 +122,13 @@ spec:
             items:
               - key: ca.crt
                 path: ca.crt
+        {{- end }}
+        {{- if $dbCa }}
+        - name: db-ca
+          configMap:
+            name: {{ .Values.databaseCa.configMap }}
+            items:
+              - key: {{ .Values.databaseCa.key }}
+                path: ca.crt
+        {{- end }}
       {{- end }}
