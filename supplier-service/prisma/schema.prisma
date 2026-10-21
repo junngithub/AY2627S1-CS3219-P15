@@ -13,6 +13,15 @@ enum SupplierStatus {
   rejected
 }
 
+enum SupplierActionType {
+  created
+  edited
+  approved
+  rejected
+  pending
+  deleted
+}
+
 model Supplier {
   id                  Int            @id @default(autoincrement())
   name                String
@@ -24,10 +33,25 @@ model Supplier {
   startingTime        String
   closingTime         String
   status              SupplierStatus @default(pending)
+  createdByUserId     String?
   createdAt           DateTime       @default(now())
   categories          Category[]     @relation("SupplierCategories")
 
   @@index([status])
+}
+
+// Kept after the supplier row is deleted, so a removal still names the admin.
+model SupplierAction {
+  id           Int                @id @default(autoincrement())
+  supplierId   Int
+  supplierName String
+  action       SupplierActionType
+  actorUserId  String
+  detail       String?
+  createdAt    DateTime           @default(now())
+
+  @@index([supplierId])
+  @@index([actorUserId])
 }
 
 model Category {

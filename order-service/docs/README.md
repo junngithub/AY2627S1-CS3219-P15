@@ -56,7 +56,7 @@ Each due order is handled on its own. One failure is logged and the sweep contin
 
 ![Read endpoints](seq-queries.png)
 
-`/mine` is the requester's orders. `/deliveries/past` is the signed-in courier's delivered and later statuses. `/deliveries/active` is that courier's in-progress work, `/requests/active` is the requester's orders a courier has taken that are still open, and `/requests/past` is the requester's settled requests. Those four lists are newest `requestTime` first and use the same `page` and `size` rules as `/mine`. None of them is ranked by distance.
+`/mine` is the requester's orders. `/deliveries/past` is the signed-in courier's delivered and later statuses. `/deliveries/active` is that courier's in-progress work, `/requests/active` is the requester's open requests, including `CREATED`, and `/requests/past` is the requester's settled requests. Those four lists are newest `requestTime` first and use the same `page` and `size` rules as `/mine`. None of them is ranked by distance.
 
 ## Outbox publish
 

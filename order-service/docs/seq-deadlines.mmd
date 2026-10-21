@@ -1,6 +1,7 @@
 sequenceDiagram
     participant Sweep as Deadline sweeper
     participant Orders as Order service
+    participant Admin as Admin Service
     participant DB as Postgres
     participant Kafka as Kafka
 
@@ -10,7 +11,8 @@ sequenceDiagram
         Sweep->>Orders: CREATED past acceptance expiry
         Orders->>DB: EXPIRED, outbox credit.reservation.return
         Sweep->>Orders: COLLECTED past the delivery deadline
-        Orders->>DB: ESCALATED, outbox admin.escalation.opened
+        Orders->>Admin: POST /api/v1/admin/conflicts
+        Orders->>DB: ESCALATED, log, alert, status outbox
         Sweep->>Orders: DELIVERED past the acknowledgement window
         Orders->>DB: UNACKNOWLEDGED, credit release, rating permission
         Sweep->>Orders: settled 7 days ago

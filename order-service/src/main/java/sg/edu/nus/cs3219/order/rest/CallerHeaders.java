@@ -7,13 +7,12 @@ import java.util.UUID;
 public final class CallerHeaders {
 
     public static final String USER_ID = "X-User-Id";
-    public static final String TELEGRAM = "X-User-Telegram";
     public static final String PERMITTED = "X-Permitted-Action";
 
     private CallerHeaders() {
     }
 
-    public static UserAccount require(String userId, String telegram, String permittedAction) {
+    public static UserAccount require(String userId, String permittedAction) {
         if (userId == null || userId.isBlank()) {
             throw ApiException.unauthorized("Sign in is required");
         }
@@ -26,7 +25,6 @@ public final class CallerHeaders {
         if (permittedAction == null || !"true".equalsIgnoreCase(permittedAction.trim())) {
             throw ApiException.forbidden("This account is not permitted to use orders");
         }
-        String handle = telegram == null ? "" : telegram.trim();
-        return new UserAccount(id.toString(), handle);
+        return new UserAccount(id.toString());
     }
 }

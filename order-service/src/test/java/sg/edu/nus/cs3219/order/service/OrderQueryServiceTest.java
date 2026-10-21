@@ -38,9 +38,9 @@ import static org.mockito.Mockito.when;
 class OrderQueryServiceTest {
 
     private final UUID id = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
-    private final UserAccount requester = new UserAccount("11111111-1111-1111-1111-111111111111", "requester");
-    private final UserAccount courier = new UserAccount("22222222-2222-2222-2222-222222222222", "courier");
-    private final UserAccount other = new UserAccount("33333333-3333-3333-3333-333333333333", "other");
+    private final UserAccount requester = new UserAccount("11111111-1111-1111-1111-111111111111");
+    private final UserAccount courier = new UserAccount("22222222-2222-2222-2222-222222222222");
+    private final UserAccount other = new UserAccount("33333333-3333-3333-3333-333333333333");
     private final Instant now = Instant.parse("2026-10-02T04:00:00Z");
 
     @Mock private OrderRepository orders;
@@ -110,7 +110,7 @@ class OrderQueryServiceTest {
 
         when(orders.findByRequesterIdAndStatusInOrderByRequestTimeDesc(
                 eq("11111111-1111-1111-1111-111111111111"),
-                eq(List.of(OrderStatus.ACCEPTED, OrderStatus.COLLECTED, OrderStatus.DELIVERED, OrderStatus.ESCALATED, OrderStatus.UNDER_REVIEW)),
+                eq(List.of(OrderStatus.CREATED, OrderStatus.ACCEPTED, OrderStatus.COLLECTED, OrderStatus.DELIVERED, OrderStatus.ESCALATED, OrderStatus.UNDER_REVIEW)),
                 any()))
                 .thenReturn(new PageImpl<>(List.of(order())));
         assertEquals(1, service.activeRequests(requester, 0, 20).content().size());

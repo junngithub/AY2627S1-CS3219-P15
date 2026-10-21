@@ -4,7 +4,7 @@ sequenceDiagram
     participant Orders as Order service
     participant DB as Postgres
 
-    Admin->>Kafka: admin.review.started or admin.case.resolved
+    Admin->>Kafka: OrderUnderReview or ConflictResolved
     Kafka->>Orders: eventId, eventType, orderId, caseId
     alt missing field or eventId already stored
         Orders-->>Kafka: ignore, and do not store the event

@@ -1,0 +1,60 @@
+# Postgres, the mock User Service, and the app.
+# Kafka is not started here. Locally there is one broker, the one in
+# order-service/compose.yaml (same idea as credit-service). Start that stack
+# first. This app joins its network and uses the internal listener kafka:29092.
+# From the host, that same broker is localhost:9092.
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: admin_service
+    ports:
+      - "5434:5432"
+    volumes:
+      - admin_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d admin_service"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Stub for User Service so you can test Admin Service in isolation before
+  # the real User Service is ready / wired in. Swap USER_SERVICE_BASE_URL
+  # back to the real thing once it exists.
+  mock-user-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock-user-service
+    ports:
+      - "8090:8000"  # not 8080 — that's reserved for the real User Service
+
+  admin-service:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - default
+      - order-kafka
+    environment:
+      DATABASE_URL: postgresql+asyncpg://admin:admin@db:5432/admin_service
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      USER_SERVICE_BASE_URL: http://mock-user-service:8000
+      # From admin-service/.env (or the shell). Empty key → cases stay ai_failed.
+      AI_PROVIDER_BASE_URL: ${AI_PROVIDER_BASE_URL:-https://generativelanguage.googleapis.com}
+      AI_MODEL: ${AI_MODEL:-gemini-3.8-flash}
+      AI_PROVIDER_API_KEY: ${AI_PROVIDER_API_KEY:-}
+      AI_CALL_TIMEOUT_SECONDS: ${AI_CALL_TIMEOUT_SECONDS:-60}
+    ports:
+      - "8084:8084"
+
+volumes:
+  admin_db_data:
+
+networks:
+  order-kafka:
+    external: true
+    name: order-service_default

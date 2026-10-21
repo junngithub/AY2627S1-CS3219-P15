@@ -2,7 +2,7 @@ sequenceDiagram
     actor Requester
     participant Orders as Order service
     participant Photos as Photo store
-    participant Admin as Admin stub
+    participant Admin as Admin Service
     participant DB as Postgres
 
     Requester->>Orders: POST /api/v1/orders/{orderId}/escalate
@@ -10,7 +10,7 @@ sequenceDiagram
     opt dispute photo attached
         Orders->>Photos: store dispute photo
     end
-    Orders->>Admin: POST /escalations with the order and comment
+    Orders->>Admin: POST /api/v1/admin/conflicts
     Admin-->>Orders: accepted
     Orders->>DB: ESCALATED, dispute text, log, alert, status outbox
     Orders-->>Requester: 200 ESCALATED

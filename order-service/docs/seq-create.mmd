@@ -2,12 +2,15 @@ sequenceDiagram
     actor Requester
     participant Orders as Order service
     participant Supplier as Supplier Service
+    participant Users as User Service
     participant Rating as Rating stub
     participant Credit as Credit Service
     participant DB as Postgres
 
     Requester->>Orders: POST /api/v1/orders
     Orders->>Orders: check expiry and delivery times
+    Orders->>Users: GET /internal/users/{userId}/telegram
+    Users-->>Orders: telegram handle
     Orders->>Supplier: GET /api/v1/supplier/{pickupId}
     Supplier-->>Orders: approved place
     Orders->>Supplier: GET /api/v1/supplier/{dropoffId}
