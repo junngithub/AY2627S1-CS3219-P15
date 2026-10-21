@@ -27,7 +27,7 @@ The dev profile stores photos in the `order-photos` bucket. MinIO is the local S
 
 From an IDE, start Compose, then run the app with the `local` profile.
 
-Open `rest/` in Bruno and select the `local` environment. Each folder has a successful call and a request for each rejected condition. `13 flow` walks one order from create through acknowledge.
+Open `bruno/` in Bruno and select the `local` environment. Each folder has a successful call and a request for each rejected condition. `13 flow` walks one order from create through acknowledge.
 
 Kafka messages the service publishes show up in `docker compose logs -f kafka-consumer`. To send a default message:
 
