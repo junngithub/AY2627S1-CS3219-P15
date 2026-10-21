@@ -1,5 +1,5 @@
 image:
-  tag: "" # git SHA, set by CI (.github/workflows/deploy-dev.yml)
+  tag: "d20f3b2fddaa8b6840b2403c55dc7fa413a20c42" # git SHA, set by deploy/push-dev.sh
 replicas: 1
 # Placeholder until there's a Gemini key: paste it into Secrets Manager
 # foc/dev/admin-ai (infra/nonprod/aws/secrets.tf), External Secrets syncs it.
