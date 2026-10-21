@@ -13,18 +13,26 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # The role needs CREATEROLE. In Kubernetes the migration runs as the
+    # service's own login, which may not create roles (deploy/charts/foc-database,
+    # ADR-0010), so there the role is skipped; the triggers below still make
+    # the table append-only for every role.
     op.execute(
         """
         DO $$
         BEGIN
-            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'admin_service_app') THEN
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'admin_service_app')
+               AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = current_user
+                           AND (rolcreaterole OR rolsuper)) THEN
                 CREATE ROLE admin_service_app NOLOGIN;
+            END IF;
+            IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'admin_service_app') THEN
+                REVOKE UPDATE, DELETE, TRUNCATE ON audit_logs FROM admin_service_app;
             END IF;
         END
         $$;
         """
     )
-    op.execute("REVOKE UPDATE, DELETE, TRUNCATE ON audit_logs FROM admin_service_app")
     op.execute("REVOKE UPDATE, DELETE, TRUNCATE ON audit_logs FROM PUBLIC")
     op.execute(
         """
