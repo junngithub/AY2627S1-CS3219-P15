@@ -133,28 +133,25 @@ B=foc-tfstate-$(aws sts get-caller-identity --query Account --output text)
    - The platform apps come up first. The env apps retry until the CRDs they
      need exist.
    - The services stay `Degraded` with `image.tag is required` until step 6.
-6. **Push the images from your laptop.** This is the same job as
-   `deploy-dev.yml`, which can't log in here. Run it from the repo root on the
-   commit you want deployed:
+6. **Push the images from your laptop** with `deploy/push-dev.sh`. It does
+   what `deploy-dev.yml` would, which can't log in here:
    ```bash
-   export AWS_PROFILE=cs3219-dev
-   R=$(terraform -chdir=infra/global/ecr output -raw registry)
-   aws ecr get-login-password --region ap-southeast-1 | docker login -u AWS --password-stdin "$R"
-   T=$(git rev-parse HEAD)          # images are tagged with the commit they're built from
-   for svc in user supplier credit order admin; do
-     ref="$R/foc/$svc-service:$T"
-     docker build --platform linux/arm64 -t "$ref" "$svc-service" && docker push "$ref"
-     if grep -qiE '^FROM .* AS migrate$' "$svc-service/Dockerfile"; then   # pre-deploy migration image (ADR-0011)
-       docker build --platform linux/arm64 --target migrate -t "$ref-migrate" "$svc-service" && docker push "$ref-migrate"
-     fi
-     sed -i '' "s|^  tag: .*|  tag: \"$T\" # git SHA|" "deploy/values/envs/dev/services/$svc.yaml"
-   done
-   stub="$R/foc/connectivity-stub:0.2.0"   # rating and badges run it
-   docker build --platform linux/arm64 -t "$stub" tools/connectivity-stub && docker push "$stub"
-   git commit -am "chore(dev): deploy ${T::7}" && git push   # Argo CD syncs the new tags
+   export AWS_PROFILE=cs3219-dev     # and `aws sso login` if the session expired
+   deploy/push-dev.sh                # every image dev runs; or name some: deploy/push-dev.sh credit order
+   git push                          # then merge to main: Argo CD deploys from main
    ```
-   ECR tags are immutable: re-pushing an existing `:<sha>` fails. That's
-   harmless, since the image is already there.
+   For each service it:
+   - builds `linux/arm64`, natively on Apple Silicon
+   - tags the image with the **last commit that changed that service's
+     folder**, so unchanged services aren't rebuilt
+   - pushes `foc/<svc>-service:<sha>`, plus `:<sha>-migrate` when the
+     Dockerfile has a `migrate` stage
+   - pushes `connectivity-stub:0.2.0` for rating and badges
+   - commits the new tags to `deploy/values/envs/dev/services/`
+
+   It refuses a service folder with uncommitted changes, since the image must
+   match the commit it's named after. `--no-commit` edits the values files
+   without committing.
 7. **Mesh the pods that started before Linkerd.** The injector fails open, as
    `remesh()` in `deploy/local.sh` handles locally:
    ```bash
@@ -187,7 +184,7 @@ B=foc-tfstate-$(aws sts get-caller-identity --query Account --output text)
       ```
    4. From then on, use the admin's verify endpoint for other testers.
 
-After this, repeat step 6 for a changed service (only that service's lines) and
+After this, rerun step 6 for a changed service (`deploy/push-dev.sh <svc>`) and
 step 8 for a frontend change. In an account without the NUS limits, the two
 workflows do this on every merge to `main`.
 
@@ -216,7 +213,7 @@ kubectl -n envoy-gateway-system get targetgroupbindings # gateway-dev present
 
 | Task | How |
 |---|---|
-| Deploy a service | Step 6 for that service, from your laptop. In an account without the NUS limits, merging to `main` runs deploy-dev instead. |
+| Deploy a service | Commit the change, run `deploy/push-dev.sh <svc>`, push, and merge to `main`. In an account without the NUS limits, merging to `main` runs deploy-dev instead. |
 | Roll back | `git revert` the tag-bump commit. |
 | Argo CD UI | `kubectl -n argocd port-forward svc/argocd-server 8081:80`. The password is in Secret `argocd-initial-admin-secret`. |
 | Logs | `kubectl -n foc-dev logs deploy/<svc> -c <svc>` |
@@ -231,7 +228,10 @@ kubectl -n envoy-gateway-system get targetgroupbindings # gateway-dev present
   placeholder, so conflict cases end as `ai_failed` and wait for an admin.
   Paste the key there; External Secrets syncs it within the hour, then restart
   admin. rating and badges have no code yet and run the stub.
-- **stg.** Add `"stg"` to `var.envs` in `infra/nonprod/aws`, then uncomment the
-  stg lines in `deploy/argocd/nonprod.yaml` and add `deploy/values/envs/stg/`.
+- **stg.** Add `"stg"` to `var.envs` in `infra/nonprod/aws`, uncomment the stg
+  lines in `deploy/argocd/nonprod.yaml`, add `foc-stg` to Strimzi's
+  `watchNamespaces` (`deploy/values/clusters/nonprod/strimzi.yaml`; the operator
+  exits if it watches a namespace that doesn't exist), add
+  `deploy/values/envs/stg/`, and raise `var.node_count`.
 - **Upload size through the gateway.** CloudFront accepts 10 MB. Check that
   Envoy does too, on the first photo upload.
