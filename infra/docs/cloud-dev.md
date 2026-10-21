@@ -160,13 +160,10 @@ B=foc-tfstate-$(aws sts get-caller-identity --query Account --output text)
    ```
 8. **Publish the frontend from your laptop** (same as `frontend-dev.yml`):
    ```bash
-   set -a; . .github/cloud/dev.env; set +a        # FRONTEND_BUCKET, CLOUDFRONT_ID (filled in step 4)
-   (cd frontend && npm ci && npm run build)
-   aws s3 sync frontend/dist/assets "s3://$FRONTEND_BUCKET/assets" --cache-control "public,max-age=31536000,immutable"
-   aws s3 sync frontend/dist "s3://$FRONTEND_BUCKET" --exclude "assets/*" --exclude index.html --cache-control "public,max-age=300"
-   aws s3 cp frontend/dist/index.html "s3://$FRONTEND_BUCKET/index.html" --cache-control no-cache
-   aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_ID" --paths "/*"
+   deploy/push-frontend-dev.sh   # builds, uploads to the bucket in .github/cloud/dev.env, invalidates CloudFront
    ```
+   Rerun it for every frontend change. It needs no git commit or merge:
+   the frontend isn't deployed by Argo CD.
 9. **First admin.** Test verification
    (`POST /api/v1/user/admin/users/{id}/verify`, enabled in dev) needs an
    admin. `bootstrap-admin` needs a user that is already verified, so the first

@@ -5,8 +5,8 @@ name: deploy-dev
 
 # Manual only for now: the NUS AWS account's service control policy denies
 # GitHub OIDC (sts:AssumeRoleWithWebIdentity), so the AWS login step fails.
-# Deploys run from a laptop (infra/docs/cloud-dev.md, step 6). In an account
-# without that limit, restore the push trigger:
+# Deploys run from a laptop with deploy/push-dev.sh (infra/docs/cloud-dev.md,
+# step 6). In an account without that limit, restore the push trigger:
 #   push: { branches: [main], paths: ["*-service/**", tools/connectivity-stub/**, .github/workflows/deploy-dev.yml] }
 on:
   workflow_dispatch:
