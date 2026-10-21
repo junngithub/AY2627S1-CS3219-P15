@@ -1,0 +1,23 @@
+meta {
+  name: Requester cannot accept own order
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/orders/{{orderId}}/accept
+  body: none
+  auth: none
+}
+
+headers {
+  X-User-Id: 51782dc4-c45c-3ffb-9c44-49c89589d31e
+  X-Permitted-Action: true
+}
+
+tests {
+  test("status is 409", function() {
+    expect(res.getStatus()).to.equal(409);
+    expect(res.getBody().error).to.include("own order");
+  });
+}

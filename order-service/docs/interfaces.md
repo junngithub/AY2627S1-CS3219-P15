@@ -21,7 +21,7 @@ Errors use `{ "error": "...", "code": "<HTTP status name>" }`.
 | --- | --- | --- | --- |
 | POST | `/` | requester | Create. Body: `itemDescription` (1–500), `credits` (integer ≥ 1), `expiryTime`, `deliveryTime`, `fromLocation`, `toLocation` |
 | GET | `/{orderId}` | requester or assigned courier | One order. Anyone else gets 404 |
-| POST | `/{orderId}/accept` | courier | CREATED → ACCEPTED |
+| POST | `/{orderId}/accept` | courier, not the requester | CREATED → ACCEPTED. The requester gets 409 |
 | POST | `/{orderId}/cancel` | requester or assigned courier | Requester cancels CREATED. Courier releases ACCEPTED inside the collection window |
 | POST | `/{orderId}/collect` | assigned courier | Multipart field `photo`. ACCEPTED → COLLECTED |
 | POST | `/{orderId}/deliver` | assigned courier | Multipart field `photo`. COLLECTED → DELIVERED |
