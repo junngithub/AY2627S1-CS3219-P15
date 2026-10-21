@@ -1,40 +1,39 @@
-import httpx
 from fastapi import Depends, HTTPException, Request
-
-from app.config import settings
 
 
 class CurrentAdmin:
-    def __init__(self, user_id: str, email: str):
+    def __init__(self, user_id: str):
         self.user_id = user_id
-        self.email = email
+
+
+def _header(request: Request, name: str) -> str | None:
+    value = request.headers.get(name)
+    if value is None:
+        return None
+    trimmed = value.strip()
+    return trimmed or None
+
+
+def _is_true(value: str | None) -> bool:
+    return value is not None and value.lower() == "true"
 
 
 async def require_admin(request: Request) -> CurrentAdmin:
     """
-    F2.1 — validated on every request, not cached from login.
-    F2.2/F2.2.1 — non-admins get 404, never 403, so the endpoint's existence
-    isn't revealed to a non-admin caller.
+    Identity comes from the API gateway after it calls User authorize:
+    x-user-id, x-is-admin, x-permitted-action.
+
+    F2.2/F2.2.1 — a caller who is missing, not an admin, or not permitted
+    (inactive, or email/Telegram not verified) gets 404, never 403, so the
+    endpoint's existence is not revealed.
     """
-    token = request.headers.get("Authorization")
-    if not token:
-        raise HTTPException(status_code=404)  # deliberate: same as "not admin"
-
-    async with httpx.AsyncClient(base_url=settings.user_service_base_url, timeout=5.0) as client:
-        try:
-            resp = await client.get("/api/v1/user/me/authorize", headers={"Authorization": token})
-        except httpx.RequestError:
-            # Fail closed — an unreachable User Service must not grant admin access.
-            raise HTTPException(status_code=404)
-
-    if resp.status_code != 200:
+    user_id = _header(request, "x-user-id")
+    is_admin = _is_true(_header(request, "x-is-admin"))
+    permitted = _is_true(_header(request, "x-permitted-action"))
+    if not user_id or not is_admin or not permitted:
         raise HTTPException(status_code=404)
 
-    payload = resp.json()
-    if payload.get("role") != "admin":
-        raise HTTPException(status_code=404)  # F2.2.1
-
-    return CurrentAdmin(user_id=payload["userId"], email=payload["email"])
+    return CurrentAdmin(user_id=user_id)
 
 
 AdminDep = Depends(require_admin)

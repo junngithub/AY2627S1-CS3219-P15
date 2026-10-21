@@ -4,8 +4,16 @@ import httpx
 import pytest
 
 BASE_URL = os.environ.get("ADMIN_API_BASE_URL", "http://localhost:8084")
-ADMIN_HEADERS = {"Authorization": "Bearer admin-sahana"}
-USER_HEADERS = {"Authorization": "Bearer user-1"}
+ADMIN_HEADERS = {
+    "x-user-id": "admin-sahana",
+    "x-is-admin": "true",
+    "x-permitted-action": "true",
+}
+USER_HEADERS = {
+    "x-user-id": "user-1",
+    "x-is-admin": "false",
+    "x-permitted-action": "true",
+}
 
 
 @pytest.fixture(scope="session")

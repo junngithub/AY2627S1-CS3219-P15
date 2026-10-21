@@ -1,10 +1,9 @@
 """Live checks against the Compose stack: admin user routes, their error
 responses, and the Kafka event that a successful call publishes.
 
-Skipped when Admin Service is not reachable. Requires Kafka in this compose
-project (events are read with the broker's console consumer, because the
-broker advertises kafka:9092). User ids prefixed with missing- are rejected
-by the mock User Service.
+Skipped when Admin Service is not reachable. Events are read from Order's
+broker (order-service compose, internal listener kafka:29092). User ids
+prefixed with missing- are rejected by the mock User Service.
 """
 
 import json
@@ -15,8 +14,16 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-ADMIN_HEADERS = {"Authorization": "Bearer admin-sahana"}
-USER_HEADERS = {"Authorization": "Bearer user-1"}
+ADMIN_HEADERS = {
+    "x-user-id": "admin-sahana",
+    "x-is-admin": "true",
+    "x-permitted-action": "true",
+}
+USER_HEADERS = {
+    "x-user-id": "user-1",
+    "x-is-admin": "false",
+    "x-permitted-action": "true",
+}
 
 USER_ROUTES = [
     ("GET", "/api/v1/admin/users"),
@@ -30,7 +37,7 @@ USER_ROUTES = [
 def _compose_exec(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["docker", "compose", "exec", "-T", "kafka", *args],
-        cwd=ROOT,
+        cwd=ROOT.parent / "order-service",
         capture_output=True,
         text=True,
         timeout=40,
@@ -45,7 +52,11 @@ def kafka_events(topic: str) -> list[dict]:
     its first seconds joining, and a short timeout returns nothing even when
     the topic has messages.
     """
-    offsets = _compose_exec("kafka-get-offsets", "--bootstrap-server", "kafka:9092", "--topic", topic)
+    offsets = _compose_exec(
+        "/opt/kafka/bin/kafka-get-offsets.sh",
+        "--bootstrap-server", "kafka:29092",
+        "--topic", topic,
+    )
     if offsets.returncode != 0:
         blob = f"{offsets.stderr}\n{offsets.stdout}".lower()
         if "unknown topic" in blob or "does not exist" in blob:
@@ -61,8 +72,8 @@ def kafka_events(topic: str) -> list[dict]:
         if not end.isdigit() or int(end) == 0:
             continue
         consumed = _compose_exec(
-            "kafka-console-consumer",
-            "--bootstrap-server", "kafka:9092",
+            "/opt/kafka/bin/kafka-console-consumer.sh",
+            "--bootstrap-server", "kafka:29092",
             "--topic", topic,
             "--partition", partition,
             "--offset", "earliest",
