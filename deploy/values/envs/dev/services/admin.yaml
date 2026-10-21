@@ -1,0 +1,7 @@
+image:
+  tag: "" # git SHA, set by CI (.github/workflows/deploy-dev.yml)
+replicas: 1
+# Placeholder until there's a Gemini key: paste it into Secrets Manager
+# foc/dev/admin-ai (infra/nonprod/aws/secrets.tf), External Secrets syncs it.
+externalSecrets:
+  admin-ai: [AI_PROVIDER_API_KEY]

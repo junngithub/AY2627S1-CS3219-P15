@@ -5,6 +5,8 @@ gatewayClassName: envoy
 envoyNamespace: envoy-gateway-system
 # Name of this env's Envoy proxy Service there. Default: envoy-<release namespace>.
 envoyServiceName: ""
+# LoadBalancer locally; ClusterIP in the cloud, where the NLB is Terraform's.
+envoyServiceType: LoadBalancer
 
 # ServiceAccount of the Envoy proxies, i.e. their Linkerd identity. Default:
 # envoy-<release namespace>. Services' mesh policies assume that default

@@ -1,7 +1,8 @@
 # Argo CD objects for the NON-PROD EKS cluster. The root Application
 # created by infra/nonprod/bootstrap applies this file plus projects/.
 #
-# Environments on this cluster: dev → namespace foc-dev, stg → namespace foc-stg.
+# Environments on this cluster: dev → namespace foc-dev, stg → namespace foc-stg
+# (stg is commented out until infra/nonprod/aws creates its AWS resources).
 #
 # Ordering: Kafka objects need Strimzi's CRDs, and services need Strimzi's
 # Kafka user Secrets. Instead of cross-app sync waves (which ApplicationSets
@@ -56,6 +57,90 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true # Gateway API / Envoy Gateway CRDs are large
+    retry:
+      limit: 10
+      backoff: { duration: 10s, factor: 2, maxDuration: 5m }
+---
+# AWS glue (ADR-0013): the Load Balancer Controller binds each env's Envoy
+# proxies to its Terraform-made NLB; External Secrets copies Secrets Manager
+# into each env's Secrets; cluster-config holds the gp3 StorageClass, the
+# secret stores, the RDS CA bundle and the TargetGroupBindings (it retries
+# until the other two have installed their CRDs).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: aws-load-balancer-controller
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: foc-platform
+  source:
+    repoURL: https://github.com/junngithub/AY2627S1-CS3219-P15.git
+    targetRevision: main
+    path: deploy/charts/aws-load-balancer-controller
+    helm:
+      valueFiles:
+        - ../../values/clusters/nonprod/aws-load-balancer-controller.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 10
+      backoff: { duration: 10s, factor: 2, maxDuration: 5m }
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: external-secrets
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: foc-platform
+  source:
+    repoURL: https://github.com/junngithub/AY2627S1-CS3219-P15.git
+    targetRevision: main
+    path: deploy/charts/external-secrets
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: external-secrets
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true # its CRDs are large
+    retry:
+      limit: 10
+      backoff: { duration: 10s, factor: 2, maxDuration: 5m }
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cluster-config
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: foc-platform
+  source:
+    repoURL: https://github.com/junngithub/AY2627S1-CS3219-P15.git
+    targetRevision: main
+    path: deploy/charts/cluster-config
+    helm:
+      valueFiles:
+        - ../../values/clusters/nonprod/cluster-config.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - SkipDryRunOnMissingResource=true # ESO / LB controller CRDs may not exist yet
     retry:
       limit: 10
       backoff: { duration: 10s, factor: 2, maxDuration: 5m }
@@ -209,7 +294,7 @@ spec:
     - list:
         elements:
           - { env: dev, namespace: foc-dev }
-          - { env: stg, namespace: foc-stg }
+          # - { env: stg, namespace: foc-stg } # with "stg" in infra/nonprod/aws var.envs
   template:
     metadata:
       name: "{{ .env }}-namespace"
@@ -247,7 +332,7 @@ spec:
     - list:
         elements:
           - { env: dev, namespace: foc-dev }
-          - { env: stg, namespace: foc-stg }
+          # - { env: stg, namespace: foc-stg } # with "stg" in infra/nonprod/aws var.envs
   template:
     metadata:
       name: "{{ .env }}-kafka"
@@ -274,6 +359,48 @@ spec:
           limit: 10
           backoff: { duration: 10s, factor: 2, maxDuration: 5m }
 ---
+# Each env's databases and logins on the shared RDS instance (ADR-0010). The
+# Secrets come from Secrets Manager (createSecrets: false); the setup Job runs
+# as a PostSync hook. Services' migrate Jobs retry until it has run.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: foc-database
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - list:
+        elements:
+          - { env: dev, namespace: foc-dev }
+          # - { env: stg, namespace: foc-stg } # with "stg" in infra/nonprod/aws var.envs
+  template:
+    metadata:
+      name: "{{ .env }}-database"
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: foc
+      source:
+        repoURL: https://github.com/junngithub/AY2627S1-CS3219-P15.git
+        targetRevision: main
+        path: deploy/charts/foc-database
+        helm:
+          valueFiles:
+            - "../../values/envs/{{ .env }}/database.yaml"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{ .namespace }}"
+      syncPolicy:
+        automated: { prune: true, selfHeal: true }
+        syncOptions:
+          - CreateNamespace=true
+          - SkipDryRunOnMissingResource=true # ExternalSecret CRD may not exist yet
+        retry:
+          limit: 10
+          backoff: { duration: 10s, factor: 2, maxDuration: 5m }
+---
 # One Application per service values file in values/envs/<env>/services/.
 # Adding a service to an env = adding that file.
 apiVersion: argoproj.io/v1alpha1
@@ -290,7 +417,7 @@ spec:
           - list:
               elements:
                 - { env: dev, namespace: foc-dev }
-                - { env: stg, namespace: foc-stg }
+                # - { env: stg, namespace: foc-stg } # with "stg" in infra/nonprod/aws var.envs
           - git:
               repoURL: https://github.com/junngithub/AY2627S1-CS3219-P15.git
               revision: main
@@ -338,7 +465,7 @@ spec:
     - list:
         elements:
           - { env: dev, namespace: foc-dev }
-          - { env: stg, namespace: foc-stg }
+          # - { env: stg, namespace: foc-stg } # with "stg" in infra/nonprod/aws var.envs
   template:
     metadata:
       name: "{{ .env }}-gateway"
@@ -350,6 +477,9 @@ spec:
         repoURL: https://github.com/junngithub/AY2627S1-CS3219-P15.git
         targetRevision: main
         path: deploy/charts/foc-gateway
+        helm:
+          valueFiles:
+            - "../../values/envs/{{ .env }}/gateway.yaml"
       destination:
         server: https://kubernetes.default.svc
         namespace: "{{ .namespace }}"

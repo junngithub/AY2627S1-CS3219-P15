@@ -113,7 +113,9 @@ unless you keep a final snapshot (≈ $0.095/GB-mo beyond the free amount).
   would make the NLB internal and drop its two public IPs (−$7.30); check the
   current VPC-origin pricing first.
 - **SES** for OTP emails: $0.10 per 1,000, so effectively $0.
-- **Secrets Manager**: not used (Kubernetes Secrets); $0.40/secret-month if adopted.
+- **Secrets Manager**: used since ADR-0013. Dev has 6 secrets (4 database
+  logins, `user-otp`, `order-user-lookup`) plus RDS's own admin secret:
+  about $2.80/month at $0.40/secret-month, plus API calls (negligible).
 - **Data transfer out**: the first 100 GB/month to the internet is free, and
   CloudFront has its own free 1 TB. Inter-AZ traffic (Kafka, service calls
   across two nodes) is $0.01/GB each way: cents at dev volume.

@@ -1,6 +1,7 @@
-# How Envoy Gateway runs this env's proxy: a LoadBalancer Service with a fixed
-# name. Locally k3s ServiceLB fulfils it; on EKS the AWS Load Balancer
-# Controller turns it into an NLB.
+# How Envoy Gateway runs this env's proxy: a Service with a fixed name.
+# Locally it's a LoadBalancer that k3s ServiceLB fulfils. On EKS it's
+# ClusterIP: the NLB is Terraform's (infra/nonprod/aws/gateway-lb.tf) and a
+# TargetGroupBinding (charts/cluster-config) registers the proxy pods in it.
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: EnvoyProxy
 metadata:
@@ -11,7 +12,7 @@ spec:
     kubernetes:
       envoyService:
         name: {{ include "foc-gateway.envoyServiceName" . }}
-        type: LoadBalancer
+        type: {{ .Values.envoyServiceType }}
       # A fixed name instead of envoy-<ns>-<gateway>-<hash>: it's the proxies'
       # Linkerd identity, which services' mesh policies name (ADR-0012,
       # charts/foc-service mesh.gateway.serviceAccount).

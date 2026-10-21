@@ -1,0 +1,13 @@
+apiVersion: v2
+name: external-secrets
+description: >-
+  Wrapper around the official External Secrets Operator chart (vendored under
+  charts/). Cloud clusters only, namespace external-secrets. Copies secrets
+  from AWS Secrets Manager into Kubernetes Secrets (ADR-0010); the stores are
+  in charts/cluster-config.
+type: application
+version: 0.1.0
+dependencies:
+  - name: external-secrets
+    version: 2.13.0
+    repository: https://charts.external-secrets.io

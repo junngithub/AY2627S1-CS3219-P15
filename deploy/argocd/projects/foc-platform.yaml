@@ -1,5 +1,5 @@
 # Cluster-wide platform components (Strimzi operator, Envoy Gateway, cert-manager,
-# trust-manager, Linkerd: CRDs, ClusterRoles, GatewayClass, ClusterIssuers).
+# trust-manager, Linkerd, AWS Load Balancer Controller, External Secrets: CRDs, ClusterRoles, GatewayClass, ClusterIssuers).
 # Admin-level: only reviewed changes should land here.
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
@@ -19,6 +19,11 @@ spec:
       namespace: cert-manager
     - server: https://kubernetes.default.svc
       namespace: linkerd
+    # AWS glue (ADR-0013): Load Balancer Controller, cluster-config.
+    - server: https://kubernetes.default.svc
+      namespace: kube-system
+    - server: https://kubernetes.default.svc
+      namespace: external-secrets
     # Strimzi creates RoleBindings in the namespaces it watches.
     - server: https://kubernetes.default.svc
       namespace: "foc*"

@@ -28,6 +28,14 @@ database:
   enabled: false
   healthPath: ""
 
+# Certificate authority for the database's TLS certificate (the RDS CA bundle
+# in the cloud; ADR-0010). If configMap is set and database.enabled, the pod
+# (and the migrate Job) mounts that key at /etc/db-ca/ca.crt and gets
+# NODE_EXTRA_CA_CERTS pointing at it. "" = none (local Postgres has no TLS).
+databaseCa:
+  configMap: ""
+  key: ca.crt
+
 # Schema migrations (ADR-0011). If enabled, a Job runs `command` before every
 # install/upgrade, in the service's own "<tag><tagSuffix>" image (the
 # Dockerfile's `migrate` stage), with DATABASE_URL from Secret <name>-db.
@@ -51,6 +59,18 @@ secretEnv: {}
 # it doesn't work under Argo CD, which renders without the cluster. In the cloud
 # the External Secrets Operator creates the same Secrets (ADR-0010).
 generatedSecrets: {}
+
+# CLOUD: the same Secrets, copied from AWS Secrets Manager by the External
+# Secrets Operator: Secret <name> gets each key from secret
+# <secretStore.prefix><name> (JSON; created by infra/<cluster>/aws/secrets.tf).
+# Same shape as generatedSecrets, e.g. { user-otp: [OTP_SECRET] }; list it
+# under the one service that owns the Secret.
+externalSecrets: {}
+# ClusterSecretStore for this env (charts/cluster-config), set in
+# values/envs/<env>/common.yaml.
+secretStore:
+  name: "" # e.g. aws-secrets-dev
+  prefix: "" # e.g. foc/dev/
 
 # Linkerd service mesh (ADR-0012). The pod gets a proxy, runs as its own
 # ServiceAccount (= its Linkerd identity) and accepts only mesh-authenticated

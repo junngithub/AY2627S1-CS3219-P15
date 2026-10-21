@@ -1,0 +1,3 @@
+image:
+  tag: "" # git SHA, set by CI (.github/workflows/deploy-dev.yml)
+replicas: 1

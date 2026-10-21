@@ -1,5 +1,13 @@
 # Frontend on S3 + CloudFront: readiness
 
+> **Update (2026-10-21):** the infrastructure below is now written:
+> `infra/nonprod/aws/frontend.tf` and `gateway-lb.tf`, plus
+> `.github/workflows/frontend-dev.yml`. The `/api/*` origin is an internal NLB
+> behind a CloudFront VPC origin, so the origin-TLS question below is settled
+> ([ADR-0013](adr/0013-cloudfront-vpc-origin-and-external-secrets.md)).
+> Bring-up steps are in [`cloud-dev.md`](cloud-dev.md). The rest of this page
+> is the original assessment.
+
 > **Status (2026-10-18):** the **app is ready with small infra-side changes**;
 > the **AWS infrastructure is not**. The frontend is a pure client-side SPA
 > with no runtime config, cookies or websockets, so it can move off nginx.
@@ -54,9 +62,10 @@ preflight that skips extAuth) in the `foc-gateway` SecurityPolicy.
 | Security headers | **nginx sets none today**; add a CloudFront response headers policy (HSTS, CSP, X-Frame-Options) | optional improvement |
 
 Gateway fixes made while assessing this (2026-10-18, `deploy/charts/foc-gateway`):
-`blockedPrefixes` now also block `/api/v1/credit/reserve`,
-`/api/v1/credit/release` (order's internal calls, which let any logged-in user
-spend or refund anyone's credits) and `/api/v1/badges/internal`;
+`blockedPrefixes` now also block credit's reserve and release (order's
+internal calls, which let any logged-in user spend or refund anyone's
+credits; since 2026-10-21 both sit under `/api/v1/credit/internal`, which
+is the blocked prefix) and `/api/v1/badges/internal`;
 `x-user-telegram` was added to `identityHeaders`.
 
 Note that behaviour through CloudFront will match the **gateway**, not

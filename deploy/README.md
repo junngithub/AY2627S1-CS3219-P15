@@ -111,7 +111,7 @@ hard-coding hosts or ports:
 | Service | Gets |
 |---|---|
 | order | `CREDIT_SERVICE_URL`, `SUPPLIER_SERVICE_URL`, `RATING_SERVICE_URL`, `ADMIN_SERVICE_URL`, `USER_SERVICE_URL` |
-| admin | `USER_SERVICE_URL` |
+| admin | `USER_SERVICE_BASE_URL`, `ORDER_SERVICE_BASE_URL` (its own names, `app/config.py`) |
 | credit | `USER_SERVICE_URL` |
 | badges | `USER_SERVICE_URL`, `ORDER_SERVICE_URL` |
 | user, supplier, rating | none (rating only uses Kafka) |
@@ -321,21 +321,24 @@ still shows the last result.
 
 ## Not yet in place
 
-- user, supplier, credit and order have real images. Locally rating, badges
-  and admin run [`tools/connectivity-stub`](../tools/connectivity-stub/README.md)
+- user, supplier, credit, order and admin have real images. Locally rating
+  and badges run [`tools/connectivity-stub`](../tools/connectivity-stub/README.md)
   under their own names (overridden in `values/envs/local/services/<svc>.yaml`).
-  Ports for rating, badges and admin (3000) are placeholders until
-  those services exist; user is 8080 (its `PORT` default), order 8083 (its
-  `server.port`), supplier its branch's 8081.
-- Databases in the cloud: `rds.tf`, Secrets Manager + External Secrets
-  (`foc-database` with `createSecrets: false`), the RDS CA bundle in images,
-  and CI building each image's `migrate` stage (ADR-0010, ADR-0011).
+  Ports for rating and badges (3000) are placeholders until those services
+  exist; user is 8080 (its `PORT` default), order 8083 (its `server.port`),
+  supplier its branch's 8081, admin 8084 (its Dockerfile).
+- Cloud (dev): written but not yet applied to AWS. See
+  [`infra/docs/cloud-dev.md`](../infra/docs/cloud-dev.md) and ADR-0013. That
+  covers RDS, Secrets Manager + External Secrets (`foc-database` with
+  `createSecrets: false`, `foc-service` `externalSecrets`), the RDS CA bundle
+  (`databaseCa`), and CI building each image's `migrate` stage. admin still
+  runs the stub in dev, since its database settings aren't wired up.
 - Kafka clients: user publishes `UserVerified` (credit onboards the user);
   order publishes its four topics and consumes `foc.admin.events`; credit
   settles `foc.credit.commands`. Until rating and admin exist,
   `foc.rating.commands` and `foc.admin.commands` have no consumer and
   `foc.admin.events` no producer; nothing reads `foc.order.status` yet.
-- `dev`, `stg` and `prod` have no `common.yaml` (image registry) until the AWS
-  account ID and `global/ecr` exist. Until then no services deploy there.
-- The EKS `gp3` StorageClass for prod Kafka storage, and the API gateway's
-  namespace in `networkPolicy.allowFromNamespaces`.
+- `stg` and `prod` have no `common.yaml` or service values yet. dev's are
+  filled from Terraform by `deploy/cloud-values.sh`.
+- prod's cluster (`infra/prod`), with its `gp3` StorageClass and the API
+  gateway's namespace in `networkPolicy.allowFromNamespaces`.

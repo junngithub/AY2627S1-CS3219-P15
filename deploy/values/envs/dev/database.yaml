@@ -1,0 +1,16 @@
+# Dev env's databases on the shared non-prod RDS instance (ADR-0010):
+# database and login dev_<service>. Passwords live in Secrets Manager
+# (infra/nonprod/aws/secrets.tf); External Secrets creates the Secrets.
+env: dev
+host: foc-nonprod.c9s6g2m8eb8h.ap-southeast-1.rds.amazonaws.com
+createSecrets: false
+externalSecrets:
+  store: aws-secrets-dev
+  prefix: foc/dev/
+  adminSecret: arn:aws:secretsmanager:ap-southeast-1:474265880628:secret:rds!db-0cc73cce-974b-4c7f-9276-914fbcf1d272-KtX5Og # RDS-managed admin login
+services: # same list as var.databases in infra/nonprod/aws
+  user: {}
+  supplier: {}
+  credit: {}
+  order: {}
+  admin: {}
