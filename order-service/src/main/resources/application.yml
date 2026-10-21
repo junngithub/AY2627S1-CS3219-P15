@@ -65,6 +65,7 @@ order:
   clients:
     timeout: 2s
     user-base-url: ${USER_SERVICE_URL:http://user-service:8080}
+    user-lookup-token: ${ORDER_USER_LOOKUP_TOKEN:}
     credit-base-url: ${CREDIT_SERVICE_URL:http://credit-service:8080}
     supplier-base-url: ${SUPPLIER_SERVICE_URL:http://supplier-service:8080}
     rating-base-url: ${RATING_SERVICE_URL:http://rating-service:8080}

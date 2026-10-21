@@ -1,0 +1,23 @@
+meta {
+  name: Collected order is not listed
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/v1/orders/deliveries/past
+  body: none
+  auth: none
+}
+headers {
+  X-User-Id: c35dc8b4-f300-3285-8e2f-983ed1c791ef
+  X-Permitted-Action: true
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+    const listed = res.getBody().content.some(order => order.id === bru.getVar("orderId"));
+    expect(listed).to.equal(false);
+  });
+}

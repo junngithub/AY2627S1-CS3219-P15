@@ -77,8 +77,14 @@ public interface OrderRepository extends JpaRepository<OrderEntity, UUID> {
 
     Page<OrderEntity> findByRequesterIdOrderByRequestTimeDesc(String requesterId, Pageable pageable);
 
-    Page<OrderEntity> findByCourierIdAndStatusInOrderByUpdatedAtDesc(
+    Page<OrderEntity> findByCourierIdAndStatusInOrderByRequestTimeDesc(
             String courierId,
+            Collection<OrderStatus> statuses,
+            Pageable pageable
+    );
+
+    Page<OrderEntity> findByRequesterIdAndStatusInOrderByRequestTimeDesc(
+            String requesterId,
             Collection<OrderStatus> statuses,
             Pageable pageable
     );

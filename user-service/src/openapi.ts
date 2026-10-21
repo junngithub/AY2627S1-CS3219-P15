@@ -215,7 +215,7 @@ export const openApiDocument = {
       post: {
         tags: ["Authentication"],
         summary: "Create a user account",
-        description: "Accepts configured NUS email domains and creates email and Telegram verification steps.",
+        description: "Accepts configured NUS email domains and creates email and Telegram verification steps. Sends an OTP using the configured email provider. If delivery fails after account creation, the account remains unverified; use resend-verification rather than signing up again.",
         requestBody: {
           required: true,
           content: {
@@ -240,6 +240,10 @@ export const openApiDocument = {
             content: {
               "application/json": { schema: { $ref: "#/components/schemas/Error" } },
             },
+          },
+          "503": {
+            description: "EMAIL_DELIVERY_FAILED or EMAIL_NOT_CONFIGURED. The account may already exist unverified; request a replacement OTP after email delivery is available.",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
           },
         },
       },
@@ -274,7 +278,7 @@ export const openApiDocument = {
       post: {
         tags: ["Authentication"],
         summary: "Request a replacement email OTP",
-        description: "Always returns a generic response so account existence is not disclosed.",
+        description: "Returns a generic 202 for a supplied email, even when email delivery fails, so account existence is not disclosed. Delivery failures are logged without OTPs; request again after the provider recovers.",
         requestBody: {
           required: true,
           content: {
@@ -351,7 +355,7 @@ export const openApiDocument = {
       post: {
         tags: ["Authentication"],
         summary: "Request a password reset link",
-        description: "Returns the same response whether the account exists or not. In development, the link is logged by User Service.",
+        description: "Returns the same 202 whether the account exists or email delivery fails. SES sends a single-use reset link; development mode logs it locally. Request again after a delivery failure.",
         requestBody: {
           required: true,
           content: {

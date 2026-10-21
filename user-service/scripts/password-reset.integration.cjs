@@ -52,6 +52,10 @@ test("password recovery against Docker User Service and PostgreSQL", async () =>
     cwd: serviceDirectory, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
   }).trim();
   assert.equal(mode, "development", "Run this only against the local development Compose service");
+  const emailMode = execFileSync("docker", ["compose", "exec", "-T", "user-service", "printenv", "EMAIL_PROVIDER"], {
+    cwd: serviceDirectory, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+  assert.equal(emailMode, "development", "Refuse to run synthetic accounts against real email delivery");
 
   const suffix = randomBytes(8).toString("hex");
   const email = `reset_it_${suffix}@u.nus.edu`;

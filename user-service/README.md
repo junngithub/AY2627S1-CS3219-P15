@@ -14,7 +14,9 @@ Owns user registration, verification, authentication, profile status, account li
 - Interactive Swagger/OpenAPI documentation
 - Docker Compose configuration for the service and its own PostgreSQL database
 
-Email and Telegram verification, password recovery/change, and account deletion are implemented. Order can look up Telegram handles through a service-authenticated endpoint. An audited admin verification override is available for non-production load tests. Email delivery still uses the development logger. Telegram uses a real verification bot when configured, or a development logger locally without a bot. Account escalation and friendship management remain to be implemented.
+Email and Telegram verification, password recovery/change, and account deletion are implemented. Order can look up Telegram handles through a service-authenticated endpoint. An audited admin verification override is available for non-production load tests. Email delivery supports AWS SES when configured, with a development logger for local work. Local frontend signup, real SES OTP delivery, email/Telegram verification, login and password recovery were manually exercised on 20 October 2026; deployed-environment configuration and integration still need testing. Telegram uses a real verification bot when configured, or a development logger locally without a bot. Account escalation and friendship management remain to be implemented.
+
+A deployment-only first-admin bootstrap command is available. It promotes an explicitly selected verified account; it is not an HTTP endpoint and never runs automatically.
 
 ## Swagger API documentation
 
@@ -77,7 +79,7 @@ Content-Type: application/json
 }
 ```
 
-In development, the OTP is printed in the User Service log. A real email provider has not been selected yet.
+With `EMAIL_PROVIDER=ses`, SES sends the OTP to the registered NUS address. With local `EMAIL_PROVIDER=development`, it is printed in the User Service log instead. See the SES setup below. Signup returns a sanitized `503 EMAIL_DELIVERY_FAILED` if SES rejects the request, or `503 EMAIL_NOT_CONFIGURED` if email is disabled. The account can already have been saved and remains unverified: use resend-verification after resolving delivery, rather than repeating signup.
 
 ### Resend verification OTP
 
@@ -90,7 +92,7 @@ Content-Type: application/json
 }
 ```
 
-The response does not reveal whether an account exists.
+The response does not reveal whether an account exists. A supplied email receives the same `202` even when sending fails; the service logs a sanitized failure and a new request is needed after recovery.
 
 ### Forgot/reset password
 
@@ -101,7 +103,69 @@ Content-Type: application/json
 {"email":"student@u.nus.edu"}
 ```
 
-The service always responds with `202` for a supplied email, whether or not the account exists. In development, it prints a reset link to the User Service log. The link points to `FRONTEND_BASE_URL/reset-password?token=...`; set `FRONTEND_BASE_URL` to the deployed frontend origin outside local development. Links expire after 30 minutes by default and a new request invalidates older links.
+The service responds with the same `202` for a supplied email whether or not the account exists, including when email sending fails. SES sends the link when configured; development mode prints it to the User Service log. The link points to `FRONTEND_BASE_URL/reset-password?token=...`; set `FRONTEND_BASE_URL` to the deployed frontend origin outside local development. Links expire after 30 minutes by default and a new request invalidates older links.
+
+### Email delivery: AWS SES
+
+Only User Service sends account emails. No database migration, frontend change or new public endpoint is required. The official AWS SDK uses its default credential chain; no AWS keys, Gmail password or SMTP password are embedded in the application.
+
+| Setting | Meaning |
+| --- | --- |
+| `EMAIL_PROVIDER=ses` | Send OTPs and reset links using SES API v2. |
+| `SES_FROM_EMAIL` | One bare sender address verified in the selected AWS account and region. Not the recipient domain restriction. |
+| `AWS_REGION=ap-southeast-1` | Singapore; must match the verified SES identities. |
+| `FRONTEND_BASE_URL` | Reachable frontend origin for password-reset links. |
+| `EMAIL_PROVIDER=development` | Local/test only: logs OTPs/reset links. Rejected outside `NODE_ENV=development/test`. |
+| `EMAIL_PROVIDER=disabled` | No sending or secret logging. Default outside development/test if the provider is unset; auth/profile endpoints can still run. |
+
+Local development/test defaults to the development provider for compatibility. Selecting SES never falls back to logging on errors. Startup logs the provider name; SES acceptance/failure logs never contain addresses, OTPs, reset URLs or raw AWS errors. SES acceptance is not proof of final delivery; check the inbox and bounce feedback.
+
+#### Local setup, step by step
+
+1. In SES Singapore, verify the sender. In sandbox mode, also verify every intended demo recipient. A Gmail sender has been tested manually, but we cannot authenticate `gmail.com` for SES: delivery can still be filtered/rejected. Prefer a team-controlled domain with DKIM for production. Request SES production access in Singapore before sending to unverified recipients; approval is separate from IAM permissions.
+2. Edit the existing ignored `user-service/.env` locally; do not replace it or erase existing bot/database settings. Set:
+
+   ```dotenv
+   EMAIL_PROVIDER=ses
+   SES_FROM_EMAIL=YOUR_VERIFIED_SENDER@gmail.com
+   AWS_REGION=ap-southeast-1
+   FRONTEND_BASE_URL=http://localhost:5173
+   ```
+
+3. Supply AWS access securely. For a host Node run, use an AWS CLI v2 SSO profile (`aws configure sso`, `aws sso login --profile <profile>`, then set `AWS_PROFILE` in the process environment), or short-lived credentials. Do not create permanent IAM keys just for this demo. For the local Compose container, the host's console login/profile is not automatically available. Obtain temporary programmatic credentials from the approved AWS access portal/profile, if permitted, and put **all three** values (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`) only in the ignored `.env`. Compose forwards these at runtime, not image-build time. Never paste them into chat or run a configuration dump that displays them. Temporary values expire; refresh them when needed. If the portal does not offer programmatic access, ask the infrastructure owner rather than weakening account policy.
+4. The AWS principal needs `ses:SendEmail` scoped to the approved identity, e.g. `arn:aws:ses:ap-southeast-1:<account-id>:identity/<verified-sender-address>`. The infrastructure owner must check IAM and university organization restrictions. Console sending success does not prove the container has permission. AWS region/account must match the identities; sandbox restrictions still apply.
+5. From `user-service`, rebuild/recreate the service with `docker compose up -d --build user-service`. This also starts its database if needed. **Only one running process may poll the configured Telegram bot**; do not also start a host copy using that bot. To work without starting its poller, set `TELEGRAM_POLLING_ENABLED=false` locally before starting this email test.
+6. In Swagger (`http://localhost:8080/api-docs`) or the real frontend, sign up using a verified NUS recipient and an unused Telegram handle. Retrieve the OTP from the inbox and submit `/verify-email`. Then request `/forgot-password`, open the emailed link in the frontend and reset the password. Check junk/bounce messages too. This is a live test: perform it only with the recipient owner's approval. If the account already exists, resend its OTP instead of signing up again.
+
+For deployed containers, the infrastructure owner should supply `EMAIL_PROVIDER`, `SES_FROM_EMAIL`, `AWS_REGION` and the frontend origin via environment configuration, and grant the workload an email-only IAM role (or approved secret mechanism). Do not rely on a developer's login or temporary local credentials for an always-running deployment. No cluster/IAM/SES settings are changed by this code patch.
+
+#### Local acceptance evidence - 20 October 2026
+
+- A single explicitly approved test email was sent from the local User Service container through SES Singapore; the recipient confirmed inbox delivery.
+- The operator then used the real local frontend to sign up with a sandbox-verified NUS recipient, receive/submit the SES email OTP, complete Telegram verification through the real bot and log in.
+- The operator confirmed that the frontend forgot-password/reset flow worked using the real emailed reset link.
+- Telegram polling was temporarily disabled for the isolated email check, then re-enabled for the full onboarding test. Keep exactly one active poller per bot.
+- These are manual local acceptance results, separate from the automated fake-SES tests. They do not prove deployed credentials, the gateway, Kafka-to-Credit allocation or the complete Order workflow. No personal email addresses, bot tokens, passwords or AWS credentials are recorded here.
+
+#### Failure handling and limitations
+
+- The SDK makes at most three attempts per call, with a 3-second connection timeout and a 10-second request timeout per attempt. A network timeout may mean SES accepted a message even though the response was lost, so duplicate emails are possible; codes/links remain subject to existing expiry/single-use checks.
+- Signup delivery failures return sanitized `503`; the saved account stays unverified. Resend and password recovery keep their generic `202` even on delivery failures to avoid account enumeration. After resolving the issue, request a new code/link. Neither sending nor receiving an email automatically verifies a user.
+- Email sending is synchronous and is **not** the durable Kafka verification outbox. A failed send is not queued across restarts; the user must request another message. Durable email jobs, application-level resend throttling and bounce/complaint automation remain production-hardening work. SES quotas apply, including the sandbox limit of one email per second; do not use real email for load-test users.
+- Login-lockout notification emails are not implemented by this patch.
+- Troubleshooting: `CredentialsProviderError` usually means missing AWS access; `AccessDeniedException` means permission/policy failure; `MessageRejected` may indicate identity/sandbox issues; `TooManyRequestsException` means throttling. Raw errors are deliberately not logged. Inspect AWS configuration with the infrastructure owner without exposing secrets.
+
+References: [SES SendEmail](https://docs.aws.amazon.com/ses/latest/APIReference-V2/API_SendEmail.html), [AWS SDK credentials](https://docs.aws.amazon.com/sdk-for-javascript/v3/developer-guide/setting-credentials-node.html), [SES sandbox](https://docs.aws.amazon.com/ses/latest/dg/request-production-access.html), [DMARC alignment](https://docs.aws.amazon.com/ses/latest/dg/send-email-authentication-dmarc.html).
+
+#### Automated email checks (no real messages)
+
+```powershell
+npm.cmd test
+npm.cmd run build
+npm.cmd run test:integration:email
+```
+
+The unit tests use fake SES clients, including real SDK serialization/signing with an in-memory HTTP handler. The integration test uses its own randomly named local database on port `5554`, applies migrations, and drops only that database afterward. It tests signup failures/recovery via resend, OTP validation, password reset, session revocation and generic delivery-failure responses without sending email/Telegram or modifying normal accounts. Start only the existing local database with `docker compose start db` if necessary. Other local Compose onboarding/reset scripts now refuse SES mode before creating any synthetic accounts.
 
 ```http
 POST /api/v1/user/reset-password
@@ -299,8 +363,9 @@ See [API_CONTRACT_UPDATES.txt](API_CONTRACT_UPDATES.txt) for exact edits to the 
 - Add authenticated `POST /api/v1/user/request-telegram-verification`, no body, response `202 { telegramBotUrl, expiresAt }`; errors include `401`, `429`, and `503`.
 - Keep `POST /api/v1/user/verify-telegram` authenticated with `{ otp }`, response `{ status, nextSteps }`. Keep the existing password recovery and profile password endpoints.
 - Infrastructure and Credit Service owners: run the normal migration Job with the new image, then test that Credit grants 20 credits only after both verification steps. The event format is unchanged; delivery now retries from the database.
-- Frontend owner: the earlier proposed frontend changes are isolated on the already-pushed `user-service-frontend-integration` branch for review. Signup `name` and email OTP requests are now aligned on `main`; review the remaining Telegram verification/status screens against the latest frontend before bringing them over. The current authorization-route migration changes nginx proxy configuration and documentation only, not React pages or forms.
-- Still outstanding: real email delivery (including the login-lockout email), account escalation to Admin, Admin search/role/suspension endpoints and integration, and friendships. The complete frontend/Order/Credit/Admin journey has not been demonstrated by these service-level tests. The latest fetched `main` also has new frontend changes; the older isolated frontend proposal must be reconciled with those before merging.
+- Frontend owner: the current frontend's signup, email verification, Telegram verification, login and password recovery were exercised locally on 20 October 2026 without frontend source changes. The older `user-service-frontend-integration` proposal should not be merged wholesale over the current pages. The reported logout-control discoverability issue remains for frontend review.
+- Infrastructure owner: rebuild the User image and configure `EMAIL_PROVIDER=ses`, `SES_FROM_EMAIL`, `AWS_REGION=ap-southeast-1` and the deployed `FRONTEND_BASE_URL`. Supply approved workload AWS access with `ses:SendEmail` scoped to the sender identity, not a developer's expiring local credentials. Configure bot secrets and one poller per bot as well. SES is still sandboxed: verify demo recipients in the same account/region. Do not enable development email logging in production.
+- Still outstanding: deployed-environment email configuration/testing, login-lockout notification email, account escalation to Admin, Admin search/role/suspension endpoints and integration, and friendships. The complete frontend/Order/Credit/Admin journey has not been demonstrated by the local onboarding and service-level tests.
 
 ## Account deletion (F5)
 
@@ -315,6 +380,55 @@ Content-Type: application/json
 Returns `202 { message, scheduledDeletionAt }`. The deadline is six calendar months later, clamping month-end dates when necessary. All current sessions, outstanding reset links and verification challenges are revoked immediately. The last active administrator cannot schedule deletion (`409 LAST_ADMIN`).
 
 Correct-password login before the deadline cancels deletion and creates a new session; old sessions remain revoked. Login and authorization reject an account whose deadline has passed, even if the cleanup worker has not run yet. The worker runs every `USER_DELETION_SWEEP_INTERVAL_SECONDS` (default 3600), removes up to 100 expired accounts per run, and uses database locks to coordinate with login and other workers. User-owned sessions, OTPs, challenges and verification outbox rows are removed through foreign-key cascades. A minimal audit trail stores UUIDs/action/reason, not profile fields. Other services retain their own records; no unagreed cross-service deletion event is invented here.
+
+## First-admin bootstrap (deployment only)
+
+This resolves the initial setup problem: normal Admin APIs require an existing admin, but a fresh User database has none. The privileged deployment operator uses this command to promote a specific existing user. The command does not call Admin Service, create an account, bypass verification, or expose a public/internal HTTP endpoint. Normal signup always creates an ordinary user.
+
+1. Have the intended administrator register and complete both email and Telegram verification. Obtain that account's UUID from signup or authenticated `GET /api/v1/user/me`.
+2. Deploy/rebuild the updated User image and apply existing migrations, including `UserAuditLog`. No new migration is required by bootstrap itself.
+3. Confirm the environment/database and exact user UUID with the deployment owner. Only an operator with approved container-exec/database access should run the command. Do not expose execution through a web form or ordinary user's token.
+4. Replace `REPLACE_WITH_USER_UUID` below with that UUID and run **once in the intended environment**.
+
+Local Docker Compose, from `user-service` with the updated service container running:
+
+```powershell
+docker compose exec -T user-service node dist/bootstrap-admin.js --user-id "REPLACE_WITH_USER_UUID" --confirm
+```
+
+Kubernetes, using the approved namespace and deployment access:
+
+```text
+kubectl -n <namespace> exec deployment/user -- node dist/bootstrap-admin.js --user-id <user-uuid> --confirm
+```
+
+For a compiled host run, `npm run bootstrap:admin -- --user-id <user-uuid> --confirm` uses `DATABASE_URL` from the process environment or the ignored `.env`. Check the database target before using it. Prefer execution inside the intended deployment to avoid pointing at the wrong database. Do not paste database credentials into chat or commit them.
+
+Safe help, which does not change any account:
+
+```powershell
+npm.cmd run build
+node dist/bootstrap-admin.js --help
+```
+
+The command requires explicit `--confirm`. It refuses missing/invalid UUIDs, missing users, unverified users, locked/suspended users and accounts with deletion requested or scheduled. It also refuses if **any** admin already exists, including an inactive one, or if a `FIRST_ADMIN_BOOTSTRAPPED` audit marker exists. The marker remains after account deletion, so this is not an automatic account-recovery backdoor. Recovery after lost admin access needs a separate privileged, reviewed procedure.
+
+Promotion, revocation of the account's existing sessions and outstanding password-reset links, and the audit record commit in one transaction. Failure rolls back the whole change. Concurrent commands coordinate using the same database advisory lock as last-admin lifecycle checks, so only one can succeed. Future role-changing operations must use `lockAdminRoleChanges` as well. Names, password hashes, email/Telegram verification and other users are unchanged; the command does not publish verification events or award credits.
+
+Audit action: `FIRST_ADMIN_BOOTSTRAPPED`, with target UUID, reason and time. `actorUserId` is null because this is an out-of-band deployment operation, not an authenticated application admin; retain platform access logs to identify the human operator. Success/help exits `0`; rejected setup or database failure exits nonzero, without printing connection credentials. Successful output includes the target UUID and role, not profile or password fields.
+
+After success, the promoted account must **sign in again** using its existing password. `/api/v1/user/internal/authorize` then returns `isAdmin: true` and `permittedAction: true`. This fixes first-admin creation only: Admin Service must still use the agreed authorization URL/fields, and normal User-side role/search/suspension APIs remain separate integration work. There is no new bootstrap API row to add to the shared contract.
+
+### Isolated bootstrap integration test
+
+With local development PostgreSQL running on port 5554:
+
+```powershell
+npm.cmd run build
+npm.cmd run test:integration:admin-bootstrap
+```
+
+The test creates its own uniquely named database, applies migrations, runs the real compiled CLI, tests rejection, atomic rollback, fresh admin login and concurrent processes, then drops only its disposable database. It does not promote any account in the normal `user_db`, send email/Telegram messages, or start the real service/bot. It requires permission to create/drop temporary databases on that local development server; never point this fixture at a shared or production database.
 
 ## New integration endpoints
 
@@ -351,7 +465,7 @@ This sets missing email/Telegram verification timestamps on synthetic non-produc
 
 It defaults to `404` unless `ENABLE_TEST_VERIFICATION=true` and `APP_ENV` is explicitly a permitted non-production environment (`local`, `development`, `dev`, `test`, `staging`, `stg`). When `APP_ENV` is absent it falls back to `NODE_ENV`; production/unknown environments remain disabled. Runtime Node images may use `NODE_ENV=production` even in non-production clusters, so set the real environment explicitly with `APP_ENV`. Never enable this override in production. The normal signup domain/password rules still apply to synthetic users.
 
-Admin Service must forward its administrator's real `Authorization` header when calling this endpoint. Fake `admin-*` tokens and caller-supplied identity headers do not authenticate an admin. A real admin account must be seeded through the team's privileged deployment process; no public first-admin shortcut is introduced. The optional inverse operation is deliberately not added because reversing verification/credits needs a separate agreed workflow.
+Admin Service must forward its administrator's real `Authorization` header when calling this endpoint. Fake `admin-*` tokens and caller-supplied identity headers do not authenticate an admin. Use the deployment-only first-admin bootstrap command above to establish the first real admin; this test-verification endpoint does not grant roles. No public first-admin shortcut is introduced. The optional inverse operation is deliberately not added because reversing verification/credits needs a separate agreed workflow.
 
 ### Infrastructure and Admin Service integration review
 

@@ -1,0 +1,24 @@
+sequenceDiagram
+    actor Requester
+    participant Orders as Order service
+    participant Supplier as Supplier Service
+    participant Users as User Service
+    participant Rating as Rating stub
+    participant Credit as Credit Service
+    participant DB as Postgres
+
+    Requester->>Orders: POST /api/v1/orders
+    Orders->>Orders: check expiry and delivery times
+    Orders->>Users: GET /internal/users/{userId}/telegram
+    Users-->>Orders: telegram handle
+    Orders->>Supplier: GET /api/v1/supplier/{pickupId}
+    Supplier-->>Orders: approved place
+    Orders->>Supplier: GET /api/v1/supplier/{dropoffId}
+    Supplier-->>Orders: approved place
+    Orders->>Rating: rating for requester
+    Rating-->>Orders: 5.0
+    Orders->>Credit: POST /api/v1/credit/reserve
+    Credit-->>Orders: reserved
+    Orders->>DB: insert CREATED order, log, alert, status outbox
+    Orders-->>Requester: 201 CREATED
+    Note over Orders,Credit: If the insert fails, POST /api/v1/credit/release returns the reservation

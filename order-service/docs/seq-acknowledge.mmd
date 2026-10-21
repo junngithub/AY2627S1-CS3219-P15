@@ -1,0 +1,11 @@
+sequenceDiagram
+    actor Requester
+    participant Orders as Order service
+    participant DB as Postgres
+
+    Requester->>Orders: POST /api/v1/orders/{orderId}/acknowledge
+    Note over Orders: requester, COLLECTED or DELIVERED, acknowledgement window still open
+    Orders->>DB: ACKNOWLEDGED and settled_at = now
+    Note over DB: outbox credit.reservation.release, reason ACKNOWLEDGED
+    Note over DB: outbox rating.permission.granted, requester rates courier
+    Orders-->>Requester: 200 ACKNOWLEDGED

@@ -45,7 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class OrderApiTest {
 
     private final UUID id = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
-    private final UserAccount caller = new UserAccount("11111111-1111-1111-1111-111111111111", "requester");
+    private final UserAccount caller = new UserAccount("11111111-1111-1111-1111-111111111111");
 
     @Mock private OrderCommandService commands;
     @Mock private OrderQueryService queries;
@@ -95,7 +95,10 @@ class OrderApiTest {
         when(queries.get(any(), eq(id))).thenReturn(order);
         when(queries.pool(any(), eq(1.2), eq(103.8), eq(0), eq(20))).thenReturn(PageResponse.of(List.of(order), 0, 20, 1));
         when(queries.mine(any(), eq(0), eq(20))).thenReturn(PageResponse.empty(0, 20));
-        when(queries.deliveries(any(), eq(0), eq(20))).thenReturn(PageResponse.empty(0, 20));
+        when(queries.pastDeliveries(any(), eq(0), eq(20))).thenReturn(PageResponse.empty(0, 20));
+        when(queries.activeDeliveries(any(), eq(0), eq(20))).thenReturn(PageResponse.empty(0, 20));
+        when(queries.activeRequests(any(), eq(0), eq(20))).thenReturn(PageResponse.empty(0, 20));
+        when(queries.pastRequests(any(), eq(0), eq(20))).thenReturn(PageResponse.empty(0, 20));
         when(queries.search(any(), eq("nus-coop"), isNull(), eq(0), eq(20))).thenReturn(PageResponse.empty(0, 20, 0));
         AlertEntity alert = new AlertEntity();
         alert.setId(UUID.randomUUID());
@@ -128,7 +131,10 @@ class OrderApiTest {
                 .andExpect(status().isOk());
         mvc.perform(signed(get("/api/v1/orders").param("latitude", "1.2").param("longitude", "103.8"))).andExpect(status().isOk());
         mvc.perform(signed(get("/api/v1/orders/mine"))).andExpect(status().isOk());
-        mvc.perform(signed(get("/api/v1/orders/deliveries"))).andExpect(status().isOk());
+        mvc.perform(signed(get("/api/v1/orders/deliveries/past"))).andExpect(status().isOk());
+        mvc.perform(signed(get("/api/v1/orders/deliveries/active"))).andExpect(status().isOk());
+        mvc.perform(signed(get("/api/v1/orders/requests/active"))).andExpect(status().isOk());
+        mvc.perform(signed(get("/api/v1/orders/requests/past"))).andExpect(status().isOk());
         mvc.perform(signed(get("/api/v1/orders/search").param("pickupLocationId", "nus-coop"))).andExpect(status().isOk());
         mvc.perform(signed(get("/api/v1/orders/alerts"))).andExpect(jsonPath("$.content[0].toStatus").value("CREATED"));
     }
@@ -179,7 +185,6 @@ class OrderApiTest {
     private <B extends AbstractMockHttpServletRequestBuilder<B>> B signed(B request) {
         return request
                 .header(CallerHeaders.USER_ID, caller.userId())
-                .header(CallerHeaders.PERMITTED, "true")
-                .header(CallerHeaders.TELEGRAM, caller.telegramHandle());
+                .header(CallerHeaders.PERMITTED, "true");
     }
 }

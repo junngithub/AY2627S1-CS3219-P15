@@ -1,0 +1,20 @@
+sequenceDiagram
+    participant Admin as Admin Service
+    participant Kafka as foc.admin.events
+    participant Orders as Order service
+    participant DB as Postgres
+
+    Admin->>Kafka: OrderUnderReview or ConflictResolved
+    Kafka->>Orders: eventId, eventType, orderId, caseId
+    alt missing field or eventId already stored
+        Orders-->>Kafka: ignore, and do not store the event
+    else order id is unknown
+        Orders->>DB: insert processed_events, leave status unchanged
+    else new event for a known order
+        Orders->>DB: insert processed_events and set case_id
+        alt review started while ESCALATED
+            Orders->>DB: UNDER_REVIEW, log, alert, status outbox
+        else case resolved while ESCALATED or UNDER_REVIEW
+            Orders->>DB: delete photos, COMPLETED, log, alert, status outbox
+        end
+    end

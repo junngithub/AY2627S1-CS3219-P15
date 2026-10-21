@@ -27,10 +27,11 @@ public class AdminEventListener {
     public void onMessage(String payload) {
         try {
             JsonNode node = mapper.readTree(payload);
+            JsonNode body = node.path("payload").isObject() ? node.path("payload") : node;
             String eventId = text(node, "eventId");
-            String eventType = text(node, "eventType");
-            String orderId = text(node, "orderId");
-            String caseId = text(node, "caseId");
+            String eventType = adminEvent(text(node, "eventType"));
+            String orderId = firstText(body, node, "orderId");
+            String caseId = firstText(body, node, "caseId");
             if (orderId == null) {
                 return;
             }
@@ -42,6 +43,21 @@ public class AdminEventListener {
         } catch (Exception exception) {
             log.warn("Admin event was ignored because it could not be read", exception);
         }
+    }
+
+    private static String adminEvent(String eventType) {
+        if ("OrderUnderReview".equals(eventType)) {
+            return "admin.review.started";
+        }
+        if ("ConflictResolved".equals(eventType)) {
+            return "admin.case.resolved";
+        }
+        return eventType;
+    }
+
+    private static String firstText(JsonNode preferred, JsonNode fallback, String field) {
+        String value = text(preferred, field);
+        return value == null ? text(fallback, field) : value;
     }
 
     private static String text(JsonNode node, String field) {

@@ -1,0 +1,22 @@
+sequenceDiagram
+    actor Courier
+    participant Orders as Order service
+    participant Users as User Service
+    participant Rating as Rating stub
+    participant DB as Postgres
+
+    Courier->>Orders: POST /api/v1/orders/{orderId}/accept
+    Orders->>Users: GET /internal/users/{userId}/telegram
+    Users-->>Orders: telegram handle
+    Orders->>Rating: rating for courier
+    Rating-->>Orders: 5.0
+    Orders->>DB: update only if status is still CREATED
+    Note over DB: sets courier, rating, and collection deadline to now plus 5 minutes
+    alt row updated
+        Orders->>DB: order_log, alert, status outbox
+        Orders-->>Courier: 200 ACCEPTED
+    else order missing
+        Orders-->>Courier: 404 Order not found
+    else already claimed
+        Orders-->>Courier: 409 This task was already claimed
+    end

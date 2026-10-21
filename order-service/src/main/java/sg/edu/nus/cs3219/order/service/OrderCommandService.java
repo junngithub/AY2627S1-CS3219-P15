@@ -5,11 +5,11 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import sg.edu.nus.cs3219.order.client.AdminClient;
 import sg.edu.nus.cs3219.order.client.CreditClient;
-import sg.edu.nus.cs3219.order.client.OrderContext;
 import sg.edu.nus.cs3219.order.client.Place;
 import sg.edu.nus.cs3219.order.client.RatingClient;
 import sg.edu.nus.cs3219.order.client.SupplierClient;
 import sg.edu.nus.cs3219.order.client.UserAccount;
+import sg.edu.nus.cs3219.order.client.UserClient;
 import sg.edu.nus.cs3219.order.config.OrderProperties;
 import sg.edu.nus.cs3219.order.domain.OrderAction;
 import sg.edu.nus.cs3219.order.domain.OrderStateMachine;
@@ -30,6 +30,8 @@ import sg.edu.nus.cs3219.order.rest.CreateOrderRequest;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -42,6 +44,7 @@ public class OrderCommandService {
     private final ProcessedEventRepository processedEvents;
     private final CreditClient credits;
     private final SupplierClient suppliers;
+    private final UserClient users;
     private final RatingClient ratings;
     private final AdminClient admins;
     private final OrderMessageFactory messages;
@@ -57,6 +60,7 @@ public class OrderCommandService {
             ProcessedEventRepository processedEvents,
             CreditClient credits,
             SupplierClient suppliers,
+            UserClient users,
             RatingClient ratings,
             AdminClient admins,
             OrderMessageFactory messages,
@@ -71,6 +75,7 @@ public class OrderCommandService {
         this.processedEvents = processedEvents;
         this.credits = credits;
         this.suppliers = suppliers;
+        this.users = users;
         this.ratings = ratings;
         this.admins = admins;
         this.messages = messages;
@@ -90,6 +95,7 @@ public class OrderCommandService {
         if (!request.deliveryTime().isAfter(now) || !request.deliveryTime().isAfter(request.expiryTime())) {
             throw ApiException.badRequest("Delivery deadline must be after the current time and after acceptance expiry");
         }
+        String requesterTelegram = users.telegramHandle(requester.userId());
         Place pickup = suppliers.requirePlace(request.fromLocation(), requester);
         Place dropoff = suppliers.requirePlace(request.toLocation(), requester);
         double requesterRating = ratings.ratingFor(requester.userId(), requester);
@@ -100,7 +106,7 @@ public class OrderCommandService {
             OrderEntity order = new OrderEntity();
             order.setId(id);
             order.setRequesterId(requester.userId());
-            order.setRequesterTelegramHandle(requester.telegramHandle());
+            order.setRequesterTelegramHandle(requesterTelegram);
             order.setRequesterRating(requesterRating);
             order.setItemDescription(request.itemDescription().trim());
             order.setAmount(request.credits());
@@ -134,12 +140,13 @@ public class OrderCommandService {
     @Transactional
     public OrderEntity accept(UserAccount courier, UUID orderId) {
         double courierRating = ratings.ratingFor(courier.userId(), courier);
+        String courierTelegram = users.telegramHandle(courier.userId());
         Instant now = clock.instant();
         Instant collectionDeadline = now.plus(properties.getDeadlines().getCollectionWindow());
         int updated = orders.acceptIfOpen(
                 orderId,
                 courier.userId(),
-                courier.telegramHandle(),
+                courierTelegram,
                 courierRating,
                 collectionDeadline,
                 now
@@ -226,7 +233,7 @@ public class OrderCommandService {
         if (photo != null && !photo.isEmpty()) {
             order.setDisputePhotoRef(photos.store(orderId, "dispute", photo));
         }
-        admins.escalate(orderContext(order, comment), requester);
+        admins.openConflict(order.getId(), requester.userId(), comment, evidence(order));
         order.setDisputeText(comment);
         transition(order, OrderStatus.ESCALATED, true, now, OrderAction.ESCALATED, requester.userId());
         return order;
@@ -258,8 +265,8 @@ public class OrderCommandService {
         if (!OrderStateMachine.deliveryMissed(order.snapshot(), now)) {
             return;
         }
+        admins.openConflict(order.getId(), order.getRequesterId(), "Delivery deadline missed", evidence(order));
         transition(order, OrderStatus.ESCALATED, true, now, OrderAction.DELIVERY_DEADLINE_MISSED, null);
-        outbox.append(order.getId(), KafkaTopics.ADMIN_COMMANDS, messages.escalationOpened(order, now), now);
     }
 
     @Transactional
@@ -313,6 +320,20 @@ public class OrderCommandService {
         }
     }
 
+    private static List<String> evidence(OrderEntity order) {
+        List<String> refs = new ArrayList<>();
+        addEvidence(refs, order.getCollectionPhotoRef());
+        addEvidence(refs, order.getDeliveryPhotoRef());
+        addEvidence(refs, order.getDisputePhotoRef());
+        return refs;
+    }
+
+    private static void addEvidence(List<String> refs, String ref) {
+        if (ref != null && !ref.isBlank()) {
+            refs.add(ref);
+        }
+    }
+
     private void releaseAndAllowRequesterRating(OrderEntity order, String reason, Instant now) {
         outbox.append(order.getId(), KafkaTopics.CREDIT, messages.creditRelease(order, reason, now), now);
         outbox.append(
@@ -361,38 +382,6 @@ public class OrderCommandService {
                 KafkaTopics.ORDER_STATUS,
                 messages.statusChanged(order, from, to, notifyRequester, now),
                 now
-        );
-    }
-
-    private static OrderContext orderContext(OrderEntity order, String comment) {
-        return new OrderContext(
-                order.getId(),
-                order.getStatus().name(),
-                order.getItemDescription(),
-                order.getAmount(),
-                order.getRequesterId(),
-                order.getRequesterTelegramHandle(),
-                order.getRequesterRating(),
-                order.getCourierId(),
-                order.getCourierTelegramHandle(),
-                order.getCourierRating(),
-                order.getRequestTime(),
-                order.getAcceptanceExpiry(),
-                order.getDeliveryDeadline(),
-                order.getCollectionDeadline(),
-                order.getAcknowledgementDeadline(),
-                order.getPickupLocationId(),
-                order.getPickupName(),
-                order.getPickupLat(),
-                order.getPickupLng(),
-                order.getDropoffLocationId(),
-                order.getDropoffName(),
-                order.getDropoffLat(),
-                order.getDropoffLng(),
-                order.getCollectionPhotoRef(),
-                order.getDeliveryPhotoRef(),
-                order.getDisputePhotoRef(),
-                comment
         );
     }
 
