@@ -33,7 +33,7 @@ Errors use `{ "error": "...", "code": "<HTTP status name>" }`.
 | GET | `/mine` | requester | That caller's orders, newest `requestTime` first |
 | GET | `/deliveries/past` | courier | That courier's `DELIVERED`, `ACKNOWLEDGED`, `UNACKNOWLEDGED`, and `COMPLETED` orders, newest `requestTime` first |
 | GET | `/deliveries/active` | courier | That courier's in-progress deliveries: `ACCEPTED`, `COLLECTED`, `ESCALATED`, `UNDER_REVIEW`, newest `requestTime` first |
-| GET | `/requests/active` | requester | That requester's active requests a courier has taken: `ACCEPTED`, `COLLECTED`, `DELIVERED`, `ESCALATED`, `UNDER_REVIEW`, newest `requestTime` first. `CREATED` stays on `/mine` |
+| GET | `/requests/active` | requester | That requester's open requests: `CREATED`, `ACCEPTED`, `COLLECTED`, `DELIVERED`, `ESCALATED`, `UNDER_REVIEW`, newest `requestTime` first |
 | GET | `/requests/past` | requester | That requester's past requests: `ACKNOWLEDGED`, `UNACKNOWLEDGED`, `COMPLETED`, `EXPIRED`, `CANCELLED`, newest `requestTime` first |
 | GET | `/alerts` | requester | Alerts with `notifyRequester` true |
 

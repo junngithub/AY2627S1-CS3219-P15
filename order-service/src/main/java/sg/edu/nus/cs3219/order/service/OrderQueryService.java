@@ -38,6 +38,7 @@ public class OrderQueryService {
     );
 
     private static final List<OrderStatus> ACTIVE_REQUESTS = List.of(
+            OrderStatus.CREATED,
             OrderStatus.ACCEPTED,
             OrderStatus.COLLECTED,
             OrderStatus.DELIVERED,

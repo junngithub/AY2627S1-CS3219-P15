@@ -1,5 +1,5 @@
 meta {
-  name: Open order is not an active request
+  name: Open order is an active request
   type: http
   seq: 3
 }
@@ -18,7 +18,7 @@ headers {
 tests {
   test("status is 200", function() {
     expect(res.getStatus()).to.equal(200);
-    const listed = res.getBody().content.some(order => order.id === bru.getVar("orderId"));
-    expect(listed).to.equal(false);
+    const match = res.getBody().content.find(order => order.id === bru.getVar("orderId"));
+    expect(match.status).to.equal("CREATED");
   });
 }

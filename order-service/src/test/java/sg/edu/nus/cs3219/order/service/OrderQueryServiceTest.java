@@ -110,7 +110,7 @@ class OrderQueryServiceTest {
 
         when(orders.findByRequesterIdAndStatusInOrderByRequestTimeDesc(
                 eq("11111111-1111-1111-1111-111111111111"),
-                eq(List.of(OrderStatus.ACCEPTED, OrderStatus.COLLECTED, OrderStatus.DELIVERED, OrderStatus.ESCALATED, OrderStatus.UNDER_REVIEW)),
+                eq(List.of(OrderStatus.CREATED, OrderStatus.ACCEPTED, OrderStatus.COLLECTED, OrderStatus.DELIVERED, OrderStatus.ESCALATED, OrderStatus.UNDER_REVIEW)),
                 any()))
                 .thenReturn(new PageImpl<>(List.of(order())));
         assertEquals(1, service.activeRequests(requester, 0, 20).content().size());
