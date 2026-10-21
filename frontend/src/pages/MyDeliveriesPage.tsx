@@ -1,48 +1,50 @@
 /**
  * AI Assistance Disclosure
  * Tool: Claude Code (Claude Opus 5), date: 2026-09-28; wired to
- *       GET /api/v1/orders/deliveries with Claude Code (Claude Opus 5.5) on
- *       2026-10-20
+ *       GET /api/v1/orders/deliveries/active and /past with Claude Code
+ *       (Claude Opus 5.5) on 2026-10-21
  * Scope: Generated the My deliveries list. No mockup exists, so it follows
  *        UI FR9, which writes one set of rules for both order lists.
  * Reviewed by Ngooi Jun Sen.
  *
- * FR9.1.1 Active and History tabs, FR9.2.1 a desktop table, FR9.2.2 mobile
- * cards with prominent status pills. FR9.1.2 asks for newest request first;
- * the endpoint orders by last update instead, which for finished deliveries
- * is close enough.
- *
- * TODO(order-service): the endpoint lists only Delivered, Acknowledged,
- * Unacknowledged and Completed orders. Active therefore shows deliveries
- * awaiting the requester's acknowledgement, not tasks still being collected
- * or carried; those stay reachable from the link on Browse.
+ * FR9.1.1 Active and History tabs, each from its own endpoint; FR9.1.2
+ * newest request first (both endpoints sort that way); FR9.2.1 a desktop
+ * table, FR9.2.2 mobile cards with prominent status pills.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Alert } from '../components/ui/Alert';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { errorMessage } from '../lib/api';
 import { formatWhen } from '../lib/format';
-import { fetchMyDeliveries, isActiveStatus, type Order } from '../lib/orders';
+import { fetchActiveDeliveries, fetchPastDeliveries, type Order } from '../lib/orders';
 import { formatDeadline, useCountdown } from '../lib/useCountdown';
 import styles from '../components/order/orderList.module.css';
 
-/**
- * Its own component because each row runs its own clock. Only Delivered rows
- * have one: the requester's acknowledgement deadline, after which the credits
- * are released to the courier anyway.
- */
+/** The clock a row waits on, and what to call it. */
+function deadlineFor(row: Order): { at: Date; label: string; overdue: string } | null {
+  if (row.status === 'Accepted' && row.collectionDeadline) {
+    return { at: row.collectionDeadline, label: 'Collect within', overdue: 'Collection window closed' };
+  }
+  if (row.status === 'Collected') {
+    return { at: row.deliveryDeadline, label: 'Deliver within', overdue: 'Delivery deadline passed' };
+  }
+  if (row.status === 'Delivered' && row.acknowledgementDeadline) {
+    // After this the credits are released to the courier anyway.
+    return { at: row.acknowledgementDeadline, label: 'Credits release in', overdue: 'Credits releasing' };
+  }
+  return null;
+}
+
+/** Its own component because each row runs its own clock. */
 function StatusCell({ row }: { row: Order }) {
-  const deadline = row.status === 'Delivered' ? row.acknowledgementDeadline : null;
-  const secondsLeft = useCountdown(deadline ? deadline.getTime() : null);
+  const deadline = deadlineFor(row);
+  const secondsLeft = useCountdown(deadline ? deadline.at.getTime() : null);
 
   let detail: string | null = null;
   if (deadline) {
-    detail =
-      secondsLeft > 0
-        ? `Credits release in ${formatDeadline(secondsLeft)}`
-        : 'Credits releasing';
+    detail = secondsLeft > 0 ? `${deadline.label} ${formatDeadline(secondsLeft)}` : deadline.overdue;
   }
 
   return (
@@ -56,19 +58,20 @@ function StatusCell({ row }: { row: Order }) {
 type Tab = 'active' | 'history';
 
 export function MyDeliveriesPage() {
-  const [allRows, setAllRows] = useState<Order[]>([]);
-  const [total, setTotal] = useState(0);
+  const [active, setActive] = useState<Order[]>([]);
+  const [history, setHistory] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>('history');
+  const [tab, setTab] = useState<Tab>('active');
 
   useEffect(() => {
     let cancelled = false;
-    fetchMyDeliveries()
-      .then((page) => {
+    // Both up front, so each tab shows its count before it is opened.
+    Promise.all([fetchActiveDeliveries(), fetchPastDeliveries()])
+      .then(([activePage, pastPage]) => {
         if (cancelled) return;
-        setAllRows(page.orders);
-        setTotal(page.total);
+        setActive(activePage.orders);
+        setHistory(pastPage.orders);
       })
       .catch((error: unknown) => {
         if (cancelled) return;
@@ -82,15 +85,6 @@ export function MyDeliveriesPage() {
     };
   }, []);
 
-  // UI FR9.1.1: ongoing and settled orders are separated.
-  const { active, history } = useMemo(
-    () => ({
-      active: allRows.filter((row) => isActiveStatus(row.status)),
-      history: allRows.filter((row) => !isActiveStatus(row.status)),
-    }),
-    [allRows],
-  );
-
   const rows = tab === 'active' ? active : history;
 
   return (
@@ -98,7 +92,9 @@ export function MyDeliveriesPage() {
       <header className={styles.header}>
         <h1 className={styles.title}>
           My deliveries
-          <span className={styles.subtitle}>recently updated first &middot; {total} total</span>
+          <span className={styles.subtitle}>
+            newest first &middot; {active.length + history.length} total
+          </span>
         </h1>
 
         <Link to="/browse" className={styles.newButton}>
@@ -114,7 +110,7 @@ export function MyDeliveriesPage() {
           className={tab === 'active' ? `${styles.tab} ${styles.tabActive}` : styles.tab}
           onClick={() => setTab('active')}
         >
-          Awaiting acknowledgement <span className={styles.tabCount}>{active.length}</span>
+          Active <span className={styles.tabCount}>{active.length}</span>
         </button>
         <button
           type="button"
@@ -134,12 +130,12 @@ export function MyDeliveriesPage() {
       ) : rows.length === 0 ? (
         <div className={styles.empty}>
           <p className={styles.emptyTitle}>
-            {tab === 'active' ? 'Nothing awaiting acknowledgement' : 'No past deliveries'}
+            {tab === 'active' ? 'Nothing in progress' : 'No past deliveries'}
           </p>
           <p className={styles.emptyBody}>
             {tab === 'active'
-              ? 'Deliveries show here once you mark them delivered. Tasks you are still collecting or carrying are not listed yet; open them from Browse.'
-              : 'Deliveries appear here once the requester acknowledges them, or the acknowledgement window closes.'}
+              ? 'Tasks you accept show here until you deliver them.'
+              : 'Deliveries move here once you mark them delivered.'}
           </p>
           <Link to="/browse" className={styles.newButton}>
             Browse requests

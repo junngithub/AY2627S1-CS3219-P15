@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { Link, NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthProvider';
 import { fetchSuppliersForAdmin } from '../../lib/suppliers';
 import styles from './AdminLayout.module.css';
@@ -47,7 +47,10 @@ export function AdminLayout() {
     <div className={styles.shell}>
       <nav className={styles.rail} aria-label="Admin sections">
         <div className={styles.brand}>
-          <span className={styles.logo}>FoC</span>
+          {/* Back to the app, as the logo does in AppShell. */}
+          <Link to="/browse" className={styles.logo} aria-label="Back to FoC">
+            FoC
+          </Link>
           <span className={styles.adminTag}>Admin</span>
         </div>
 

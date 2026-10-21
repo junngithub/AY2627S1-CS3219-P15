@@ -21,6 +21,13 @@ const MODE_TABS = [
   { to: '/my-deliveries', label: 'My deliveries' },
 ];
 
+/*
+ * Admins also get a way into the admin area (UI FR15). Shown only to them:
+ * Admin F2.2.1 keeps the admin pages unknown to everyone else, and the routes
+ * are registered for admins only (App.tsx), so the link would 404 anyway.
+ */
+const ADMIN_TAB = { to: '/admin', label: 'Admin' };
+
 const MENU_LINKS = [
   ...MODE_TABS,
   { to: '/requests/new', label: 'New request' },
@@ -50,6 +57,9 @@ export function AppShell() {
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
   const { user } = useAuth();
+  const isAdmin = user?.isAdmin === true;
+  const tabs = isAdmin ? [...MODE_TABS, ADMIN_TAB] : MODE_TABS;
+  const menuLinks = isAdmin ? [...MENU_LINKS, ADMIN_TAB] : MENU_LINKS;
 
   // Close the mobile menu whenever the route changes.
   useEffect(() => setMenuOpen(false), [location.pathname]);
@@ -108,7 +118,7 @@ export function AppShell() {
           </nav>
         ) : (
           <nav className={styles.tabs} aria-label="Mode">
-            {MODE_TABS.map((tab) => (
+            {tabs.map((tab) => (
               <NavLink
                 key={tab.to}
                 to={tab.to}
@@ -153,7 +163,7 @@ export function AppShell() {
 
       {menuOpen ? (
         <nav id="mobile-menu" className={styles.mobileMenu} aria-label="Main">
-          {MENU_LINKS.map((link) => (
+          {menuLinks.map((link) => (
             <NavLink
               key={link.to}
               to={link.to}
