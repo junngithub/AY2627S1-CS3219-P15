@@ -136,6 +136,10 @@ class MessagingTest {
         UUID orderId = UUID.randomUUID();
         listener.onMessage("{\"eventId\":\"e1\",\"eventType\":\"admin.review.started\",\"orderId\":\"" + orderId + "\",\"caseId\":\"case-1\"}");
         verify(commands).applyAdminEvent("e1", "admin.review.started", orderId, "case-1");
+        listener.onMessage("{\"eventId\":\"e4\",\"eventType\":\"OrderUnderReview\",\"version\":1,\"timestamp\":\"2026-10-21T00:00:00Z\",\"payload\":{\"orderId\":\"" + orderId + "\",\"caseId\":\"case-4\"}}");
+        verify(commands).applyAdminEvent("e4", "admin.review.started", orderId, "case-4");
+        listener.onMessage("{\"eventId\":\"e5\",\"eventType\":\"ConflictResolved\",\"version\":1,\"payload\":{\"orderId\":\"" + orderId + "\",\"caseId\":\"case-5\",\"faultParty\":\"courier\"}}");
+        verify(commands).applyAdminEvent("e5", "admin.case.resolved", orderId, "case-5");
 
         listener.onMessage("{");
         listener.onMessage("{\"eventId\":\"e2\",\"eventType\":\"admin.review.started\",\"orderId\":\"not-a-uuid\",\"caseId\":\"case-1\"}");

@@ -61,7 +61,7 @@ These HTTP calls finish before the order row changes. A failure leaves the previ
 | Accept | `GET /api/v1/user/internal/users/{userId}/telegram` with `X-Service-Token` before the order is claimed |
 | Create, if the insert fails | `POST /api/v1/credit/release` with `{ orderId }` |
 | Requester cancels CREATED | `POST /api/v1/credit/release` before the status becomes CANCELLED |
-| Requester escalates | `POST /escalations` on the admin client. Rating and admin clients are local stubs. Rating always returns 5.0. Admin accepts a non-blank comment |
+| Requester escalates, and a collected order that misses its delivery deadline | `POST /api/v1/admin/conflicts` with `{ orderId, reporterUserId, comment, photos }` before the status becomes ESCALATED. A repeat for the same order is accepted. Rating still returns 5.0 locally |
 
 Courier release does not call Credit. The reservation stays with the order.
 
@@ -77,9 +77,8 @@ Every published payload has `eventId`, `eventType`, `schemaVersion` (1), `occurr
 | foc.credit.commands | credit.reservation.return | Acceptance expiry. `reason` is `EXPIRED` |
 | foc.credit.commands | credit.reservation.release | Acknowledge or unacknowledge. `reason` is `ACKNOWLEDGED` or `UNACKNOWLEDGED`, and the payload includes `courierId` and `amount` |
 | foc.rating.commands | rating.permission.granted | Deliver: courier rates requester. Acknowledge or unacknowledge: requester rates courier. Fields: `raterId`, `raterRole`, `rateeId`, `rateeRole` |
-| foc.admin.commands | admin.escalation.opened | Sweeper only, when a COLLECTED order misses the delivery deadline. `reason` is `DELIVERY_DEADLINE_MISSED` |
-| foc.admin.events | admin.review.started | Consumed. ESCALATED → UNDER_REVIEW when `caseId` is present |
-| foc.admin.events | admin.case.resolved | Consumed. ESCALATED or UNDER_REVIEW → COMPLETED, and photos are deleted |
+| foc.admin.events | OrderUnderReview | Consumed. ESCALATED → UNDER_REVIEW when `payload.caseId` is present |
+| foc.admin.events | ConflictResolved | Consumed. ESCALATED or UNDER_REVIEW → COMPLETED, and photos are deleted |
 
 `order.status.changed` has no consumer in this service. A duplicate `eventId`, a missing field, or a non-UUID order id is ignored and is not stored. A readable event for an unknown order is stored in `processed_events` and does not change a status. A known order stores the event, copies `caseId`, and changes status only when the current status allows that event. A failure while applying a readable event is retried.
 

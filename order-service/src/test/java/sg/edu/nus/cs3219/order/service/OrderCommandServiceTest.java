@@ -324,12 +324,7 @@ class OrderCommandServiceTest {
         when(photos.store(id, "dispute", photo)).thenReturn(id + "/dispute.png");
         OrderEntity escalated = service.escalate(requester, id, "wrong item", photo);
         assertEquals(id + "/dispute.png", escalated.getDisputePhotoRef());
-        verify(admins).escalate(org.mockito.ArgumentMatchers.argThat(context ->
-                context.orderId().equals(id)
-                        && "wrong item".equals(context.comment())
-                        && "DELIVERED".equals(context.status())
-                        && "22222222-2222-2222-2222-222222222222".equals(context.courierId())
-                        && (id + "/dispute.png").equals(context.disputePhotoRef())), eq(requester));
+        verify(admins).openConflict(eq(id), eq(requester.userId()), eq("wrong item"), eq(java.util.List.of(id + "/dispute.png")));
     }
 
     @Test
@@ -377,6 +372,11 @@ class OrderCommandServiceTest {
         when(orders.lockById(id)).thenReturn(Optional.of(missed));
         service.escalateMissedDelivery(id, now);
         assertEquals(OrderStatus.ESCALATED, missed.getStatus());
+        verify(admins).openConflict(
+                eq(id),
+                eq("11111111-1111-1111-1111-111111111111"),
+                eq("Delivery deadline missed"),
+                eq(java.util.List.of(id + "/collection.png", id + "/delivery.png")));
 
         OrderEntity onTime = openOrder();
         onTime.setStatus(OrderStatus.COLLECTED);

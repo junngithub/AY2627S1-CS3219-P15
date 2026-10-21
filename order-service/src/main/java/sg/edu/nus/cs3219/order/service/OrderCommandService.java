@@ -5,7 +5,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import sg.edu.nus.cs3219.order.client.AdminClient;
 import sg.edu.nus.cs3219.order.client.CreditClient;
-import sg.edu.nus.cs3219.order.client.OrderContext;
 import sg.edu.nus.cs3219.order.client.Place;
 import sg.edu.nus.cs3219.order.client.RatingClient;
 import sg.edu.nus.cs3219.order.client.SupplierClient;
@@ -31,6 +30,8 @@ import sg.edu.nus.cs3219.order.rest.CreateOrderRequest;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -232,7 +233,7 @@ public class OrderCommandService {
         if (photo != null && !photo.isEmpty()) {
             order.setDisputePhotoRef(photos.store(orderId, "dispute", photo));
         }
-        admins.escalate(orderContext(order, comment), requester);
+        admins.openConflict(order.getId(), requester.userId(), comment, evidence(order));
         order.setDisputeText(comment);
         transition(order, OrderStatus.ESCALATED, true, now, OrderAction.ESCALATED, requester.userId());
         return order;
@@ -264,8 +265,8 @@ public class OrderCommandService {
         if (!OrderStateMachine.deliveryMissed(order.snapshot(), now)) {
             return;
         }
+        admins.openConflict(order.getId(), order.getRequesterId(), "Delivery deadline missed", evidence(order));
         transition(order, OrderStatus.ESCALATED, true, now, OrderAction.DELIVERY_DEADLINE_MISSED, null);
-        outbox.append(order.getId(), KafkaTopics.ADMIN_COMMANDS, messages.escalationOpened(order, now), now);
     }
 
     @Transactional
@@ -319,6 +320,20 @@ public class OrderCommandService {
         }
     }
 
+    private static List<String> evidence(OrderEntity order) {
+        List<String> refs = new ArrayList<>();
+        addEvidence(refs, order.getCollectionPhotoRef());
+        addEvidence(refs, order.getDeliveryPhotoRef());
+        addEvidence(refs, order.getDisputePhotoRef());
+        return refs;
+    }
+
+    private static void addEvidence(List<String> refs, String ref) {
+        if (ref != null && !ref.isBlank()) {
+            refs.add(ref);
+        }
+    }
+
     private void releaseAndAllowRequesterRating(OrderEntity order, String reason, Instant now) {
         outbox.append(order.getId(), KafkaTopics.CREDIT, messages.creditRelease(order, reason, now), now);
         outbox.append(
@@ -367,38 +382,6 @@ public class OrderCommandService {
                 KafkaTopics.ORDER_STATUS,
                 messages.statusChanged(order, from, to, notifyRequester, now),
                 now
-        );
-    }
-
-    private static OrderContext orderContext(OrderEntity order, String comment) {
-        return new OrderContext(
-                order.getId(),
-                order.getStatus().name(),
-                order.getItemDescription(),
-                order.getAmount(),
-                order.getRequesterId(),
-                order.getRequesterTelegramHandle(),
-                order.getRequesterRating(),
-                order.getCourierId(),
-                order.getCourierTelegramHandle(),
-                order.getCourierRating(),
-                order.getRequestTime(),
-                order.getAcceptanceExpiry(),
-                order.getDeliveryDeadline(),
-                order.getCollectionDeadline(),
-                order.getAcknowledgementDeadline(),
-                order.getPickupLocationId(),
-                order.getPickupName(),
-                order.getPickupLat(),
-                order.getPickupLng(),
-                order.getDropoffLocationId(),
-                order.getDropoffName(),
-                order.getDropoffLat(),
-                order.getDropoffLng(),
-                order.getCollectionPhotoRef(),
-                order.getDeliveryPhotoRef(),
-                order.getDisputePhotoRef(),
-                comment
         );
     }
 

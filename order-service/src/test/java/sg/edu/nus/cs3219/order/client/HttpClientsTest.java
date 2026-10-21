@@ -80,6 +80,18 @@ class HttpClientsTest {
                     status = 500;
                     yield "{\"error\":\"nope\",\"code\":\"INTERNAL_ERROR\"}".getBytes(StandardCharsets.UTF_8);
                 }
+                case "/api/v1/admin/conflicts" -> {
+                    if (requestBody.contains("\"comment\":\"\"")) {
+                        status = 422;
+                        yield "{\"detail\":\"rejected\"}".getBytes(StandardCharsets.UTF_8);
+                    }
+                    if (requestBody.contains("admin-down")) {
+                        status = 500;
+                        yield "{\"detail\":\"nope\"}".getBytes(StandardCharsets.UTF_8);
+                    }
+                    status = 201;
+                    yield "{\"id\":\"case-1\"}".getBytes(StandardCharsets.UTF_8);
+                }
                 default -> {
                     CreditProblem credit = creditProblem(requestBody);
                     if (credit == null) {
@@ -129,6 +141,17 @@ class HttpClientsTest {
         assertEquals(HttpStatus.CONFLICT, assertThrows(ApiException.class, () -> clients.telegramHandle("unverified")).getStatus());
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, assertThrows(ApiException.class, () -> clients.telegramHandle("blank")).getStatus());
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, assertThrows(ApiException.class, () -> clients.telegramHandle("down")).getStatus());
+
+        clients.openConflict(orderId, "ada-id", "wrong item", java.util.List.of("a.png"));
+        assertEquals("/api/v1/admin/conflicts", lastPath.get());
+        assertTrue(lastBody.get().contains("\"orderId\":\"" + orderId + "\""));
+        assertTrue(lastBody.get().contains("\"reporterUserId\":\"ada-id\""));
+        assertTrue(lastBody.get().contains("\"comment\":\"wrong item\""));
+        assertTrue(lastBody.get().contains("a.png"));
+        assertEquals(HttpStatus.BAD_REQUEST, assertThrows(ApiException.class,
+                () -> clients.openConflict(orderId, "ada-id", "", java.util.List.of())).getStatus());
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, assertThrows(ApiException.class,
+                () -> clients.openConflict(orderId, "ada-id", "admin-down", java.util.List.of())).getStatus());
     }
 
     @Test
@@ -171,6 +194,7 @@ class HttpClientsTest {
         assertThrows(ApiException.class, () -> down.returnReserved(orderId, ada));
         assertThrows(ApiException.class, () -> down.requirePlace("2", ada));
         assertThrows(ApiException.class, () -> down.telegramHandle("11111111-1111-1111-1111-111111111111"));
+        assertThrows(ApiException.class, () -> down.openConflict(orderId, "ada-id", "wrong item", java.util.List.of()));
     }
 
     private static CreditProblem creditProblem(String body) {

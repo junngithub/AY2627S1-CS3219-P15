@@ -40,7 +40,7 @@ docker compose exec kafka-tools bash /defaults/send.sh admin.case.resolved <orde
 
 Create and cancel call Credit Service (`POST /api/v1/credit/reserve` and `POST /api/v1/credit/release`). Pickup and dropoff ids are Supplier Service numeric ids; only `approved` suppliers are accepted (`GET /api/v1/supplier/{id}`). The `local` profile calls User Service at `http://localhost:8080`, Credit Service at `http://localhost:3000`, and Supplier Service at `http://localhost:8081`. Deployed environments override those with `USER_SERVICE_URL`, `CREDIT_SERVICE_URL`, `SUPPLIER_SERVICE_URL`, `RATING_SERVICE_URL`, and `ADMIN_SERVICE_URL`. Create and accept look up the caller's Telegram handle with `GET /api/v1/user/internal/users/{userId}/telegram`. That call sends `X-Service-Token`, which must be the same value as the User Service `ORDER_USER_LOOKUP_TOKEN`.
 
-The API gateway sends `X-User-Id` and `X-Permitted-Action`. Every order endpoint accepts the call only when `X-Permitted-Action` is `true`. Bruno sends those headers directly. Courier ratings and requester escalations still use local stand-ins, because Rating Service and Admin Service are not in this repository.
+The API gateway sends `X-User-Id` and `X-Permitted-Action`. Every order endpoint accepts the call only when `X-Permitted-Action` is `true`. Bruno sends those headers directly. Courier ratings still use a local stand-in, because Rating Service is not in this repository. Requester escalation and a missed delivery deadline call Admin Service at `POST /api/v1/admin/conflicts`.
 
 ## Images
 

@@ -15,18 +15,21 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.UUID;
 
 @Component
-public class HttpClients implements CreditClient, SupplierClient, UserClient {
+public class HttpClients implements CreditClient, SupplierClient, UserClient, AdminClient {
 
     private static final String NOT_APPROVED = "That location is not an approved supplier";
     private static final String USER_FAILED = "User service could not complete the request";
+    private static final String ADMIN_FAILED = "Admin service could not complete the request";
     private static final String SERVICE_TOKEN = "X-Service-Token";
 
     private final RestClient credits;
     private final RestClient suppliers;
     private final RestClient users;
+    private final RestClient admins;
     private final String userLookupToken;
 
     public HttpClients(OrderProperties properties) {
@@ -34,6 +37,7 @@ public class HttpClients implements CreditClient, SupplierClient, UserClient {
         this.credits = client(properties.getClients().getCreditBaseUrl(), timeout);
         this.suppliers = client(properties.getClients().getSupplierBaseUrl(), timeout);
         this.users = client(properties.getClients().getUserBaseUrl(), timeout);
+        this.admins = client(properties.getClients().getAdminBaseUrl(), timeout);
         this.userLookupToken = properties.getClients().getUserLookupToken();
     }
 
@@ -88,6 +92,25 @@ public class HttpClients implements CreditClient, SupplierClient, UserClient {
             throw userFailure(exception);
         } catch (ResourceAccessException exception) {
             throw ApiException.unavailable("User service did not respond in time");
+        }
+    }
+
+    @Override
+    public void openConflict(UUID orderId, String reporterUserId, String comment, List<String> photos) {
+        try {
+            admins.post()
+                    .uri("/api/v1/admin/conflicts")
+                    .body(new ConflictRequest(orderId.toString(), reporterUserId, comment, photos == null ? List.of() : photos))
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (RestClientResponseException exception) {
+            int status = exception.getStatusCode().value();
+            if (status == 400 || status == 422) {
+                throw ApiException.badRequest("Admin service rejected the escalation");
+            }
+            throw ApiException.unavailable(ADMIN_FAILED);
+        } catch (ResourceAccessException exception) {
+            throw ApiException.unavailable("Admin service did not respond in time");
         }
     }
 
@@ -169,6 +192,9 @@ public class HttpClients implements CreditClient, SupplierClient, UserClient {
     }
 
     private record ReleaseRequest(UUID orderId) {
+    }
+
+    private record ConflictRequest(String orderId, String reporterUserId, String comment, List<String> photos) {
     }
 
     private record SupplierResponse(Integer id, String name, double latitude, double longitude, String status) {
