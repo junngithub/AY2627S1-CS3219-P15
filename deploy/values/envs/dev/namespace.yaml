@@ -2,7 +2,12 @@
 quota:
   requests.cpu: "2"
   requests.memory: 5Gi
-  limits.cpu: "6" # +200m per Linkerd proxy (ADR-0012), incl. rollout surge and mesh tests
+  # Limits don't reserve node CPU (requests do), so this can exceed the nodes.
+  # Steady state is ~7.4: 7 services (4.0) + their Linkerd proxies (7 × 200m,
+  # ADR-0012) + Kafka broker (1) + entity operator (1). The rest covers
+  # migrate Jobs and rollout surge. At 6 the entity operator was refused, so
+  # no KafkaUser Secrets were made and every Kafka client failed to start.
+  limits.cpu: "12"
   limits.memory: 10Gi
   persistentvolumeclaims: "10"
   pods: "40"
