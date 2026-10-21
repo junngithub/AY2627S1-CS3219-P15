@@ -17,7 +17,7 @@ secretEnv:
   ORDER_USER_LOOKUP_TOKEN:
     { secret: order-user-lookup, key: ORDER_USER_LOOKUP_TOKEN }
 mesh: # who may call user (ADR-0012)
-  callers: [gateway]
+  callers: [gateway, admin] # admin: list / promote / suspend / reinstate users
   internal:
     # Envoy's /internal/authorize check.
     - { path: /api/v1/user/internal, callers: [gateway] }

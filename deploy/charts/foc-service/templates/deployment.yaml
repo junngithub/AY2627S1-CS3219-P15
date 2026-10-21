@@ -56,6 +56,9 @@ spec:
                 secretKeyRef:
                   name: {{ $ref.secret }}
                   key: {{ $ref.key }}
+                  {{- if $ref.optional }}
+                  optional: true # missing Secret = variable unset, pod still starts
+                  {{- end }}
           {{- end }}
           {{- with .Values.kafka.user }}
             - name: KAFKA_BROKERS

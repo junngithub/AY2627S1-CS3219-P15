@@ -42,6 +42,8 @@ migrate:
 
 # Env vars read from an existing Secret instead of a ConfigMap, for values that
 # must not sit in git or in `env`: NAME: { secret: <Secret name>, key: <key> }.
+# Add `optional: true` for a value the service can run without (the pod starts
+# with the variable unset when the Secret doesn't exist).
 secretEnv: {}
 
 # LOCAL ONLY: have this chart create Secret <name> with a random value for each
