@@ -1,9 +1,9 @@
 """Live checks against the Compose stack: conflict HTTP routes, their error
 responses, and the Kafka event that a successful call publishes.
 
-Skipped when Admin Service is not reachable. Requires Kafka in this compose
-project (events are read with the broker's console consumer, because the
-broker advertises kafka:9092). Conflict intake has no service token.
+Skipped when Admin Service is not reachable. Events are read from Order's
+broker (order-service compose, internal listener kafka:29092). Conflict intake
+has no service token.
 
 Claim and resolve do not wait on the vision model. After intake, the case is
 seeded in Postgres. The evaluation job only writes while a case is still
@@ -22,9 +22,21 @@ import httpx
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-ADMIN_HEADERS = {"Authorization": "Bearer admin-sahana"}
-OTHER_ADMIN_HEADERS = {"Authorization": "Bearer admin-other"}
-USER_HEADERS = {"Authorization": "Bearer user-1"}
+ADMIN_HEADERS = {
+    "x-user-id": "admin-sahana",
+    "x-is-admin": "true",
+    "x-permitted-action": "true",
+}
+OTHER_ADMIN_HEADERS = {
+    "x-user-id": "admin-other",
+    "x-is-admin": "true",
+    "x-permitted-action": "true",
+}
+USER_HEADERS = {
+    "x-user-id": "user-1",
+    "x-is-admin": "false",
+    "x-permitted-action": "true",
+}
 
 _MISSING = str(uuid.uuid4())
 CONFLICT_ROUTES = [
@@ -39,7 +51,7 @@ RESOLVE_BODY = {"faultParty": "courier", "decision": "accept"}
 def _compose_exec(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["docker", "compose", "exec", "-T", "kafka", *args],
-        cwd=ROOT,
+        cwd=ROOT.parent / "order-service",
         capture_output=True,
         text=True,
         timeout=40,
@@ -54,7 +66,11 @@ def kafka_events(topic: str) -> list[dict]:
     its first seconds joining, and a short timeout returns nothing even when
     the topic has messages.
     """
-    offsets = _compose_exec("kafka-get-offsets", "--bootstrap-server", "kafka:9092", "--topic", topic)
+    offsets = _compose_exec(
+        "/opt/kafka/bin/kafka-get-offsets.sh",
+        "--bootstrap-server", "kafka:29092",
+        "--topic", topic,
+    )
     if offsets.returncode != 0:
         blob = f"{offsets.stderr}\n{offsets.stdout}".lower()
         if "unknown topic" in blob or "does not exist" in blob:
@@ -70,8 +86,8 @@ def kafka_events(topic: str) -> list[dict]:
         if not end.isdigit() or int(end) == 0:
             continue
         consumed = _compose_exec(
-            "kafka-console-consumer",
-            "--bootstrap-server", "kafka:9092",
+            "/opt/kafka/bin/kafka-console-consumer.sh",
+            "--bootstrap-server", "kafka:29092",
             "--topic", topic,
             "--partition", partition,
             "--offset", "earliest",
@@ -87,11 +103,28 @@ def kafka_events(topic: str) -> list[dict]:
     return events
 
 
-def events_for(topic: str, **payload) -> list[dict]:
+def _field(event: dict, key: str):
+    payload = event.get("payload")
+    if isinstance(payload, dict) and key in payload:
+        return payload.get(key)
+    return event.get(key)
+
+
+def events_for(topic: str, **fields) -> list[dict]:
     return [
         event for event in kafka_events(topic)
-        if all(event.get("payload", {}).get(key) == value for key, value in payload.items())
+        if all(_field(event, key) == value for key, value in fields.items())
     ]
+
+
+def assert_order_event(event: dict, event_type: str, **fields) -> None:
+    assert event["eventType"] == event_type
+    assert event["schemaVersion"] == 1
+    assert event["eventId"]
+    assert event["occurredAt"]
+    assert "payload" not in event
+    for key, value in fields.items():
+        assert event[key] == value
 
 
 def assert_envelope(event: dict, event_type: str, **payload) -> None:
@@ -277,9 +310,9 @@ def test_conflict_lifecycle_publishes_events(api):
     assert stolen.status_code == 409
     assert audit_rows(case_id, "review_conflict") == ["admin-sahana\t"]
 
-    review_events = events_for("admin.order-under-review", orderId=order_id)
+    review_events = events_for("foc.admin.events", eventType="admin.review.started", orderId=order_id)
     assert len(review_events) == 1
-    assert_envelope(review_events[0], "OrderUnderReview", orderId=order_id, caseId=case_id)
+    assert_order_event(review_events[0], "admin.review.started", orderId=order_id, caseId=case_id)
 
     assert timer_ids(case_id) == [f"deadline-{case_id}", f"reminder-{case_id}"]
     resolved = api.post(f"/api/v1/admin/conflicts/{case_id}/resolve", headers=ADMIN_HEADERS, json=RESOLVE_BODY)
@@ -308,16 +341,9 @@ def test_conflict_lifecycle_publishes_events(api):
         json={"faultParty": "requester", "decision": "reject"},
     )
     assert again_resolve.status_code == 409
-    resolved_events = events_for("admin.conflict-resolved", orderId=order_id)
+    resolved_events = events_for("foc.admin.events", eventType="admin.case.resolved", orderId=order_id)
     assert len(resolved_events) == 1
-    assert_envelope(
-        resolved_events[0],
-        "ConflictResolved",
-        orderId=order_id,
-        caseId=case_id,
-        faultParty="courier",
-        resolvedAutomatically=False,
-    )
+    assert_order_event(resolved_events[0], "admin.case.resolved", orderId=order_id, caseId=case_id)
 
 
 def test_concurrent_create_publishes_one_event(api):
@@ -399,7 +425,7 @@ def test_cannot_claim_from_the_wrong_status(api, status):
     resp = api.post(f"/api/v1/admin/conflicts/{case_id}/review", headers=ADMIN_HEADERS)
     assert resp.status_code == 409
     assert status in resp.json()["detail"]
-    assert events_for("admin.order-under-review", caseId=case_id) == []
+    assert events_for("foc.admin.events", caseId=case_id) == []
 
 
 def test_claim_from_ai_failed_publishes_order_under_review(api):
@@ -413,9 +439,9 @@ def test_claim_from_ai_failed_publishes_order_under_review(api):
     listed = api.get("/api/v1/admin/conflicts", params={"status": "under_review"}, headers=ADMIN_HEADERS)
     assert listed.status_code == 200
     assert any(row["id"] == case_id for row in listed.json())
-    matched = events_for("admin.order-under-review", caseId=case_id)
+    matched = events_for("foc.admin.events", caseId=case_id)
     assert len(matched) == 1
-    assert_envelope(matched[0], "OrderUnderReview", orderId=created["order_id"], caseId=case_id)
+    assert_order_event(matched[0], "admin.review.started", orderId=created["order_id"], caseId=case_id)
 
 
 def test_simultaneous_claim_publishes_one_event(api):
@@ -432,9 +458,9 @@ def test_simultaneous_claim_publishes_one_event(api):
         responses = [future.result() for future in (pool.submit(post, ADMIN_HEADERS), pool.submit(post, OTHER_ADMIN_HEADERS))]
     assert sorted(resp.status_code for resp in responses) == [200, 409]
     assert audit_rows(case_id, "review_conflict") in (["admin-sahana\t"], ["admin-other\t"])
-    matched = events_for("admin.order-under-review", caseId=case_id)
+    matched = events_for("foc.admin.events", caseId=case_id)
     assert len(matched) == 1
-    assert_envelope(matched[0], "OrderUnderReview", orderId=created["order_id"], caseId=case_id)
+    assert_order_event(matched[0], "admin.review.started", orderId=created["order_id"], caseId=case_id)
 
 
 @pytest.mark.parametrize(
@@ -452,7 +478,7 @@ def test_resolve_rejects_invalid_body(api, payload):
     seed_case(case_id, "under_review", fault="courier", confidence=0.5)
     resp = api.post(f"/api/v1/admin/conflicts/{case_id}/resolve", headers=ADMIN_HEADERS, json=payload)
     assert resp.status_code == 422
-    assert events_for("admin.conflict-resolved", caseId=case_id) == []
+    assert events_for("foc.admin.events", caseId=case_id) == []
 
 
 @pytest.mark.parametrize("status", ["created", "ai_evaluated", "ai_failed", "resolved"])
@@ -467,7 +493,7 @@ def test_cannot_resolve_until_under_review(api, status):
     resp = api.post(f"/api/v1/admin/conflicts/{case_id}/resolve", headers=ADMIN_HEADERS, json=RESOLVE_BODY)
     assert resp.status_code == 409
     assert status in resp.json()["detail"]
-    assert events_for("admin.conflict-resolved", caseId=case_id) == []
+    assert events_for("foc.admin.events", caseId=case_id) == []
 
 
 @pytest.mark.parametrize(
@@ -504,13 +530,11 @@ def test_resolve_publishes_the_fault_party_from_the_body(api, fault, decision):
         json={"faultParty": "courier", "decision": "accept"},
     )
     assert again.status_code == 409
-    matched = events_for("admin.conflict-resolved", caseId=case_id)
+    matched = events_for("foc.admin.events", eventType="admin.case.resolved", caseId=case_id)
     assert len(matched) == 1
-    assert_envelope(
+    assert_order_event(
         matched[0],
-        "ConflictResolved",
+        "admin.case.resolved",
         orderId=created["order_id"],
         caseId=case_id,
-        faultParty=fault,
-        resolvedAutomatically=False,
     )

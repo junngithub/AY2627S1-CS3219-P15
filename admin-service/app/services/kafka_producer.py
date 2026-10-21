@@ -49,6 +49,18 @@ async def stop_producer() -> None:
         await _producer.stop()
 
 
+def _order_event(event_type: str, order_id: str, case_id: str) -> dict:
+    # Flat message on foc.admin.events. Order reads eventId, eventType, orderId, and caseId.
+    return {
+        "eventId": str(uuid.uuid4()),
+        "eventType": event_type,
+        "schemaVersion": 1,
+        "occurredAt": datetime.now(timezone.utc).isoformat(),
+        "orderId": order_id,
+        "caseId": case_id,
+    }
+
+
 def _envelope(event_type: str, version: int, payload: dict) -> dict:
     # Shared envelope across all services per the async communication contract.
     return {
@@ -67,26 +79,15 @@ async def publish_conflict_case_created(order_id: str, case_id: str) -> None:
  
  
 async def publish_order_under_review(order_id: str, case_id: str) -> None:
-    # Admin F1.7 / Order F2.15 — an admin has claimed the case; Order sets the order to Under Review.
-    event = _envelope("OrderUnderReview", 1, {"orderId": order_id, "caseId": case_id})
-    await _producer.send_and_wait(settings.kafka_topic_order_under_review, value=event, key=order_id.encode())
+    # Admin claims the case. Order applies this only while the order is ESCALATED.
+    event = _order_event("admin.review.started", order_id, case_id)
+    await _producer.send_and_wait(settings.kafka_topic_admin_events, value=event, key=order_id.encode())
  
  
-async def publish_conflict_resolved(
-    order_id: str, case_id: str, fault_party: str, resolved_automatically: bool
-) -> None:
-    # F3.6/F3.5.1 — sent to Order Service only; Order Service fans out to Credit/Rating (NFR3.1).
-    event = _envelope(
-        "ConflictResolved",
-        1,
-        {
-            "orderId": order_id,
-            "caseId": case_id,
-            "faultParty": fault_party,
-            "resolvedAutomatically": resolved_automatically,
-        },
-    )
-    await _producer.send_and_wait(settings.kafka_topic_conflict_resolved, value=event, key=order_id.encode())
+async def publish_conflict_resolved(order_id: str, case_id: str) -> None:
+    # Admin resolves the case. Order applies this only while the order is ESCALATED or UNDER_REVIEW.
+    event = _order_event("admin.case.resolved", order_id, case_id)
+    await _producer.send_and_wait(settings.kafka_topic_admin_events, value=event, key=order_id.encode())
 
 
 async def publish_user_promoted(user_id: str, admin_id: str) -> None:

@@ -1,8 +1,9 @@
 """
-Minimal stand-in for User Service, just enough to unblock local testing of
-Admin Service's `require_admin` dependency and the promote/suspend/reinstate
-relay calls. NOT for production use — delete once the real User Service is
-reachable, and point USER_SERVICE_BASE_URL at that instead.
+Minimal stand-in for User Service, just enough for Admin Service's
+promote/suspend/reinstate relay calls and user search. Admin identity now
+comes from the API gateway headers, not from this mock. NOT for production
+use — delete once the real User Service is reachable, and point
+USER_SERVICE_BASE_URL at that instead.
 
 Run standalone: uvicorn mock_user_service:app --port 8001
 """

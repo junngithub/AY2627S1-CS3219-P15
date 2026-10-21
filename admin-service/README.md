@@ -24,7 +24,7 @@ admin-service/
 │   ├── config.py                 # env-driven settings (pydantic-settings)
 │   ├── database.py               # async SQLAlchemy engine/session
 │   ├── core/
-│   │   └── security.py           # require_admin: User Service every request, 404 not 403
+│   │   └── security.py           # require_admin: gateway identity headers, 404 not 403
 │   ├── models/
 │   │   ├── conflict_case.py      # conflict_cases + ConflictStatus / FaultParty
 │   │   └── audit_log.py          # append-only audit trail
@@ -46,7 +46,7 @@ admin-service/
 ├── alembic/                      # migrations (init + conflict stages)
 ├── tests/
 ├── mock_user_service.py          # local stub for User Service
-├── docker-compose.yml            # Postgres, Kafka, mock User Service, app
+├── docker-compose.yml            # Postgres, mock User Service, app (Kafka is Order's)
 ├── Dockerfile
 ├── requirements.txt
 └── .env.example
@@ -55,9 +55,9 @@ admin-service/
 ## Why it's laid out this way
 
 - **`core/security.py` is the one place admin authorization lives.** Admin routes
-  depend on `AdminDep`, so “check User Service on every request, 404 not 403”
+  depend on `AdminDep`, so “read the gateway identity headers, 404 not 403”
   cannot be skipped or duplicated inconsistently. Conflict intake is open:
-  Order Service does not send a shared secret.
+  Order Service calls it directly and does not send gateway headers.
 - **`services/` talks to infra outside this service’s DB** — Kafka, the AI
   provider, downstream HTTP. Routers stay thin.
 - **`jobs/` is separate from `services/scheduler.py`:** scheduler only registers
@@ -65,8 +65,9 @@ admin-service/
   request, so it opens its own DB session.
 - **`services/conflict_resolution.py` is the only resolve path** (manual and
   deadline auto-resolve). One conditional `UPDATE` enforces the state machine.
-- **`services/audit.py` is the only write path** for `audit_logs`. Nothing else
-  should `UPDATE`/`DELETE` that table.
+- **`services/audit.py` is the only write path** for `audit_logs`. Migration
+  `0003_audit_logs_append_only` rejects `UPDATE`, `DELETE`, and `TRUNCATE` in
+  the database as well.
 - **`services/ai_client.py` isolates the VLM call.** Provider, prompt, or
   response shape changes stay in that file.
 
@@ -74,13 +75,12 @@ admin-service/
 
 | Caller | Mechanism | Failure |
 |---|---|---|
-| Admin UI / admin user | `Authorization: Bearer <token>` → User Service `GET /api/v1/user/me/authorize`; `role` must be `admin` | **404** (never 403) |
+| Admin UI / admin user | Gateway sets `x-user-id`, `x-is-admin=true`, and `x-permitted-action=true` (role `ADMIN`, account active, email and Telegram verified) | **404** (never 403) |
 | Order Service (intake) | No auth. `POST /api/v1/admin/conflicts` is open | — |
 
-If User Service is unreachable, admin checks fail closed (404).
+A missing user id, a non-admin, and an admin who is not permitted all get the same **404**.
 
-With the bundled mock User Service, any token starting with `admin-` is treated
-as an admin (e.g. `Authorization: Bearer admin-sahana`).
+`tests/test_gateway.py` checks those headers without Docker. The live tests in `tests/` send the same headers. User search, promote, demote, suspend, and reinstate still call User Service for the user record itself.
 
 ## HTTP API
 
@@ -123,7 +123,7 @@ slow VLM cannot time out Order Service.
 |---|---|---|
 | GET | `/api/v1/admin/conflicts?status=` | Filter by status; aliases `pending` → `ai_evaluated`, `non_deadline` → `ai_failed` |
 | GET | `/api/v1/admin/conflicts/{case_id}` | Detail |
-| POST | `/api/v1/admin/conflicts/{case_id}/review` | Claim: `ai_evaluated` \| `ai_failed` → `under_review`; Kafka `OrderUnderReview` |
+| POST | `/api/v1/admin/conflicts/{case_id}/review` | Claim: `ai_evaluated` \| `ai_failed` → `under_review`; Kafka `admin.review.started` |
 | POST | `/api/v1/admin/conflicts/{case_id}/resolve` | Body `{ "faultParty": "requester\|courier\|no-fault", "decision": "accept\|reject" }` |
 
 Claim is idempotent for the same admin. Another admin (or wrong status) gets **409**.
@@ -148,23 +148,21 @@ Default deadline is 168 hours (7 days); a reminder job is scheduled
 
 ## Kafka events (producer)
 
-Envelope (all topics):
+Order consumes two flat events on `foc.admin.events`. The Kafka key is the order id.
 
 ```json
-{
-  "eventId": "<uuid>",
-  "eventType": "<Type>",
-  "version": 1,
-  "timestamp": "<ISO-8601 UTC>",
-  "payload": {}
-}
+{ "eventId": "<uuid>", "eventType": "admin.review.started", "schemaVersion": 1, "occurredAt": "<ISO-8601 UTC>", "orderId": "<id>", "caseId": "<id>" }
 ```
+
+`admin.case.resolved` uses the same fields. `schemaVersion` is `1`. `eventId` is the idempotency key.
+
+The other events still use the wrapped envelope `{ eventId, eventType, version, timestamp, payload }`.
 
 | Event | Default topic | When |
 |---|---|---|
 | `ConflictCaseCreated` | `admin.conflict-case-created` | After intake commit |
-| `OrderUnderReview` | `admin.order-under-review` | After an admin claims a case |
-| `ConflictResolved` | `admin.conflict-resolved` | After resolve (manual or auto); Order Service fans out to Credit/Rating |
+| `admin.review.started` | `foc.admin.events` | After an admin claims a case |
+| `admin.case.resolved` | `foc.admin.events` | After resolve (manual or auto). Order completes the order; this message has no credit or rating fields |
 | `UserPromoted` | `admin.user.promoted` | After User Service accepts promote |
 | `UserDemoted` | `admin.user.demoted` | After demote |
 | `UserSuspended` | `admin.user.suspended` | After suspend |
@@ -198,12 +196,22 @@ several compose files on one machine.
 
 From `admin-service/`:
 
+From `order-service/` (so the network is named `order-service_default`):
+
+```bash
+docker compose up -d kafka
+```
+
+Then from `admin-service/`:
+
 ```bash
 docker compose up --build
 ```
 
-Starts Postgres, Zookeeper, Kafka, mock User Service, and the app on **8084**.
-The container talks to `db:5432`, `kafka:9092`, and `http://mock-user-service:8000`.
+Start Order's Kafka first. This file does not start a broker. It starts Postgres,
+mock User Service, and the app on **8084**, and joins Order's Compose network so
+the container can use `kafka:29092`. The container talks to `db:5432` and
+`http://mock-user-service:8000`.
 
 Apply migrations against the mapped Postgres (from the host, with `.env` pointing at `localhost:5434`):
 
@@ -216,7 +224,8 @@ alembic upgrade head
 ## Running the API on the host
 
 `.env.example` is for **host-side** tools (`alembic`, `pytest`, local `uvicorn`).
-Hostnames `db` / `kafka` only work inside the Compose network.
+Hostname `db` only works inside this Compose network. `localhost:9092` is
+Order's broker, the same one Credit uses from the host.
 
 ```bash
 cp .env.example .env
@@ -225,9 +234,9 @@ alembic upgrade head
 uvicorn app.main:app --reload --port 8084
 ```
 
-You still need Postgres (and Kafka if you want publishes to succeed). Easiest
-path: `docker compose up db kafka zookeeper mock-user-service` then run uvicorn
-on the host.
+You still need Postgres, and Order's Kafka if you want publishes to succeed.
+Easiest path: start Order's Kafka, then `docker compose up db mock-user-service`,
+then run uvicorn on the host with `KAFKA_BOOTSTRAP_SERVERS=localhost:9092`.
 
 ## Tests
 
@@ -244,15 +253,9 @@ stack is down).
 
 - Deadline reminder does not notify anyone. `send_deadline_reminder` only sets
   `reminder_sent_at`. Email or an in-app notice is still a TODO.
-- Audit logs are not locked at the database. The app never updates or deletes
-  `audit_logs`, but the `REVOKE UPDATE, DELETE` for the app role is only written
-  on the model. There is no migration that applies it.
 - User Service is still the mock. Compose points `USER_SERVICE_BASE_URL` at
   `mock-user-service`. That stub should be removed once the real User Service
   contract is wired.
-- Kafka from the host may not connect. Compose advertises `kafka:9092`, which
-  works inside the Docker network. A producer on the host using `localhost:9092`
-  can fail until extra advertised listeners are added.
 - A failed Kafka publish is only logged. The database commits first, and if
   Kafka is down the API still succeeds. There is no outbox to retry that event
   later.

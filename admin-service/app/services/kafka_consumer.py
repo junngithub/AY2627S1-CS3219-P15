@@ -19,8 +19,7 @@ _RETRY_DELAY_SECONDS = 3
 def _topics() -> list[str]:
     return [
         settings.kafka_topic_conflict_case_created,
-        settings.kafka_topic_order_under_review,
-        settings.kafka_topic_conflict_resolved,
+        settings.kafka_topic_admin_events,
         settings.kafka_topic_user_promoted,
         settings.kafka_topic_user_demoted,
         settings.kafka_topic_user_suspended,

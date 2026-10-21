@@ -6,10 +6,11 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://admin:admin@db:5432/admin_service"
 
     # Kafka
-    kafka_bootstrap_servers: str = "kafka:9092"
+    # Order's local broker. Host tools use the published port; Compose overrides
+    # this with kafka:29092 on Order's network.
+    kafka_bootstrap_servers: str = "localhost:9092"
     kafka_topic_conflict_case_created: str = "admin.conflict-case-created"
-    kafka_topic_order_under_review: str = "admin.order-under-review"
-    kafka_topic_conflict_resolved: str = "admin.conflict-resolved"
+    kafka_topic_admin_events: str = "foc.admin.events"
     kafka_topic_user_promoted: str = "admin.user.promoted"
     kafka_topic_user_demoted: str = "admin.user.demoted"
     kafka_topic_user_suspended: str = "admin.user.suspended"
