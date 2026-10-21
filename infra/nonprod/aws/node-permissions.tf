@@ -48,10 +48,18 @@ data "aws_iam_policy_document" "node_workloads" {
   }
 
   # user-service: OTP and password-reset emails (EMAIL_PROVIDER=ses).
+  # Any identity, not just the sender's: in the SES sandbox the recipient must
+  # be a verified identity too, and SES checks this permission against it
+  # (AccessDeniedException otherwise). The From address stays locked to ours.
   statement {
     sid       = "UserSendEmail"
     actions   = ["ses:SendEmail"]
-    resources = [aws_sesv2_email_identity.sender.arn]
+    resources = ["arn:aws:ses:${var.region}:${data.aws_caller_identity.current.account_id}:identity/*"]
+    condition {
+      test     = "StringEquals"
+      variable = "ses:FromAddress"
+      values   = [var.ses_from_email]
+    }
   }
 
   # order-service: collection, delivery and dispute photos (order.photos.mode=s3).
