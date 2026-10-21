@@ -20,7 +20,7 @@ sequenceDiagram
     Caller->>Orders: GET /api/v1/orders/deliveries/active
     Orders->>DB: caller's ACCEPTED, COLLECTED, ESCALATED, UNDER_REVIEW rows, newest request_time first
     Caller->>Orders: GET /api/v1/orders/requests/active
-    Orders->>DB: requester rows a courier has taken that are not settled, newest request_time first
+    Orders->>DB: requester CREATED, ACCEPTED, COLLECTED, DELIVERED, ESCALATED, UNDER_REVIEW rows, newest request_time first
     Caller->>Orders: GET /api/v1/orders/requests/past
     Orders->>DB: requester ACKNOWLEDGED, UNACKNOWLEDGED, COMPLETED, EXPIRED, CANCELLED rows, newest request_time first
     Caller->>Orders: GET /api/v1/orders/alerts

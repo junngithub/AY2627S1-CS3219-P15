@@ -45,7 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class OrderApiTest {
 
     private final UUID id = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
-    private final UserAccount caller = new UserAccount("11111111-1111-1111-1111-111111111111", "requester");
+    private final UserAccount caller = new UserAccount("11111111-1111-1111-1111-111111111111");
 
     @Mock private OrderCommandService commands;
     @Mock private OrderQueryService queries;
@@ -185,7 +185,6 @@ class OrderApiTest {
     private <B extends AbstractMockHttpServletRequestBuilder<B>> B signed(B request) {
         return request
                 .header(CallerHeaders.USER_ID, caller.userId())
-                .header(CallerHeaders.PERMITTED, "true")
-                .header(CallerHeaders.TELEGRAM, caller.telegramHandle());
+                .header(CallerHeaders.PERMITTED, "true");
     }
 }
