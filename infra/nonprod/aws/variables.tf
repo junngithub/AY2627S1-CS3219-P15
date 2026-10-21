@@ -43,8 +43,9 @@ variable "node_instance_types" {
 }
 
 variable "node_count" {
-  type    = object({ min = number, desired = number, max = number })
-  default = { min = 1, desired = 1, max = 2 }
+  description = "Nodes in the group. Dev needs 2: a t4g.large holds at most 29 pods (VPC CNI: one VPC address per pod), and dev runs about 40, Linkerd proxies included."
+  type        = object({ min = number, desired = number, max = number })
+  default     = { min = 2, desired = 2, max = 3 }
 }
 
 variable "databases" {
