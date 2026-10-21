@@ -1,5 +1,5 @@
 image:
-  tag: "" # git SHA, set by CI (.github/workflows/deploy-dev.yml)
+  tag: "2ae335483a8608f2f5c77ad6c0b79b9e140fa3c0" # git SHA, set by deploy/push-dev.sh
 replicas: 1 # TELEGRAM_POLLING_ENABLED must stay on one replica only
 env:
   APP_ENV: dev

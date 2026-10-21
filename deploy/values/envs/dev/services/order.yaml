@@ -1,5 +1,5 @@
 image:
-  tag: "" # git SHA, set by CI (.github/workflows/deploy-dev.yml)
+  tag: "7aaf9d5f1beb52bfb3af2eb4e2565484ffda46dc" # git SHA, set by deploy/push-dev.sh
 replicas: 1
 env:
   # Photos in S3 instead of the pod's disk; the node role may write to this
