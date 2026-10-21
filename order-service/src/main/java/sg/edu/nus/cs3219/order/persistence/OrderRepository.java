@@ -34,6 +34,7 @@ public interface OrderRepository extends JpaRepository<OrderEntity, UUID> {
             where o.id = :id
               and o.status = sg.edu.nus.cs3219.order.domain.OrderStatus.CREATED
               and o.courierId is null
+              and lower(o.requesterId) <> lower(:courierId)
             """)
     int acceptIfOpen(
             @Param("id") UUID id,
