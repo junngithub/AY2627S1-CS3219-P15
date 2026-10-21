@@ -23,6 +23,11 @@ coverage/
 # TypeScript incremental build cache
 *.tsbuildinfo
 
+# Eclipse / VS Code Java extension project metadata
+.classpath
+.project
+.settings/
+
 # draw.io desktop: unsaved-edit temp files and backups
 .$*.dtmp
 *.drawio.bkp
@@ -33,6 +38,8 @@ coverage/
 .env.*.local
 *.pem
 *.key
+# Public CA certificates (not keys) that charts ship to the cluster.
+!deploy/charts/cluster-config/files/*.pem
 
 # OS
 .DS_Store
