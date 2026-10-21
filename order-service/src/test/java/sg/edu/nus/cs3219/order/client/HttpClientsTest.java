@@ -117,7 +117,7 @@ class HttpClientsTest {
     }
 
     @Test
-    void callsTheOtherServices() {
+    void callsCredit() {
         UUID orderId = UUID.randomUUID();
         clients.reserve(orderId, "ada-id", 8, ada);
         assertEquals("ada-id", lastUser.get());
@@ -125,7 +125,10 @@ class HttpClientsTest {
         assertTrue(lastBody.get().contains("requesterId"));
         clients.returnReserved(orderId, ada);
         assertEquals("/api/v1/credit/release", lastPath.get());
+    }
 
+    @Test
+    void callsSupplier() {
         Place place = clients.requirePlace("2", ada);
         assertEquals("2", place.id());
         assertEquals("NUS Co-op", place.name());
@@ -134,14 +137,21 @@ class HttpClientsTest {
         assertEquals(HttpStatus.BAD_REQUEST, assertThrows(ApiException.class, () -> clients.requirePlace("missing", ada)).getStatus());
         assertEquals(HttpStatus.BAD_REQUEST, assertThrows(ApiException.class, () -> clients.requirePlace("slug", ada)).getStatus());
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, assertThrows(ApiException.class, () -> clients.requirePlace("down", ada)).getStatus());
+    }
 
+    @Test
+    void callsUserService() {
         assertEquals("ada_tan", clients.telegramHandle("11111111-1111-1111-1111-111111111111"));
         assertEquals("lookup-token", lastServiceToken.get());
         assertEquals(HttpStatus.NOT_FOUND, assertThrows(ApiException.class, () -> clients.telegramHandle("missing")).getStatus());
         assertEquals(HttpStatus.CONFLICT, assertThrows(ApiException.class, () -> clients.telegramHandle("unverified")).getStatus());
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, assertThrows(ApiException.class, () -> clients.telegramHandle("blank")).getStatus());
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, assertThrows(ApiException.class, () -> clients.telegramHandle("down")).getStatus());
+    }
 
+    @Test
+    void callsAdmin() {
+        UUID orderId = UUID.randomUUID();
         clients.openConflict(orderId, "ada-id", "wrong item", java.util.List.of("a.png"));
         assertEquals("/api/v1/admin/conflicts", lastPath.get());
         assertTrue(lastBody.get().contains("\"orderId\":\"" + orderId + "\""));

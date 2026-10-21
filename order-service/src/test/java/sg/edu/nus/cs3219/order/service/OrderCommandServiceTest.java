@@ -324,7 +324,7 @@ class OrderCommandServiceTest {
         when(photos.store(id, "dispute", photo)).thenReturn(id + "/dispute.png");
         OrderEntity escalated = service.escalate(requester, id, "wrong item", photo);
         assertEquals(id + "/dispute.png", escalated.getDisputePhotoRef());
-        verify(admins).openConflict(eq(id), eq(requester.userId()), eq("wrong item"), eq(java.util.List.of(id + "/dispute.png")));
+        verify(admins).openConflict(id, requester.userId(), "wrong item", java.util.List.of(id + "/dispute.png"));
     }
 
     @Test
@@ -373,10 +373,10 @@ class OrderCommandServiceTest {
         service.escalateMissedDelivery(id, now);
         assertEquals(OrderStatus.ESCALATED, missed.getStatus());
         verify(admins).openConflict(
-                eq(id),
-                eq("11111111-1111-1111-1111-111111111111"),
-                eq("Delivery deadline missed"),
-                eq(java.util.List.of(id + "/collection.png", id + "/delivery.png")));
+                id,
+                "11111111-1111-1111-1111-111111111111",
+                "Delivery deadline missed",
+                java.util.List.of(id + "/collection.png", id + "/delivery.png"));
 
         OrderEntity onTime = openOrder();
         onTime.setStatus(OrderStatus.COLLECTED);
