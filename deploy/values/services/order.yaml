@@ -28,6 +28,8 @@ secretEnv:
   PGDATABASE: { secret: order-db, key: PGDATABASE }
   PGUSER: { secret: order-db, key: PGUSER }
   PGPASSWORD: { secret: order-db, key: PGPASSWORD }
+  ORDER_USER_LOOKUP_TOKEN:
+    { secret: order-user-lookup, key: ORDER_USER_LOOKUP_TOKEN }
 resources: # a JVM needs more than the chart default
   requests:
     cpu: 100m
