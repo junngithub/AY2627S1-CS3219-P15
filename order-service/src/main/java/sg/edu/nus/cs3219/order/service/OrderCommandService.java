@@ -10,6 +10,7 @@ import sg.edu.nus.cs3219.order.client.Place;
 import sg.edu.nus.cs3219.order.client.RatingClient;
 import sg.edu.nus.cs3219.order.client.SupplierClient;
 import sg.edu.nus.cs3219.order.client.UserAccount;
+import sg.edu.nus.cs3219.order.client.UserClient;
 import sg.edu.nus.cs3219.order.config.OrderProperties;
 import sg.edu.nus.cs3219.order.domain.OrderAction;
 import sg.edu.nus.cs3219.order.domain.OrderStateMachine;
@@ -42,6 +43,7 @@ public class OrderCommandService {
     private final ProcessedEventRepository processedEvents;
     private final CreditClient credits;
     private final SupplierClient suppliers;
+    private final UserClient users;
     private final RatingClient ratings;
     private final AdminClient admins;
     private final OrderMessageFactory messages;
@@ -57,6 +59,7 @@ public class OrderCommandService {
             ProcessedEventRepository processedEvents,
             CreditClient credits,
             SupplierClient suppliers,
+            UserClient users,
             RatingClient ratings,
             AdminClient admins,
             OrderMessageFactory messages,
@@ -71,6 +74,7 @@ public class OrderCommandService {
         this.processedEvents = processedEvents;
         this.credits = credits;
         this.suppliers = suppliers;
+        this.users = users;
         this.ratings = ratings;
         this.admins = admins;
         this.messages = messages;
@@ -90,6 +94,7 @@ public class OrderCommandService {
         if (!request.deliveryTime().isAfter(now) || !request.deliveryTime().isAfter(request.expiryTime())) {
             throw ApiException.badRequest("Delivery deadline must be after the current time and after acceptance expiry");
         }
+        String requesterTelegram = users.telegramHandle(requester.userId());
         Place pickup = suppliers.requirePlace(request.fromLocation(), requester);
         Place dropoff = suppliers.requirePlace(request.toLocation(), requester);
         double requesterRating = ratings.ratingFor(requester.userId(), requester);
@@ -100,7 +105,7 @@ public class OrderCommandService {
             OrderEntity order = new OrderEntity();
             order.setId(id);
             order.setRequesterId(requester.userId());
-            order.setRequesterTelegramHandle(requester.telegramHandle());
+            order.setRequesterTelegramHandle(requesterTelegram);
             order.setRequesterRating(requesterRating);
             order.setItemDescription(request.itemDescription().trim());
             order.setAmount(request.credits());
@@ -134,12 +139,13 @@ public class OrderCommandService {
     @Transactional
     public OrderEntity accept(UserAccount courier, UUID orderId) {
         double courierRating = ratings.ratingFor(courier.userId(), courier);
+        String courierTelegram = users.telegramHandle(courier.userId());
         Instant now = clock.instant();
         Instant collectionDeadline = now.plus(properties.getDeadlines().getCollectionWindow());
         int updated = orders.acceptIfOpen(
                 orderId,
                 courier.userId(),
-                courier.telegramHandle(),
+                courierTelegram,
                 courierRating,
                 collectionDeadline,
                 now

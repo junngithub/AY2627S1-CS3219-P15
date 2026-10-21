@@ -27,7 +27,8 @@ class HttpClientsTest {
     private final AtomicReference<String> lastPath = new AtomicReference<>();
     private final AtomicReference<String> lastBody = new AtomicReference<>();
     private final AtomicReference<String> lastUser = new AtomicReference<>();
-    private final UserAccount ada = new UserAccount("ada-id", "ada");
+    private final AtomicReference<String> lastServiceToken = new AtomicReference<>();
+    private final UserAccount ada = new UserAccount("ada-id");
 
     @BeforeEach
     void setUp() throws Exception {
@@ -45,6 +46,7 @@ class HttpClientsTest {
             lastBody.set(requestBody);
             byte[] empty = "null".getBytes(StandardCharsets.UTF_8);
             lastUser.set(exchange.getRequestHeaders().getFirst("X-User-Id"));
+            lastServiceToken.set(exchange.getRequestHeaders().getFirst("X-Service-Token"));
             int status = 200;
             byte[] body = switch (path) {
                 case "/api/v1/supplier/2" -> "{\"id\":2,\"name\":\"NUS Co-op\",\"latitude\":1.2,\"longitude\":103.7,\"status\":\"approved\",\"building\":\"COM2\"}".getBytes(StandardCharsets.UTF_8);
@@ -61,6 +63,22 @@ class HttpClientsTest {
                 case "/api/v1/supplier/down" -> {
                     status = 500;
                     yield "{\"error\":\"nope\"}".getBytes(StandardCharsets.UTF_8);
+                }
+                case "/api/v1/user/internal/users/11111111-1111-1111-1111-111111111111/telegram" ->
+                        "{\"userId\":\"11111111-1111-1111-1111-111111111111\",\"telegramHandle\":\"ada_tan\"}".getBytes(StandardCharsets.UTF_8);
+                case "/api/v1/user/internal/users/missing/telegram" -> {
+                    status = 404;
+                    yield "{\"error\":\"User not found\",\"code\":\"USER_NOT_FOUND\"}".getBytes(StandardCharsets.UTF_8);
+                }
+                case "/api/v1/user/internal/users/unverified/telegram" -> {
+                    status = 409;
+                    yield "{\"error\":\"User has not completed verification\",\"code\":\"USER_NOT_VERIFIED\"}".getBytes(StandardCharsets.UTF_8);
+                }
+                case "/api/v1/user/internal/users/blank/telegram" ->
+                        "{\"userId\":\"blank\",\"telegramHandle\":\"\"}".getBytes(StandardCharsets.UTF_8);
+                case "/api/v1/user/internal/users/down/telegram" -> {
+                    status = 500;
+                    yield "{\"error\":\"nope\",\"code\":\"INTERNAL_ERROR\"}".getBytes(StandardCharsets.UTF_8);
                 }
                 default -> {
                     CreditProblem credit = creditProblem(requestBody);
@@ -104,6 +122,13 @@ class HttpClientsTest {
         assertEquals(HttpStatus.BAD_REQUEST, assertThrows(ApiException.class, () -> clients.requirePlace("missing", ada)).getStatus());
         assertEquals(HttpStatus.BAD_REQUEST, assertThrows(ApiException.class, () -> clients.requirePlace("slug", ada)).getStatus());
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, assertThrows(ApiException.class, () -> clients.requirePlace("down", ada)).getStatus());
+
+        assertEquals("ada_tan", clients.telegramHandle("11111111-1111-1111-1111-111111111111"));
+        assertEquals("lookup-token", lastServiceToken.get());
+        assertEquals(HttpStatus.NOT_FOUND, assertThrows(ApiException.class, () -> clients.telegramHandle("missing")).getStatus());
+        assertEquals(HttpStatus.CONFLICT, assertThrows(ApiException.class, () -> clients.telegramHandle("unverified")).getStatus());
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, assertThrows(ApiException.class, () -> clients.telegramHandle("blank")).getStatus());
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, assertThrows(ApiException.class, () -> clients.telegramHandle("down")).getStatus());
     }
 
     @Test
@@ -145,6 +170,7 @@ class HttpClientsTest {
         assertThrows(ApiException.class, () -> down.reserve(orderId, "ada-id", 1, ada));
         assertThrows(ApiException.class, () -> down.returnReserved(orderId, ada));
         assertThrows(ApiException.class, () -> down.requirePlace("2", ada));
+        assertThrows(ApiException.class, () -> down.telegramHandle("11111111-1111-1111-1111-111111111111"));
     }
 
     private static CreditProblem creditProblem(String body) {
@@ -182,6 +208,8 @@ class HttpClientsTest {
         properties.getClients().setSupplierBaseUrl(baseUrl);
         properties.getClients().setRatingBaseUrl(baseUrl);
         properties.getClients().setAdminBaseUrl(baseUrl);
+        properties.getClients().setUserBaseUrl(baseUrl);
+        properties.getClients().setUserLookupToken("lookup-token");
         return new HttpClients(properties);
     }
 }

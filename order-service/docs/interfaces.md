@@ -10,9 +10,8 @@ The gateway is the identity source. There is no JWT check in this service.
 | --- | --- | --- |
 | X-User-Id | yes | UUID. Blank or non-UUID returns 401 `Sign in is required` |
 | X-Permitted-Action | yes | Must be `true`, ignoring case and surrounding space. Otherwise 403 `This account is not permitted to use orders` |
-| X-User-Telegram | no | Stored on the order when this caller creates or accepts it |
 
-Outbound calls to Credit and Supplier send `X-User-Id` and, when present, `X-User-Telegram`. They do not forward `X-Permitted-Action`.
+Outbound calls to Credit and Supplier send `X-User-Id`. They do not forward `X-Permitted-Action`. The Telegram handle stored on an order comes from User Service.
 
 Errors use `{ "error": "...", "code": "<HTTP status name>" }`.
 
@@ -58,7 +57,8 @@ These HTTP calls finish before the order row changes. A failure leaves the previ
 
 | When | Call |
 | --- | --- |
-| Create | `GET /api/v1/supplier/{id}` for pickup and dropoff. Only an approved supplier with an id and a name is accepted. Then `POST /api/v1/credit/reserve` with `{ orderId, requesterId, amount }` |
+| Create | `GET /api/v1/user/internal/users/{userId}/telegram` with `X-Service-Token`, then `GET /api/v1/supplier/{id}` for pickup and dropoff. Only an approved supplier with an id and a name is accepted. Then `POST /api/v1/credit/reserve` with `{ orderId, requesterId, amount }` |
+| Accept | `GET /api/v1/user/internal/users/{userId}/telegram` with `X-Service-Token` before the order is claimed |
 | Create, if the insert fails | `POST /api/v1/credit/release` with `{ orderId }` |
 | Requester cancels CREATED | `POST /api/v1/credit/release` before the status becomes CANCELLED |
 | Requester escalates | `POST /escalations` on the admin client. Rating and admin clients are local stubs. Rating always returns 5.0. Admin accepts a non-blank comment |

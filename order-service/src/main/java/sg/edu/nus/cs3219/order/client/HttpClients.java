@@ -18,17 +18,23 @@ import java.time.Duration;
 import java.util.UUID;
 
 @Component
-public class HttpClients implements CreditClient, SupplierClient {
+public class HttpClients implements CreditClient, SupplierClient, UserClient {
 
     private static final String NOT_APPROVED = "That location is not an approved supplier";
+    private static final String USER_FAILED = "User service could not complete the request";
+    private static final String SERVICE_TOKEN = "X-Service-Token";
 
     private final RestClient credits;
     private final RestClient suppliers;
+    private final RestClient users;
+    private final String userLookupToken;
 
     public HttpClients(OrderProperties properties) {
         Duration timeout = properties.getClients().getTimeout();
         this.credits = client(properties.getClients().getCreditBaseUrl(), timeout);
         this.suppliers = client(properties.getClients().getSupplierBaseUrl(), timeout);
+        this.users = client(properties.getClients().getUserBaseUrl(), timeout);
+        this.userLookupToken = properties.getClients().getUserLookupToken();
     }
 
     @Override
@@ -64,6 +70,28 @@ public class HttpClients implements CreditClient, SupplierClient {
     }
 
     @Override
+    public String telegramHandle(String userId) {
+        if (userLookupToken == null || userLookupToken.isBlank()) {
+            throw ApiException.unavailable(USER_FAILED);
+        }
+        try {
+            TelegramResponse response = users.get()
+                    .uri("/api/v1/user/internal/users/{userId}/telegram", userId)
+                    .header(SERVICE_TOKEN, userLookupToken)
+                    .retrieve()
+                    .body(TelegramResponse.class);
+            if (response == null || response.telegramHandle() == null || response.telegramHandle().isBlank()) {
+                throw ApiException.unavailable(USER_FAILED);
+            }
+            return response.telegramHandle();
+        } catch (RestClientResponseException exception) {
+            throw userFailure(exception);
+        } catch (ResourceAccessException exception) {
+            throw ApiException.unavailable("User service did not respond in time");
+        }
+    }
+
+    @Override
     public Place requirePlace(String locationId, UserAccount caller) {
         try {
             SupplierResponse supplier = suppliers.get()
@@ -87,8 +115,17 @@ public class HttpClients implements CreditClient, SupplierClient {
         }
     }
 
+    private static ApiException userFailure(RestClientResponseException exception) {
+        return switch (errorCode(exception)) {
+            case "USER_NOT_FOUND" -> ApiException.notFound("That user was not found");
+            case "USER_NOT_VERIFIED" -> ApiException.conflict("That user has not finished verification");
+            case "INVALID_USER_ID" -> ApiException.badRequest("A valid user id is required");
+            default -> ApiException.unavailable(USER_FAILED);
+        };
+    }
+
     private static ApiException creditFailure(RestClientResponseException exception) {
-        return switch (creditCode(exception)) {
+        return switch (errorCode(exception)) {
             case "CREDIT_INSUFFICIENT_BALANCE" -> ApiException.badRequest("Not enough credits for this reward");
             case "CREDIT_INVALID_AMOUNT" -> ApiException.badRequest("The reward must be a positive number of credits");
             case "CREDIT_ORDER_NOT_FOUND" -> ApiException.badRequest("No reserved credits were found for this order");
@@ -98,7 +135,7 @@ public class HttpClients implements CreditClient, SupplierClient {
         };
     }
 
-    private static String creditCode(RestClientResponseException exception) {
+    private static String errorCode(RestClientResponseException exception) {
         try {
             JsonNode code = JsonMapper.shared().readTree(exception.getResponseBodyAsString()).get("code");
             if (code == null || code.isNull()) {
@@ -112,9 +149,6 @@ public class HttpClients implements CreditClient, SupplierClient {
 
     private static void identify(HttpHeaders headers, UserAccount caller) {
         headers.set(CallerHeaders.USER_ID, caller.userId());
-        if (caller.telegramHandle() != null && !caller.telegramHandle().isBlank()) {
-            headers.set(CallerHeaders.TELEGRAM, caller.telegramHandle());
-        }
     }
 
     private static RestClient client(String baseUrl, Duration timeout) {
@@ -138,5 +172,8 @@ public class HttpClients implements CreditClient, SupplierClient {
     }
 
     private record SupplierResponse(Integer id, String name, double latitude, double longitude, String status) {
+    }
+
+    private record TelegramResponse(String userId, String telegramHandle) {
     }
 }
