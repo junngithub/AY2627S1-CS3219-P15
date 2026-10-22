@@ -39,5 +39,5 @@ variable "tools" {
 variable "databases" {
   description = "Services that get their own Postgres database and login (ADR-0010)."
   type        = list(string)
-  default     = ["user", "supplier", "credit", "order"]
+  default     = ["user", "supplier", "credit", "order", "rating"]
 }
