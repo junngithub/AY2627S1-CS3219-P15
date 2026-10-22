@@ -38,6 +38,7 @@ describe("HTTP foundation", () => {
     const document = await response.json() as {
       openapi: string;
       paths: Record<string, unknown>;
+      components: { securitySchemes: Record<string, unknown> };
     };
     assert.equal(document.openapi, "3.0.3");
     assert.ok(document.paths["/api/v1/user/signup"]);
@@ -49,6 +50,9 @@ describe("HTTP foundation", () => {
     assert.ok(document.paths["/api/v1/user/admin/users/{userId}/verify"]);
     assert.ok(document.paths["/api/v1/user/internal/authorize"]);
     assert.equal(document.paths["/api/v1/user/authorize"], undefined);
+    assert.deepEqual(Object.keys(document.components.securitySchemes), ["bearerAuth"]);
+    const lookup = document.paths["/api/v1/user/internal/users/{userId}/telegram"] as { get: { security: unknown } };
+    assert.deepEqual(lookup.get.security, []);
   });
 
   it("answers authorize checks for any method, as the API gateway sends them", async () => {
@@ -60,7 +64,7 @@ describe("HTTP foundation", () => {
     }
   });
 
-  it("does not accept gateway identity headers or an Order service token as authorize credentials", async () => {
+  it("does not accept identity or arbitrary service headers as authorize credentials", async () => {
     for (const endpoint of ["internal/authorize", "authorize"]) {
       const response = await fetch(`${baseUrl}/api/v1/user/${endpoint}`, {
         headers: {
@@ -92,14 +96,17 @@ describe("request validation before database access", () => {
     }
   });
 
-  it("does not accept spoofed identity headers for integration endpoints", async () => {
-    for (const endpoint of ["internal/users/5999fc1e-1496-45a0-af8e-53ebf70669ba/telegram", "admin/users/5999fc1e-1496-45a0-af8e-53ebf70669ba/verify"]) {
-      const response = await fetch(`${baseUrl}/api/v1/user/${endpoint}`, {
-        method: endpoint.startsWith("admin") ? "POST" : "GET",
-        headers: { "x-is-admin": "true", "x-user-id": "5999fc1e-1496-45a0-af8e-53ebf70669ba", "x-permitted-action": "true" },
-      });
-      assert.equal(response.status, 404);
-    }
+  it("does not accept spoofed identity headers for admin test verification", async () => {
+    const response = await fetch(`${baseUrl}/api/v1/user/admin/users/5999fc1e-1496-45a0-af8e-53ebf70669ba/verify`, {
+      method: "POST",
+      headers: { "x-is-admin": "true", "x-user-id": "5999fc1e-1496-45a0-af8e-53ebf70669ba", "x-permitted-action": "true" },
+    });
+    assert.equal(response.status, 404);
+  });
+  it("validates internal lookup UUIDs without requiring an application token", async () => {
+    const response = await fetch(`${baseUrl}/api/v1/user/internal/users/not-a-uuid/telegram`);
+    assert.equal(response.status, 400);
+    assert.equal((await response.json() as { code: string }).code, "INVALID_USER_ID");
   });
   it("requires an email to request a password reset", async () => {
     const response = await fetch(`${baseUrl}/api/v1/user/forgot-password`, {

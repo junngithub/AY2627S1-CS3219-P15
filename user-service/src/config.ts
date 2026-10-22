@@ -32,7 +32,6 @@ export const config = {
   nodeEnv,
   appEnv,
   email: readEmailConfiguration(process.env),
-  orderUserLookupToken: process.env.ORDER_USER_LOOKUP_TOKEN ?? "",
   testVerificationEnabled: testVerificationAllowed(process.env.ENABLE_TEST_VERIFICATION, appEnv),
   deletionSweepIntervalSeconds: positiveInteger("USER_DELETION_SWEEP_INTERVAL_SECONDS", 3600),
   port: positiveInteger("PORT", 8080),

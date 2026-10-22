@@ -19,10 +19,6 @@ export const openApiDocument = {
   ],
   components: {
     securitySchemes: {
-      orderServiceToken: {
-        type: "apiKey", in: "header", name: "X-Service-Token",
-        description: "Dedicated ORDER_USER_LOOKUP_TOKEN shared only with Order Service. Use private User Service DNS; the gateway blocks this path.",
-      },
       bearerAuth: {
         type: "http",
         scheme: "bearer",
@@ -425,7 +421,7 @@ export const openApiDocument = {
         tags: ["User"],
         summary: "Validate a session for another service",
         description:
-          "Internal only: blocked at public proxies. Called directly by the API gateway for every protected request, with the client's HTTP method and no body, so every method is accepted (POST shown). Requires the user's bearer session, not the Order lookup service token. The gateway reads only the status and the identity headers. Responses are never cached. /api/v1/user/authorize remains a temporary, externally blocked compatibility alias during caller migration.",
+          "Internal only: blocked at public proxies. Called directly by the API gateway for every protected request, with the client's HTTP method and no body, so every method is accepted (POST shown). Still requires the user's bearer session after removal of the separate Order lookup secret. The gateway reads only the status and the identity headers. Responses are never cached. /api/v1/user/authorize remains a temporary, externally blocked compatibility alias during caller migration.",
         security: [{ bearerAuth: [] }],
         responses: {
           "200": {
@@ -480,8 +476,8 @@ export const openApiDocument = {
     "/api/v1/user/internal/users/{userId}/telegram": {
       get: {
         tags: ["User"], summary: "Order Service: look up a verified user's Telegram handle",
-        description: "Internal only. Order must authenticate its caller and authorize order participation. This endpoint does not accept gateway identity headers as credentials.",
-        security: [{ orderServiceToken: [] }],
+        description: "Internal only. Caller authentication is enforced by Linkerd mTLS and an Order-only route policy, not an application shared token. The public gateway must block this path and unprotected ports must not bypass the mesh. Direct local calls have no caller authentication and are for isolated development only. Order must authorize order participation.",
+        security: [],
         parameters: [{ name: "userId", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
         responses: {
           "200": { description: "Minimal contact details", content: { "application/json": { schema: {
@@ -489,7 +485,7 @@ export const openApiDocument = {
             properties: { userId: { type: "string", format: "uuid" }, telegramHandle: { type: "string", example: "example_user" } },
           } } } },
           "400": { description: "Invalid user UUID" },
-          "404": { description: "Missing/invalid service token, or unavailable user" },
+          "404": { description: "User missing, suspended or past its deletion deadline" },
           "409": { description: "User not verified" },
         },
       },
