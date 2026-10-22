@@ -2,7 +2,15 @@
 name: rating
 image:
   name: foc/rating-service
-port: 3000 # placeholder until rating-service exists
+port: 8085 # RATING_SERVICE_PORT default in rating-service/src/config.ts
 healthPath: /health
+database:
+  enabled: true # DATABASE_URL from Secret rating-db (charts/foc-database, ADR-0010)
+  healthPath: /health/db # runs `select 1`
 kafka:
   user: rating # reads foc.rating.commands, writes foc.user.rating (ADR-0004)
+env:
+  LOG_LEVEL: info
+migrate:
+  enabled: true # runs before each deploy (ADR-0011); image: the Dockerfile's `migrate` stage
+  command: ["npm", "run", "db:migrate"]
