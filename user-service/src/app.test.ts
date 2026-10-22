@@ -49,10 +49,17 @@ describe("HTTP foundation", () => {
     assert.ok(document.paths["/api/v1/user/internal/users/{userId}/telegram"]);
     assert.ok(document.paths["/api/v1/user/admin/users/{userId}/verify"]);
     assert.ok(document.paths["/api/v1/user/internal/authorize"]);
+    assert.ok(document.paths["/api/v1/user/search"]);
+    assert.ok(document.paths["/api/v1/user/{userId}/role"]);
+    assert.ok(document.paths["/api/v1/user/{userId}/status"]);
     assert.equal(document.paths["/api/v1/user/authorize"], undefined);
     assert.deepEqual(Object.keys(document.components.securitySchemes), ["bearerAuth"]);
     const lookup = document.paths["/api/v1/user/internal/users/{userId}/telegram"] as { get: { security: unknown } };
     assert.deepEqual(lookup.get.security, []);
+    for (const endpoint of ["search", "{userId}/role", "{userId}/status", "admin/users/{userId}/verify"]) {
+      const operation = document.paths[`/api/v1/user/${endpoint}`] as Record<string, { security: unknown }>;
+      assert.deepEqual(Object.values(operation)[0].security, [{ bearerAuth: [] }]);
+    }
   });
 
   it("answers authorize checks for any method, as the API gateway sends them", async () => {
@@ -87,6 +94,13 @@ describe("HTTP foundation", () => {
 });
 
 describe("request validation before database access", () => {
+  it("hides admin search and mutations from missing credentials and spoofed headers", async () => {
+    for (const [endpoint, method] of [["search", "GET"], ["not-a-uuid/role", "POST"], ["not-a-uuid/status", "POST"]]) {
+      const response = await fetch(`${baseUrl}/api/v1/user/${endpoint}`, { method,
+        headers: { "x-user-id": "5999fc1e-1496-45a0-af8e-53ebf70669ba", "x-is-admin": "true", "x-permitted-action": "true" } });
+      assert.equal(response.status, 404);
+    }
+  });
   it("requires authentication for Telegram verification and profile password changes", async () => {
     for (const [endpoint, method] of [
       ["request-telegram-verification", "POST"], ["verify-telegram", "POST"], ["me/password", "PATCH"], ["me", "DELETE"],
