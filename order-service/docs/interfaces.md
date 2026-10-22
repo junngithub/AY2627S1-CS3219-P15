@@ -57,8 +57,8 @@ These HTTP calls finish before the order row changes. A failure leaves the previ
 
 | When | Call |
 | --- | --- |
-| Create | `GET /api/v1/user/internal/users/{userId}/telegram` with `X-Service-Token`, then `GET /api/v1/supplier/{id}` for pickup and dropoff. Only an approved supplier with an id and a name is accepted. Then `POST /api/v1/credit/internal/reserve` with `{ orderId, requesterId, amount }` |
-| Accept | `GET /api/v1/user/internal/users/{userId}/telegram` with `X-Service-Token` before the order is claimed |
+| Create | `GET /api/v1/user/internal/users/{userId}/telegram`, then `GET /api/v1/supplier/{id}` for pickup and dropoff. Only an approved supplier with an id and a name is accepted. Then `POST /api/v1/credit/internal/reserve` with `{ orderId, requesterId, amount }` |
+| Accept | `GET /api/v1/user/internal/users/{userId}/telegram` before the order is claimed |
 | Create, if the insert fails | `POST /api/v1/credit/internal/release` with `{ orderId }` |
 | Requester cancels CREATED | `POST /api/v1/credit/internal/release` before the status becomes CANCELLED |
 | Requester escalates, and a collected order that misses its delivery deadline | `POST /api/v1/admin/conflicts` with `{ orderId, reporterUserId, comment, photos }` before the status becomes ESCALATED. A repeat for the same order is accepted. Rating still returns 5.0 locally |
