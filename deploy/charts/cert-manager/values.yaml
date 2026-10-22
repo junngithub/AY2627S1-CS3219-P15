@@ -1,0 +1,8 @@
+# Values passed to the vendored cert-manager chart.
+cert-manager:
+  # cert-manager ships its CRDs as templates; install them with the release and
+  # keep them if the release is uninstalled (deleting them deletes every
+  # Certificate, including Linkerd's).
+  crds:
+    enabled: true
+    keep: true

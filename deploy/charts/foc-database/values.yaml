@@ -18,10 +18,17 @@ admin_database: postgres
 # database.enabled is true).
 services: {}
 
-# Locally the chart writes the Secrets from the values above. In the cloud the
-# passwords live in Secrets Manager and External Secrets creates the same
-# Secrets instead (not built yet).
+# Locally the chart writes the Secrets from the values above. In the cloud
+# (false) the passwords live in Secrets Manager and External Secrets creates
+# the same Secrets (templates/external-secrets.yaml); services then only need
+# their keys listed, e.g. services: { credit: {} }.
 createSecrets: true
+
+# Cloud only (createSecrets: false).
+externalSecrets:
+  store: "" # ClusterSecretStore, e.g. aws-secrets-dev (charts/cluster-config)
+  prefix: "" # e.g. foc/dev/ → secret foc/dev/<service>-db
+  adminSecret: "" # ARN of RDS's master user secret (terraform output rds.master_secret_arn)
 
 # psql in the setup Job and tests. Floci's proxy offers TLS with its own CA,
 # RDS requires TLS: `prefer` works for both without a CA file.

@@ -1,2 +1,5 @@
 strimzi-kafka-operator:
-  watchNamespaces: [foc-dev, foc-stg]
+  # Only namespaces that exist: the operator exits when it can't watch one
+  # (no RoleBindings there). Add foc-stg together with stg in
+  # deploy/argocd/nonprod.yaml and infra/nonprod/aws var.envs.
+  watchNamespaces: [foc-dev]

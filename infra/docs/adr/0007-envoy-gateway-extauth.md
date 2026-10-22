@@ -1,6 +1,9 @@
 # ADR-0007: Envoy Gateway checks auth once at the edge
 
-- **Status:** Accepted. Implemented and tested locally on 2026-10-01; cloud NLB pending.
+- **Status:** Accepted. Implemented and tested locally on 2026-10-01. Cloud
+  entry point (an internal NLB behind CloudFront) designed in
+  [ADR-0013](0013-cloudfront-vpc-origin-and-external-secrets.md) and written
+  2026-10-21; not yet applied.
 - **Date:** 2026-09-29
 
 ## Route migration (2026-10-18)

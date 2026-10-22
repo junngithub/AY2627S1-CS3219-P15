@@ -1,0 +1,22 @@
+image:
+  tag: "2ae335483a8608f2f5c77ad6c0b79b9e140fa3c0" # git SHA, set by deploy/push-dev.sh
+replicas: 1 # TELEGRAM_POLLING_ENABLED must stay on one replica only
+env:
+  APP_ENV: dev
+  # Password-reset links point here.
+  FRONTEND_BASE_URL: https://djj7vqja8at5u.cloudfront.net
+  # OTP and reset emails through SES; the node role may send only as this
+  # verified address (infra/nonprod/aws/ses.tf, node-permissions.tf). While SES is
+  # in the sandbox, only verified recipients get mail.
+  EMAIL_PROVIDER: ses
+  # Not u.nus.edu: its DMARC policy is p=reject, so mail SES sends "from" it
+  # is refused (550 5.7.509). gmail.com is p=none: delivered, often to Junk.
+  # A domain we own, DKIM-verified in SES, would fix that.
+  SES_FROM_EMAIL: donleehh420@gmail.com
+  AWS_REGION: ap-southeast-1
+  # Until the Telegram bot exists, an admin can mark users verified
+  # (POST /api/v1/user/admin/users/{id}/verify). Never in prod.
+  ENABLE_TEST_VERIFICATION: "true"
+# Secrets from Secrets Manager foc/dev/<name> (infra/nonprod/aws/secrets.tf).
+externalSecrets:
+  user-otp: [OTP_SECRET]

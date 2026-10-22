@@ -5,7 +5,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.config import settings
 
-_jobstore_url = settings.database_url.replace("+asyncpg", "")
+_jobstore_url = settings.sync_database_url
 
 scheduler: AsyncIOScheduler | None = None
 

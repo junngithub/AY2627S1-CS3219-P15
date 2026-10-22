@@ -1,7 +1,7 @@
 quota:
   requests.cpu: "5"
   requests.memory: 16Gi
-  limits.cpu: "10"
+  limits.cpu: "13" # +200m per Linkerd proxy (ADR-0012), incl. rollout surge and mesh tests
   limits.memory: 22Gi
   persistentvolumeclaims: "20"
   pods: "60"

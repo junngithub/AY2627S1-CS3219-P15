@@ -1,0 +1,3 @@
+# The NLB is Terraform's (infra/nonprod/aws/gateway-lb.tf); a TargetGroupBinding
+# in charts/cluster-config registers the proxies, so no LoadBalancer Service.
+envoyServiceType: ClusterIP

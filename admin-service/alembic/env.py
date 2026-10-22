@@ -10,7 +10,8 @@ from app.database import Base
 from app.models import AuditLog, ConflictCase  # noqa: F401 — register models on Base.metadata
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# configparser treats % as interpolation; escape it (URL-encoded passwords).
+config.set_main_option("sqlalchemy.url", settings.async_database_url.replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
@@ -30,7 +31,7 @@ def include_object(object, name, type_, reflected, compare_to):
 
 def run_migrations_offline() -> None:
     context.configure(
-        url=settings.database_url,
+        url=settings.async_database_url,
         target_metadata=target_metadata,
         literal_binds=True,
         include_object=include_object,
