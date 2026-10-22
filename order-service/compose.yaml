@@ -114,7 +114,6 @@ services:
       SUPPLIER_SERVICE_URL: http://host.docker.internal:8081
       USER_SERVICE_URL: http://host.docker.internal:8080
       ADMIN_SERVICE_URL: http://host.docker.internal:8084
-      ORDER_USER_LOOKUP_TOKEN: ${ORDER_USER_LOOKUP_TOKEN:-}
       ORDER_DB_URL: ${ORDER_DB_URL}
       ORDER_DB_USERNAME: ${ORDER_DB_USERNAME}
       ORDER_DB_PASSWORD: ${ORDER_DB_PASSWORD}

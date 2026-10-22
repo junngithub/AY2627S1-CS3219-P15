@@ -20,7 +20,8 @@ services:
       context: .
       target: build  # dev tooling (prisma CLI, ts-node-dev); the default image is the slim runtime
     ports:
-      - "8080:8080"
+      # The internal lookup has no application caller check; keep local-only.
+      - "127.0.0.1:8080:8080"
     environment:
       NODE_ENV: development
       PORT: 8080
@@ -34,7 +35,6 @@ services:
       FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:5173}
       PASSWORD_RESET_TTL_MINUTES: ${PASSWORD_RESET_TTL_MINUTES:-30}
       APP_ENV: ${APP_ENV:-local}
-      ORDER_USER_LOOKUP_TOKEN: ${ORDER_USER_LOOKUP_TOKEN:-}
       ENABLE_TEST_VERIFICATION: ${ENABLE_TEST_VERIFICATION:-false}
       USER_DELETION_SWEEP_INTERVAL_SECONDS: ${USER_DELETION_SWEEP_INTERVAL_SECONDS:-3600}
       EMAIL_PROVIDER: ${EMAIL_PROVIDER:-development}

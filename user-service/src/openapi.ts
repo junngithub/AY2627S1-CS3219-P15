@@ -19,10 +19,6 @@ export const openApiDocument = {
   ],
   components: {
     securitySchemes: {
-      orderServiceToken: {
-        type: "apiKey", in: "header", name: "X-Service-Token",
-        description: "Dedicated ORDER_USER_LOOKUP_TOKEN shared only with Order Service. Use private User Service DNS; the gateway blocks this path.",
-      },
       bearerAuth: {
         type: "http",
         scheme: "bearer",
@@ -425,7 +421,7 @@ export const openApiDocument = {
         tags: ["User"],
         summary: "Validate a session for another service",
         description:
-          "Internal only: blocked at public proxies. Called directly by the API gateway for every protected request, with the client's HTTP method and no body, so every method is accepted (POST shown). Requires the user's bearer session, not the Order lookup service token. The gateway reads only the status and the identity headers. Responses are never cached. /api/v1/user/authorize remains a temporary, externally blocked compatibility alias during caller migration.",
+          "Internal only: blocked at public proxies. Called directly by the API gateway for every protected request, with the client's HTTP method and no body, so every method is accepted (POST shown). Still requires the user's bearer session after removal of the separate Order lookup secret. The gateway reads only the status and the identity headers. Responses are never cached. /api/v1/user/authorize remains a temporary, externally blocked compatibility alias during caller migration.",
         security: [{ bearerAuth: [] }],
         responses: {
           "200": {
@@ -480,8 +476,8 @@ export const openApiDocument = {
     "/api/v1/user/internal/users/{userId}/telegram": {
       get: {
         tags: ["User"], summary: "Order Service: look up a verified user's Telegram handle",
-        description: "Internal only. Order must authenticate its caller and authorize order participation. This endpoint does not accept gateway identity headers as credentials.",
-        security: [{ orderServiceToken: [] }],
+        description: "Internal only. Caller authentication is enforced by Linkerd mTLS and an Order-only route policy, not an application shared token. The public gateway must block this path and unprotected ports must not bypass the mesh. Direct local calls have no caller authentication and are for isolated development only. Order must authorize order participation.",
+        security: [],
         parameters: [{ name: "userId", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
         responses: {
           "200": { description: "Minimal contact details", content: { "application/json": { schema: {
@@ -489,8 +485,64 @@ export const openApiDocument = {
             properties: { userId: { type: "string", format: "uuid" }, telegramHandle: { type: "string", example: "example_user" } },
           } } } },
           "400": { description: "Invalid user UUID" },
-          "404": { description: "Missing/invalid service token, or unavailable user" },
+          "404": { description: "User missing, suspended or past its deletion deadline" },
           "409": { description: "User not verified" },
+        },
+      },
+    },
+    "/api/v1/user/search": {
+      get: {
+        tags: ["User"], summary: "Admin Service: search users",
+        description: "Admin Service must forward the real administrator's Authorization bearer session. Caller-supplied identity headers alone are not accepted. Matches name/email case-insensitively or an exact UUID. Page size is 20; expired deletion records are excluded.",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "q", in: "query", schema: { type: "string", maxLength: 100, default: "" } },
+          { name: "page", in: "query", schema: { type: "integer", minimum: 1, maximum: 100000, default: 1 } },
+        ],
+        responses: {
+          "200": { description: "{ items: [{ id, name, email, role: admin|user, status: Created|Verified|Suspended }], page, total }", content: {
+            "application/json": { schema: { type: "object", required: ["items", "page", "total"], properties: {
+              items: { type: "array", items: { type: "object", required: ["id", "name", "email", "role", "status"], properties: {
+                id: { type: "string", format: "uuid" }, name: { type: "string" }, email: { type: "string", format: "email" },
+                role: { type: "string", enum: ["admin", "user"] }, status: { $ref: "#/components/schemas/AccountStatus" },
+              } } }, page: { type: "integer" }, total: { type: "integer" },
+            } } },
+          } },
+          "400": { description: "Invalid q/page" }, "404": { description: "Missing/invalid session or caller is not an eligible admin" },
+        },
+      },
+    },
+    "/api/v1/user/{userId}/role": {
+      post: {
+        tags: ["User"], summary: "Admin Service: promote or demote a user",
+        description: "Requires the real admin bearer session. Only verified active unlocked accounts can be promoted. Self-demotion and removal of the last available admin are rejected. Actual changes atomically revoke target sessions/reset links and append User audit; repeats return changed:false. Admin Service owns its own audit/events after a successful response.",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "userId", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        requestBody: { required: true, content: { "application/json": { schema: {
+          type: "object", required: ["role"], properties: { role: { type: "string", enum: ["admin", "user"] } },
+        } } } },
+        responses: {
+          "200": { description: "{ userId, role, status, changed }; role is lowercase, status is Created|Verified|Suspended" },
+          "400": { description: "Invalid UUID/role or self-demotion" },
+          "404": { description: "Caller not an eligible admin, invalid session, or user not found" },
+          "409": { description: "LAST_ADMIN, USER_NOT_ELIGIBLE or USER_PENDING_DELETION" },
+        },
+      },
+    },
+    "/api/v1/user/{userId}/status": {
+      post: {
+        tags: ["User"], summary: "Admin Service: suspend or reinstate a user",
+        description: "Requires the real admin bearer session. status:verified means remove suspension, not bypass OTP verification; response may be Created if verification is unfinished. Suspension revokes sessions, reset links and challenges. Last-admin protection and atomic User audit apply. Reinstatement does not unlock password lockout or grant credits.",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: "userId", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        requestBody: { required: true, content: { "application/json": { schema: {
+          type: "object", required: ["status"], properties: { status: { type: "string", enum: ["suspended", "verified"] } },
+        } } } },
+        responses: {
+          "200": { description: "{ userId, role, status, changed }; status reflects actual verification after reinstatement" },
+          "400": { description: "Invalid UUID/status" },
+          "404": { description: "Caller not an eligible admin, invalid session, or user not found" },
+          "409": { description: "LAST_ADMIN or USER_PENDING_DELETION" },
         },
       },
     },
