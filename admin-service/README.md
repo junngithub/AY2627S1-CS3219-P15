@@ -36,7 +36,7 @@ admin-service/
 │   │   └── conflicts.py          # /api/v1/admin/conflicts*
 │   ├── services/
 │   │   ├── kafka_producer.py     # shared event envelope + topic publishes
-│   │   ├── kafka_consumer.py     # logs events on those same topics
+│   │   ├── kafka_consumer.py     # listener; no topics subscribed yet
 │   │   ├── ai_client.py          # Gemini Flash fault recommendation
 │   │   ├── audit.py              # single write path into audit_logs
 │   │   ├── conflict_resolution.py# the only resolve path (manual + auto)
@@ -171,9 +171,18 @@ The other events still use the wrapped envelope `{ eventId, eventType, version, 
 Keys: `orderId` for conflict events, `userId` for user events. Intake and
 resolve **commit the DB first**; Kafka failures are logged, not returned as 500.
 
-`kafka_consumer.py` also subscribes to these topics as group `admin-service-listener`
-and logs each event. That copy does not change case or user state. Other services
-keep their own consumer groups.
+`kafka_consumer.py` starts with the app as group `admin-service-listener` and
+currently subscribes to no topics.
+
+**In Kubernetes** (`deploy/values/services/admin.yaml`) only `foc.admin.events`
+is published. It is the one admin topic in the cluster's event catalog
+(`deploy/charts/foc-kafka`, ADR-0004), and nothing consumes the others yet.
+The other topic settings are set to `""`, which skips that publish, and the
+listener is off (`KAFKA_CONSUMER_ENABLED=false`): the ACLs only let admin read
+`foc.admin.commands`. To publish another event, add its topic and ACL to
+`foc-kafka` first. The chart's `KAFKA_BROKERS`, `KAFKA_USERNAME`,
+`KAFKA_PASSWORD` and `KAFKA_CA_CERT` switch the client to SASL_SSL with
+SCRAM-SHA-512. Without a username it stays plaintext, as in compose.
 
 ## Local port scheme (team convention)
 
@@ -244,6 +253,8 @@ then run uvicorn on the host with `KAFKA_BOOTSTRAP_SERVERS=localhost:9092`.
 pytest
 ```
 
+`tests/test_settings.py` covers the Kubernetes settings: the database URL form
+and the Kafka login (no live stack).
 `tests/test_conflicts.py` covers the 404-not-403 admin check (ASGI, no live stack).
 `tests/conftest.py` also exposes a live-API client fixture against
 `http://localhost:8084` with `Authorization: Bearer admin-sahana` (skips if the

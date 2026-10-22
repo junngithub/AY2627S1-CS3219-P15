@@ -17,14 +17,8 @@ _RETRY_DELAY_SECONDS = 3
 
 
 def _topics() -> list[str]:
-    return [
-        settings.kafka_topic_conflict_case_created,
-        settings.kafka_topic_admin_events,
-        settings.kafka_topic_user_promoted,
-        settings.kafka_topic_user_demoted,
-        settings.kafka_topic_user_suspended,
-        settings.kafka_topic_user_reinstated,
-    ]
+    # Nothing to read yet. Do not subscribe to topics this service publishes.
+    return []
 
 
 def _ensure_logging() -> None:
@@ -55,12 +49,17 @@ async def _listen() -> None:
 
 
 async def start_consumer() -> None:
-    """Listen on the topics this service publishes. Other services still get their own copy."""
+    """Start the listener. With no topics, it does not connect or subscribe."""
     global _consumer, _task
     _ensure_logging()
+    topics = _topics()
+    if not settings.kafka_consumer_enabled or not topics:
+        logger.info("Kafka listener disabled")
+        return
+
     _consumer = AIOKafkaConsumer(
-        *_topics(),
-        bootstrap_servers=settings.kafka_bootstrap_servers,
+        *topics,
+        **settings.kafka_client_options(),
         group_id="admin-service-listener",
         value_deserializer=lambda raw: json.loads(raw.decode("utf-8")),
         auto_offset_reset="latest",
@@ -69,7 +68,7 @@ async def start_consumer() -> None:
         try:
             await _consumer.start()
             _task = asyncio.create_task(_listen())
-            logger.info("Kafka listener subscribed to %s", ", ".join(_topics()))
+            logger.info("Kafka listener subscribed to %s", ", ".join(topics))
             return
         except KafkaConnectionError:
             logger.warning(

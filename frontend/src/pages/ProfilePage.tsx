@@ -10,9 +10,11 @@
  * desktop, account and credits left) and FR12.3.2 (one stacked column on
  * mobile).
  *
+ * Rating card added with Claude Code (Claude Opus 5.5) on 2026-10-21: the
+ * unified average from GET /api/v1/rating/{userId} (UI FR12.2.1).
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { Alert } from '../components/ui/Alert';
@@ -25,6 +27,8 @@ import { errorMessage } from '../lib/api';
 import { changePassword, deleteAccount } from '../lib/user';
 import { checkPasswordRules, isValidPassword } from '../lib/validation';
 import { useCreditBalance } from '../lib/credit';
+import { formatRating } from '../lib/format';
+import { fetchUserRating, type UserRating } from '../lib/rating';
 import styles from './ProfilePage.module.css';
 
 function initials(name: string): string {
@@ -166,16 +170,7 @@ export function ProfilePage() {
         </div>
 
         <div className={styles.column}>
-          <section className={styles.card}>
-            <div className={styles.soonHead}>
-              <h2 className={styles.cardTitle}>Ratings</h2>
-              <span className={styles.soonTag}>Coming soon</span>
-            </div>
-            <p className={styles.soonBody}>
-              Your average as a courier and as a requester, with the count behind each. Waiting on
-              the Rating Service.
-            </p>
-          </section>
+          <RatingCard userId={user.userId} />
 
           <section className={styles.card}>
             <div className={styles.soonHead}>
@@ -218,6 +213,59 @@ export function ProfilePage() {
         onCancel={() => setConfirmingDelete(false)}
       />
     </div>
+  );
+}
+
+/**
+ * UI FR12.2.1, adjusted to the team's choice of one unified average (Rating
+ * F1): everything the user has been rated, as courier or requester, with the
+ * count behind it (Rating F3.1.1), since a bare average misleads at low volume.
+ */
+function RatingCard({ userId }: { userId: string }) {
+  const [rating, setRating] = useState<UserRating | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchUserRating(userId)
+      .then((result) => {
+        if (!cancelled) setRating(result);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  return (
+    <section className={styles.card}>
+      <h2 className={styles.cardTitle}>Rating</h2>
+
+      {failed ? (
+        <p className={styles.rowNote}>Your rating could not be loaded. Try again later.</p>
+      ) : rating === null ? (
+        <p className={styles.rowNote}>Loading…</p>
+      ) : rating.average === null ? (
+        // FR20.2.2: an explicit empty state.
+        <p className={styles.rowNote}>
+          No ratings yet. You are rated after each delivery, as a courier or as a requester.
+        </p>
+      ) : (
+        <p className={styles.balance}>
+          <span className={styles.balanceNumber}>
+            {formatRating(rating.average)}
+            <span className={styles.ratingStar}>
+              <Icon name="star" size={26} filled />
+            </span>
+          </span>
+          <span className={styles.balanceNote}>
+            from {rating.count} {rating.count === 1 ? 'rating' : 'ratings'}, as courier and requester
+          </span>
+        </p>
+      )}
+    </section>
   );
 }
 

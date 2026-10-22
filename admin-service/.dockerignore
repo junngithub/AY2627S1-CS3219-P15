@@ -1,0 +1,14 @@
+# Keep local secrets and caches out of the image (it is pushed to ECR).
+.env
+.env.*
+!.env.example
+__pycache__
+*.pyc
+.pytest_cache
+.venv
+.git
+.gitignore
+Dockerfile
+Dockerfile.mock-user-service
+.dockerignore
+docker-compose.yml

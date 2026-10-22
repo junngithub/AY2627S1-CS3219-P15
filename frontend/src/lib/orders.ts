@@ -218,15 +218,20 @@ export async function fetchMyRequests(): Promise<OrderPage> {
 }
 
 /**
- * The signed-in courier's deliveries, most recently updated first.
- *
- * TODO(order-service): GET /orders/deliveries returns only Delivered,
- * Acknowledged, Unacknowledged and Completed orders. Tasks still Accepted or
- * Collected are left out, so an in-progress task is reachable only from the
- * link on Browse right after accepting it.
+ * Order F5 from the courier's side: tasks in progress (Accepted, Collected,
+ * Escalated, Under review), newest request first.
  */
-export async function fetchMyDeliveries(): Promise<OrderPage> {
-  return toPage(await api.get<PageResponse<OrderResponse>>('/orders/deliveries?page=0&size=100'));
+export async function fetchActiveDeliveries(): Promise<OrderPage> {
+  return toPage(await api.get<PageResponse<OrderResponse>>('/orders/deliveries/active?page=0&size=100'));
+}
+
+/**
+ * Finished deliveries (Delivered, Acknowledged, Unacknowledged, Completed),
+ * newest request first. Delivered is here although the requester has not
+ * acknowledged yet: the courier's part is done.
+ */
+export async function fetchPastDeliveries(): Promise<OrderPage> {
+  return toPage(await api.get<PageResponse<OrderResponse>>('/orders/deliveries/past?page=0&size=100'));
 }
 
 /** One order; only its requester or assigned courier may read it. */

@@ -1,0 +1,8 @@
+# TF:<output> values are filled from `terraform output` by deploy/cloud-values.sh
+# (none of them are secrets).
+region: ap-southeast-1
+envs:
+  - name: dev
+    namespace: foc-dev
+    gatewayTargetGroupArn: arn:aws:elasticloadbalancing:ap-southeast-1:474265880628:targetgroup/foc-dev-gateway/5548cc28ce86a735
+  # stg: add with "stg" in infra/nonprod/aws var.envs.

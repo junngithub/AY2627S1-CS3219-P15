@@ -1,0 +1,17 @@
+linkerd-control-plane:
+  identity:
+    # The linkerd-identity-trust-roots ConfigMap comes from trust-manager and
+    # the issuer from cert-manager's Secret linkerd-identity-issuer
+    # (charts/linkerd-identity); the chart creates neither.
+    externalCA: true
+    issuer:
+      scheme: kubernetes.io/tls
+
+  proxy:
+    # Every injected proxy. Measured at ~2-4m CPU and ~4-6 MiB per proxy. Set
+    # explicitly: the namespace LimitRange default (500m / 512Mi) pushed the
+    # foc ResourceQuota over its limits and stalled rollouts in the spike.
+    resources:
+      cpu: { request: 10m, limit: 200m }
+      memory: { request: 32Mi, limit: 64Mi }
+

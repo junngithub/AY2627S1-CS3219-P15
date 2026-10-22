@@ -1,0 +1,6 @@
+# Values passed to the vendored trust-manager chart. Bundles read their sources
+# from the trust namespace, where charts/linkerd-identity keeps the trust anchor.
+trust-manager:
+  app:
+    trust:
+      namespace: cert-manager

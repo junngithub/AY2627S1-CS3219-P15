@@ -14,3 +14,11 @@ migrate:
 secretEnv:
   # Signs one-time passwords; the app refuses to start in production without it.
   OTP_SECRET: { secret: user-otp, key: OTP_SECRET }
+  ORDER_USER_LOOKUP_TOKEN:
+    { secret: order-user-lookup, key: ORDER_USER_LOOKUP_TOKEN }
+mesh: # who may call user (ADR-0012)
+  callers: [gateway, admin] # admin: list / promote / suspend / reinstate users
+  internal:
+    # Envoy's /internal/authorize check.
+    - { path: /api/v1/user/internal, callers: [gateway] }
+    - { path: /api/v1/user/internal/users, callers: [order] } # Telegram lookup

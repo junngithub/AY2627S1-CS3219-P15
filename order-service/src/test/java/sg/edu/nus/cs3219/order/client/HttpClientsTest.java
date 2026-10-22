@@ -27,7 +27,6 @@ class HttpClientsTest {
     private final AtomicReference<String> lastPath = new AtomicReference<>();
     private final AtomicReference<String> lastBody = new AtomicReference<>();
     private final AtomicReference<String> lastUser = new AtomicReference<>();
-    private final AtomicReference<String> lastServiceToken = new AtomicReference<>();
     private final UserAccount ada = new UserAccount("ada-id");
 
     @BeforeEach
@@ -46,7 +45,6 @@ class HttpClientsTest {
             lastBody.set(requestBody);
             byte[] empty = "null".getBytes(StandardCharsets.UTF_8);
             lastUser.set(exchange.getRequestHeaders().getFirst("X-User-Id"));
-            lastServiceToken.set(exchange.getRequestHeaders().getFirst("X-Service-Token"));
             int status = 200;
             byte[] body = switch (path) {
                 case "/api/v1/supplier/2" -> "{\"id\":2,\"name\":\"NUS Co-op\",\"latitude\":1.2,\"longitude\":103.7,\"status\":\"approved\",\"building\":\"COM2\"}".getBytes(StandardCharsets.UTF_8);
@@ -120,11 +118,12 @@ class HttpClientsTest {
     void callsCredit() {
         UUID orderId = UUID.randomUUID();
         clients.reserve(orderId, "ada-id", 8, ada);
+        assertEquals("/api/v1/credit/internal/reserve", lastPath.get());
         assertEquals("ada-id", lastUser.get());
         assertTrue(lastBody.get().contains(orderId.toString()));
         assertTrue(lastBody.get().contains("requesterId"));
         clients.returnReserved(orderId, ada);
-        assertEquals("/api/v1/credit/release", lastPath.get());
+        assertEquals("/api/v1/credit/internal/release", lastPath.get());
     }
 
     @Test
@@ -142,7 +141,6 @@ class HttpClientsTest {
     @Test
     void callsUserService() {
         assertEquals("ada_tan", clients.telegramHandle("11111111-1111-1111-1111-111111111111"));
-        assertEquals("lookup-token", lastServiceToken.get());
         assertEquals(HttpStatus.NOT_FOUND, assertThrows(ApiException.class, () -> clients.telegramHandle("missing")).getStatus());
         assertEquals(HttpStatus.CONFLICT, assertThrows(ApiException.class, () -> clients.telegramHandle("unverified")).getStatus());
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, assertThrows(ApiException.class, () -> clients.telegramHandle("blank")).getStatus());
@@ -243,7 +241,6 @@ class HttpClientsTest {
         properties.getClients().setRatingBaseUrl(baseUrl);
         properties.getClients().setAdminBaseUrl(baseUrl);
         properties.getClients().setUserBaseUrl(baseUrl);
-        properties.getClients().setUserLookupToken("lookup-token");
         return new HttpClients(properties);
     }
 }

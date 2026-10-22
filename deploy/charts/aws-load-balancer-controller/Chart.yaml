@@ -1,0 +1,13 @@
+apiVersion: v2
+name: aws-load-balancer-controller
+description: >-
+  Wrapper around the official AWS Load Balancer Controller chart (vendored
+  under charts/). Cloud clusters only, namespace kube-system. Used only for
+  TargetGroupBinding: it registers each env's Envoy proxy pods in the NLB
+  target group Terraform created (charts/cluster-config, ADR-0013).
+type: application
+version: 0.1.0
+dependencies:
+  - name: aws-load-balancer-controller
+    version: 3.6.0
+    repository: https://aws.github.io/eks-charts

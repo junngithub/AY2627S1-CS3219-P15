@@ -139,6 +139,11 @@ public class OrderCommandService {
 
     @Transactional
     public OrderEntity accept(UserAccount courier, UUID orderId) {
+        orders.findById(orderId).ifPresent(existing -> {
+            if (existing.getRequesterId().equalsIgnoreCase(courier.userId())) {
+                throw ApiException.conflict("You cannot accept your own order");
+            }
+        });
         double courierRating = ratings.ratingFor(courier.userId(), courier);
         String courierTelegram = users.telegramHandle(courier.userId());
         Instant now = clock.instant();
@@ -152,8 +157,9 @@ public class OrderCommandService {
                 now
         );
         if (updated == 0) {
-            if (!orders.existsById(orderId)) {
-                throw ApiException.notFound(ORDER_NOT_FOUND);
+            OrderEntity existing = orders.findById(orderId).orElseThrow(() -> ApiException.notFound(ORDER_NOT_FOUND));
+            if (existing.getRequesterId().equalsIgnoreCase(courier.userId())) {
+                throw ApiException.conflict("You cannot accept your own order");
             }
             throw ApiException.conflict("This task was already claimed");
         }

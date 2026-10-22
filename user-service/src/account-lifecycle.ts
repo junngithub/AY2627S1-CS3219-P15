@@ -2,7 +2,7 @@ import { Prisma, type User } from "@prisma/client";
 import { prisma } from "./db";
 import { AppError } from "./errors";
 import { lockVerificationUser } from "./verification-events";
-import { lockAdminRoleChanges } from "./admin-role-lock";
+import { lockAdminRoleChanges, otherAvailableAdmins } from "./admin-role-lock";
 
 export function deletionDeadline(requestedAt: Date): Date {
   const deadline = new Date(requestedAt);
@@ -19,9 +19,7 @@ export function deletionIsDue(user: { scheduledDeletionAt: Date | null }, now = 
 }
 
 async function otherActiveAdmins(transaction: Prisma.TransactionClient, userId: string): Promise<number> {
-  return transaction.user.count({ where: {
-    id: { not: userId }, role: "ADMIN", accessStatus: "ACTIVE", scheduledDeletionAt: null,
-  } });
+  return transaction.user.count({ where: otherAvailableAdmins(userId) });
 }
 
 export async function scheduleAccountDeletion(user: User): Promise<Date> {

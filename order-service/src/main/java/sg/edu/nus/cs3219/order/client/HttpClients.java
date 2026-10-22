@@ -24,13 +24,11 @@ public class HttpClients implements CreditClient, SupplierClient, UserClient, Ad
     private static final String NOT_APPROVED = "That location is not an approved supplier";
     private static final String USER_FAILED = "User service could not complete the request";
     private static final String ADMIN_FAILED = "Admin service could not complete the request";
-    private static final String SERVICE_TOKEN = "X-Service-Token";
 
     private final RestClient credits;
     private final RestClient suppliers;
     private final RestClient users;
     private final RestClient admins;
-    private final String userLookupToken;
 
     public HttpClients(OrderProperties properties) {
         Duration timeout = properties.getClients().getTimeout();
@@ -38,14 +36,13 @@ public class HttpClients implements CreditClient, SupplierClient, UserClient, Ad
         this.suppliers = client(properties.getClients().getSupplierBaseUrl(), timeout);
         this.users = client(properties.getClients().getUserBaseUrl(), timeout);
         this.admins = client(properties.getClients().getAdminBaseUrl(), timeout);
-        this.userLookupToken = properties.getClients().getUserLookupToken();
     }
 
     @Override
     public void reserve(UUID orderId, String requesterId, int amount, UserAccount caller) {
         try {
             credits.post()
-                    .uri("/api/v1/credit/reserve")
+                    .uri("/api/v1/credit/internal/reserve")
                     .headers(headers -> identify(headers, caller))
                     .body(new ReserveRequest(orderId, requesterId, amount))
                     .retrieve()
@@ -61,7 +58,7 @@ public class HttpClients implements CreditClient, SupplierClient, UserClient, Ad
     public void returnReserved(UUID orderId, UserAccount caller) {
         try {
             credits.post()
-                    .uri("/api/v1/credit/release")
+                    .uri("/api/v1/credit/internal/release")
                     .headers(headers -> identify(headers, caller))
                     .body(new ReleaseRequest(orderId))
                     .retrieve()
@@ -75,13 +72,9 @@ public class HttpClients implements CreditClient, SupplierClient, UserClient, Ad
 
     @Override
     public String telegramHandle(String userId) {
-        if (userLookupToken == null || userLookupToken.isBlank()) {
-            throw ApiException.unavailable(USER_FAILED);
-        }
         try {
             TelegramResponse response = users.get()
                     .uri("/api/v1/user/internal/users/{userId}/telegram", userId)
-                    .header(SERVICE_TOKEN, userLookupToken)
                     .retrieve()
                     .body(TelegramResponse.class);
             if (response == null || response.telegramHandle() == null || response.telegramHandle().isBlank()) {

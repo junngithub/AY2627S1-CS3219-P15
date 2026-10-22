@@ -185,7 +185,6 @@ public class OrderProperties {
     public static class Clients {
         private Duration timeout = Duration.ofSeconds(2);
         private String userBaseUrl = "http://user-service:8080";
-        private String userLookupToken = "";
         private String creditBaseUrl = "http://credit-service:8080";
         private String supplierBaseUrl = "http://supplier-service:8080";
         private String ratingBaseUrl = "http://rating-service:8080";
@@ -205,14 +204,6 @@ public class OrderProperties {
 
         public void setUserBaseUrl(String userBaseUrl) {
             this.userBaseUrl = userBaseUrl;
-        }
-
-        public String getUserLookupToken() {
-            return userLookupToken;
-        }
-
-        public void setUserLookupToken(String userLookupToken) {
-            this.userLookupToken = userLookupToken;
         }
 
         public String getCreditBaseUrl() {

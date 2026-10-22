@@ -22,6 +22,7 @@ import { errorMessage } from '../lib/api';
 import { refreshCreditBalance } from '../lib/credit';
 import { formatWhen } from '../lib/format';
 import { acknowledgeOrder, cancelOrder, type Order } from '../lib/orders';
+import { expectNewRating } from '../lib/rating';
 import { useLiveOrder } from '../lib/useLiveOrder';
 import { formatDeadline, useCountdown } from '../lib/useCountdown';
 import styles from './OrderDetailPage.module.css';
@@ -85,6 +86,12 @@ function OrderDetail({ order, onChange }: { order: Order; onChange: (order: Orde
     [order.id, onChange],
   );
 
+  async function acknowledge() {
+    await run(acknowledgeOrder);
+    // Acknowledging lets the requester rate the courier (Order F2.6.3).
+    expectNewRating();
+  }
+
   async function confirmCancel() {
     await run(cancelOrder);
     setConfirmingCancel(false);
@@ -97,7 +104,7 @@ function OrderDetail({ order, onChange }: { order: Order; onChange: (order: Orde
       Cancel request
     </Button>
   ) : canAcknowledge ? (
-    <Button fullWidth loading={busy} onClick={() => run(acknowledgeOrder)}>
+    <Button fullWidth loading={busy} onClick={acknowledge}>
       Acknowledge receipt
     </Button>
   ) : null;

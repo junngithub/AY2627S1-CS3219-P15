@@ -7,6 +7,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.multipart.MultipartFile;
 import sg.edu.nus.cs3219.order.client.AdminClient;
@@ -207,14 +208,27 @@ class OrderCommandServiceTest {
     }
 
     @Test
+    void acceptRejectsTheRequester() {
+        when(orders.findById(id)).thenReturn(Optional.of(openOrder()));
+
+        ApiException rejected = assertThrows(ApiException.class, () -> service.accept(requester, id));
+
+        assertEquals(HttpStatus.CONFLICT, rejected.getStatus());
+        assertEquals("You cannot accept your own order", rejected.getMessage());
+        verify(orders, never()).acceptIfOpen(any(), any(), any(), anyDouble(), any(), any());
+        verify(users, never()).telegramHandle(any());
+    }
+
+    @Test
     void acceptReportsAMissingOrderAndAClaimedOrder() {
         when(ratings.ratingFor(any(), any())).thenReturn(5.0);
         when(orders.acceptIfOpen(any(), any(), any(), anyDouble(), any(), any())).thenReturn(0);
-        when(orders.existsById(id)).thenReturn(false);
+        when(orders.findById(id)).thenReturn(Optional.empty());
         assertThrows(ApiException.class, () -> service.accept(courier, id));
 
-        when(orders.existsById(id)).thenReturn(true);
-        assertThrows(ApiException.class, () -> service.accept(courier, id));
+        when(orders.findById(id)).thenReturn(Optional.of(openOrder()));
+        ApiException claimed = assertThrows(ApiException.class, () -> service.accept(courier, id));
+        assertEquals("This task was already claimed", claimed.getMessage());
     }
 
     @Test

@@ -26,7 +26,7 @@ async def start_producer() -> None:
     """
     global _producer
     _producer = AIOKafkaProducer(
-        bootstrap_servers=settings.kafka_bootstrap_servers,
+        **settings.kafka_client_options(),
         value_serializer=lambda v: json.dumps(v).encode("utf-8"),
     )
 
@@ -47,6 +47,14 @@ async def start_producer() -> None:
 async def stop_producer() -> None:
     if _producer:
         await _producer.stop()
+
+
+async def _send(topic: str, event: dict, key: str) -> None:
+    # An empty topic name means "not published in this environment" (see config.py).
+    if not topic:
+        logger.info("Not publishing %s: no topic configured", event.get("eventType"))
+        return
+    await _producer.send_and_wait(topic, value=event, key=key.encode())
 
 
 def _order_event(event_type: str, order_id: str, case_id: str) -> dict:
@@ -75,39 +83,39 @@ def _envelope(event_type: str, version: int, payload: dict) -> dict:
 async def publish_conflict_case_created(order_id: str, case_id: str) -> None:
     # F3.1.1 — sent to Order Service on report submission: "a conflict case now exists for this order".
     event = _envelope("ConflictCaseCreated", 1, {"orderId": order_id, "caseId": case_id})
-    await _producer.send_and_wait(settings.kafka_topic_conflict_case_created, value=event, key=order_id.encode())
+    await _send(settings.kafka_topic_conflict_case_created, event, order_id)
  
  
 async def publish_order_under_review(order_id: str, case_id: str) -> None:
     # Admin claims the case. Order applies this only while the order is ESCALATED.
     event = _order_event("admin.review.started", order_id, case_id)
-    await _producer.send_and_wait(settings.kafka_topic_admin_events, value=event, key=order_id.encode())
+    await _send(settings.kafka_topic_admin_events, event, order_id)
  
  
 async def publish_conflict_resolved(order_id: str, case_id: str) -> None:
     # Admin resolves the case. Order applies this only while the order is ESCALATED or UNDER_REVIEW.
     event = _order_event("admin.case.resolved", order_id, case_id)
-    await _producer.send_and_wait(settings.kafka_topic_admin_events, value=event, key=order_id.encode())
+    await _send(settings.kafka_topic_admin_events, event, order_id)
 
 
 async def publish_user_promoted(user_id: str, admin_id: str) -> None:
     event = _envelope("UserPromoted", 1, {"userId": user_id, "promotedBy": admin_id})
-    await _producer.send_and_wait(settings.kafka_topic_user_promoted, value=event, key=user_id.encode())
+    await _send(settings.kafka_topic_user_promoted, event, user_id)
 
 
 async def publish_user_demoted(user_id: str, admin_id: str) -> None:
     # Lets other services drop any cached admin privileges for this user.
     event = _envelope("UserDemoted", 1, {"userId": user_id, "demotedBy": admin_id})
-    await _producer.send_and_wait(settings.kafka_topic_user_demoted, value=event, key=user_id.encode())
+    await _send(settings.kafka_topic_user_demoted, event, user_id)
 
 
 async def publish_user_suspended(user_id: str, admin_id: str) -> None:
     # F1.2.1 — lets other services (Order, Credit, etc.) block this user's actions.
     event = _envelope("UserSuspended", 1, {"userId": user_id, "suspendedBy": admin_id})
-    await _producer.send_and_wait(settings.kafka_topic_user_suspended, value=event, key=user_id.encode())
+    await _send(settings.kafka_topic_user_suspended, event, user_id)
 
 
 async def publish_user_reinstated(user_id: str, admin_id: str) -> None:
     # F1.3.1 — lets other services restore this user's access.
     event = _envelope("UserReinstated", 1, {"userId": user_id, "reinstatedBy": admin_id})
-    await _producer.send_and_wait(settings.kafka_topic_user_reinstated, value=event, key=user_id.encode())
+    await _send(settings.kafka_topic_user_reinstated, event, user_id)

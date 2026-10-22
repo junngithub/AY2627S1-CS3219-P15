@@ -1,0 +1,4 @@
+linkerd-crds:
+  # Envoy Gateway owns the Gateway API CRDs (charts/envoy-gateway, v1.6.1).
+  # Linkerd must not install or replace them (ADR-0012).
+  installGatewayAPI: false

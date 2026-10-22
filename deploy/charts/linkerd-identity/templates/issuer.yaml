@@ -1,0 +1,31 @@
+# Linkerd's identity issuer: the intermediate CA that signs every proxy's
+# certificate. Linkerd reads Secret linkerd-identity-issuer (scheme
+# kubernetes.io/tls, charts/linkerd) and reloads it when cert-manager renews it.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: linkerd-identity-issuer
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "linkerd-identity.labels" . | nindent 4 }}
+spec:
+  isCA: true
+  commonName: identity.linkerd.cluster.local
+  dnsNames:
+    - identity.linkerd.cluster.local
+  secretName: linkerd-identity-issuer
+  duration: {{ .Values.issuer.duration }}
+  renewBefore: {{ .Values.issuer.renewBefore }}
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  usages:
+    - cert sign
+    - crl sign
+    - server auth
+    - client auth
+  issuerRef:
+    name: linkerd-trust-anchor
+    kind: ClusterIssuer
+    group: cert-manager.io
