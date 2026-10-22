@@ -14,7 +14,7 @@ Owns user registration, verification, authentication, profile status, account li
 - Interactive Swagger/OpenAPI documentation
 - Docker Compose configuration for the service and its own PostgreSQL database
 
-Email and Telegram verification, password recovery/change, and account deletion are implemented. Order can look up Telegram handles through a service-authenticated endpoint. An audited admin verification override is available for non-production load tests. Email delivery supports AWS SES when configured, with a development logger for local work. Local frontend signup, real SES OTP delivery, email/Telegram verification, login and password recovery were manually exercised on 20 October 2026; deployed-environment configuration and integration still need testing. Telegram uses a real verification bot when configured, or a development logger locally without a bot. Account escalation and friendship management remain to be implemented.
+Email and Telegram verification, password recovery/change, account deletion, and admin user search/role/status updates are implemented. Order can look up Telegram handles through a service-authenticated endpoint. An audited admin verification override is available for non-production load tests. Email delivery supports AWS SES when configured, with a development logger for local work. Telegram uses a real verification bot when configured, or a development logger locally without a bot. Account escalation, friendship management, and login-lockout notification emails remain to be implemented. Cross-service integration still needs acceptance testing.
 
 A deployment-only first-admin bootstrap command is available. It promotes an explicitly selected verified account; it is not an HTTP endpoint and never runs automatically.
 
@@ -139,14 +139,6 @@ Local development/test defaults to the development provider for compatibility. S
 
 For deployed containers, the infrastructure owner should supply `EMAIL_PROVIDER`, `SES_FROM_EMAIL`, `AWS_REGION` and the frontend origin via environment configuration, and grant the workload an email-only IAM role (or approved secret mechanism). Do not rely on a developer's login or temporary local credentials for an always-running deployment. No cluster/IAM/SES settings are changed by this code patch.
 
-#### Local acceptance evidence - 20 October 2026
-
-- A single explicitly approved test email was sent from the local User Service container through SES Singapore; the recipient confirmed inbox delivery.
-- The operator then used the real local frontend to sign up with a sandbox-verified NUS recipient, receive/submit the SES email OTP, complete Telegram verification through the real bot and log in.
-- The operator confirmed that the frontend forgot-password/reset flow worked using the real emailed reset link.
-- Telegram polling was temporarily disabled for the isolated email check, then re-enabled for the full onboarding test. Keep exactly one active poller per bot.
-- These are manual local acceptance results, separate from the automated fake-SES tests. They do not prove deployed credentials, the gateway, Kafka-to-Credit allocation or the complete Order workflow. No personal email addresses, bot tokens, passwords or AWS credentials are recorded here.
-
 #### Failure handling and limitations
 
 - The SDK makes at most three attempts per call, with a 3-second connection timeout and a 10-second request timeout per attempt. A network timeout may mean SES accepted a message even though the response was lost, so duplicate emails are possible; codes/links remain subject to existing expiry/single-use checks.
@@ -238,7 +230,7 @@ The API gateway calls `/api/v1/user/internal/authorize` directly for every prote
 - **Identity is in the headers.** The gateway ignores the JSON body and copies `x-user-id`, `x-is-admin` and `x-permitted-action` onto the request it forwards. The JSON is for other callers.
 - **Nothing is cached**, so a suspension applies to the next request.
 
-The `/api/v1/user/internal` prefix is blocked at the public Envoy gateway and the frontend nginx proxy. Internal authorization requires the user's bearer session; it does not use the separate Order lookup service token. `/api/v1/user/authorize` remains a temporary compatibility alias with identical authentication and responses, still blocked externally. Remove the alias and its exact-path blocks only after deployed Envoy, nginx and other direct callers have migrated. The canonical route is documented in Swagger; the legacy alias is not advertised as a separate operation.
+The `/api/v1/user/internal` prefix is blocked at the public Envoy gateway and the frontend nginx proxy. Internal authorization still requires the user's bearer session; removal of the Order lookup secret does not change that. `/api/v1/user/authorize` remains a temporary compatibility alias with identical authentication and responses, still blocked externally. Remove the alias and its exact-path blocks only after deployed Envoy, nginx and other direct callers have migrated. The canonical route is documented in Swagger; the legacy alias is not advertised as a separate operation.
 
 Rollout order: deploy/rebuild the updated User Service first (it supports both routes), then update/reload the Envoy and nginx configurations. An older User image does not serve the new route, so switching callers first would break protected requests. Source/config validation here does not update running containers or the cluster automatically.
 
@@ -327,7 +319,7 @@ After installing Docker Desktop:
 docker compose up --build
 ```
 
-The database is exposed locally on port `5554`; the API is exposed on port `8080`.
+The database is exposed locally on port `5554`; the API is bound to `127.0.0.1:8080` so other computers cannot access its unauthenticated internal lookup through the host port. Compose networking is still private development infrastructure, not an authenticated mesh.
 
 ## Verification commands
 
@@ -336,6 +328,20 @@ npm test
 npm run build
 npx prisma validate
 ```
+
+For isolated database integration checks, start the local development PostgreSQL server on port `5554`, then run:
+
+```powershell
+docker compose start db
+npm.cmd run test:integration:admin-users
+npm.cmd run test:integration:lifecycle
+npm.cmd run test:integration:admin-bootstrap
+npm.cmd run test:integration:email
+```
+
+These four suites create and drop their own disposable databases, not the normal `user_db`. They do not send real messages or change normal accounts. Never point these fixtures at a shared or production database.
+
+Validation on 22 October 2026: 68 unit tests, TypeScript build, all four isolated suites, and the production Docker build passed. Local frontend signup, real SES email/Telegram verification, login and emailed password reset were manually tested on 20 October. These results do not prove live Linkerd enforcement, the real Admin relay, or the complete Kafka/Credit/Order flow.
 
 To test password recovery against the real local service and PostgreSQL, run these from `user-service` with Docker Desktop running:
 
@@ -363,9 +369,8 @@ See [API_CONTRACT_UPDATES.txt](API_CONTRACT_UPDATES.txt) for exact edits to the 
 - Add authenticated `POST /api/v1/user/request-telegram-verification`, no body, response `202 { telegramBotUrl, expiresAt }`; errors include `401`, `429`, and `503`.
 - Keep `POST /api/v1/user/verify-telegram` authenticated with `{ otp }`, response `{ status, nextSteps }`. Keep the existing password recovery and profile password endpoints.
 - Infrastructure and Credit Service owners: run the normal migration Job with the new image, then test that Credit grants 20 credits only after both verification steps. The event format is unchanged; delivery now retries from the database.
-- Frontend owner: the current frontend's signup, email verification, Telegram verification, login and password recovery were exercised locally on 20 October 2026 without frontend source changes. The older `user-service-frontend-integration` proposal should not be merged wholesale over the current pages. The reported logout-control discoverability issue remains for frontend review.
 - Infrastructure owner: rebuild the User image and configure `EMAIL_PROVIDER=ses`, `SES_FROM_EMAIL`, `AWS_REGION=ap-southeast-1` and the deployed `FRONTEND_BASE_URL`. Supply approved workload AWS access with `ses:SendEmail` scoped to the sender identity, not a developer's expiring local credentials. Configure bot secrets and one poller per bot as well. SES is still sandboxed: verify demo recipients in the same account/region. Do not enable development email logging in production.
-- Still outstanding: deployed-environment email configuration/testing, login-lockout notification email, account escalation to Admin, Admin search/role/suspension endpoints and integration, and friendships. The complete frontend/Order/Credit/Admin journey has not been demonstrated by the local onboarding and service-level tests.
+- User-side Admin search/role/status endpoints are now implemented; see the integration section below. Admin must forward real bearer credentials, and the Admin frontend response mapping still needs reconciliation. Still outstanding: deployed-environment verification, login-lockout notification email, account escalation to Admin and friendships. The complete frontend/Order/Credit/Admin journey has not been demonstrated by local onboarding and service-level tests.
 
 ## Account deletion (F5)
 
@@ -417,7 +422,7 @@ Promotion, revocation of the account's existing sessions and outstanding passwor
 
 Audit action: `FIRST_ADMIN_BOOTSTRAPPED`, with target UUID, reason and time. `actorUserId` is null because this is an out-of-band deployment operation, not an authenticated application admin; retain platform access logs to identify the human operator. Success/help exits `0`; rejected setup or database failure exits nonzero, without printing connection credentials. Successful output includes the target UUID and role, not profile or password fields.
 
-After success, the promoted account must **sign in again** using its existing password. `/api/v1/user/internal/authorize` then returns `isAdmin: true` and `permittedAction: true`. This fixes first-admin creation only: Admin Service must still use the agreed authorization URL/fields, and normal User-side role/search/suspension APIs remain separate integration work. There is no new bootstrap API row to add to the shared contract.
+After success, the promoted account must **sign in again** using its existing password. `/api/v1/user/internal/authorize` then returns `isAdmin: true` and `permittedAction: true`. Normal User-side search/role/status endpoints are documented below; Admin must forward the real administrator's bearer token. There is no new bootstrap API row to add to the shared contract.
 
 ### Isolated bootstrap integration test
 
@@ -437,19 +442,61 @@ Copy these rows into the shared API contract; keep the standard `{ error, code }
 | Method | Endpoint | Body / Params | Access and result |
 | --- | --- | --- | --- |
 | DELETE | `/api/v1/user/me` | `{ confirm: true }` | Account owner's bearer session; returns `202 { message, scheduledDeletionAt }`, revokes sessions, allows cancellation by login before the six-month deadline. Last active admin: `409 LAST_ADMIN`. |
-| GET | `/api/v1/user/internal/users/{userId}/telegram` | UUID path parameter | Dedicated `X-Service-Token`; returns `{ userId, telegramHandle }` for an active, verified, non-expired account. Private service DNS only; blocked at the gateway. |
+| GET | `/api/v1/user/internal/users/{userId}/telegram` | UUID path parameter; no body | Caller access enforced by Linkerd's Order-only policy, with no application shared token. Returns `{ userId, telegramHandle }` for an active, verified, non-expired account. Private service DNS only; blocked at the gateway. |
 | POST | `/api/v1/user/admin/users/{userId}/verify` | UUID path parameter; `{ reason }` (3–500 characters) | Verified admin bearer session, non-production feature flag; returns `{ userId, status, nextSteps, changed }`. |
 
 ### Order Service integration
 
 ```http
 GET http://user:8080/api/v1/user/internal/users/<uuid>/telegram
-X-Service-Token: <dedicated-shared-secret>
 ```
 
-The infrastructure owner must configure the same dedicated `ORDER_USER_LOOKUP_TOKEN` in User Service and securely supply it to Order. Order sends that value in `X-Service-Token`; it must never be sent to or stored in the frontend. An empty or incorrect token returns `404`; invalid UUIDs return `400`, missing/suspended/expired accounts `404`, and unverified accounts `409`. Only user ID and handle are returned, with `Cache-Control: no-store`.
+No `X-Service-Token` is required. Caller authentication is delegated to Linkerd mTLS **and its Order-only route authorization policy**, not a shared application secret. There is no token/mesh mode switch. Ordinary login, gateway authorization and Admin operations still require their existing bearer sessions.
 
-Order remains responsible for authenticating the requester/courier and enforcing order participation. Derive the acting UUID from the gateway's trusted `x-user-id`, rather than trusting a UUID supplied by the frontend. The service token authorizes the Order backend to perform lookups; it does not prove which user is acting.
+Before deploying this version, the infrastructure owner must verify sidecar injection, the Order service-account identity, the Order-only `/api/v1/user/internal/users` route policy, denied access for gateway/unmeshed/unlisted callers, and no public or unprotected port bypass. The current User mesh values declare this policy, but source configuration is not proof of live enforcement. mTLS encryption alone is insufficient.
+
+Order's owner can remove the outgoing header and its token configuration. Infrastructure must remove the unused lookup-secret references from User/Order deployment values and environment secret wiring before deleting any shared secret resource. This User-only change does not edit those files or delete secrets. Leftover headers/settings are ignored by User, so the clients can migrate separately. The old `ORDER_USER_LOOKUP_TOKEN` and `ORDER_USER_LOOKUP_AUTH` settings are no longer read; stale entries in an existing ignored `.env` are harmless and can be removed locally.
+
+For isolated local Postman testing, call `http://localhost:8080/api/v1/user/internal/users/<uuid>/telegram` without a token. Without Linkerd, **any caller that can reach this route can perform lookups**. Keep Compose on a trusted development machine/network, do not expose it through a tunnel or public port, and do not use a raw host server bound to all interfaces. A loopback host binding does not authenticate other local processes or containers on the Compose network.
+
+Invalid UUIDs return `400`, missing/suspended/expired accounts `404`, and unverified accounts `409`. Only user ID and handle are returned, with `Cache-Control: no-store`. Order remains responsible for authenticating the requester/courier and enforcing order participation. Derive the acting UUID from the gateway's trusted `x-user-id`, rather than trusting a UUID supplied by the frontend.
+
+### Admin Service: persistent user management
+
+These match the relay routes requested by Admin Service. No schema migration is needed. Every call requires `Authorization: Bearer <real-admin-session>`; Admin must forward this header from its inbound request. Being inside the cluster or sending `x-is-admin:true` is not enough. Missing/invalid/non-admin/locked/unverified/deletion-pending callers receive `404`. User rechecks the actor and session inside each mutation transaction.
+
+| Method | Route | Body / params | Result |
+| --- | --- | --- | --- |
+| GET | `/api/v1/user/search` | `?q=&page=`; bearer header | `{ items: [{ id, name, email, role, status }], page, total }` |
+| POST | `/api/v1/user/{userId}/role` | `{ role: "admin" }` or `{ role: "user" }`; bearer header | `200 { userId, role, status, changed }` |
+| POST | `/api/v1/user/{userId}/status` | `{ status: "suspended" }` or `{ status: "verified" }`; bearer header | `200 { userId, role, status, changed }` |
+
+- Roles in these responses are lowercase `admin/user`; status is `Created/Verified/Suspended`. Search defaults to page 1 and 20 records, accepts pages 1-100000, and bounds `q` to 100 characters. Matches name/email case-insensitively or exact UUID; ordering is stable and already-expired deletion records are excluded. Passwords, tokens, Telegram identifiers and verification timestamps are never returned. Results use `Cache-Control: no-store`.
+- Promotion requires both verifications and an active, unlocked target without pending deletion. No public first-admin shortcut is introduced. The first admin still uses the privileged bootstrap command.
+- Demotion/suspension cannot remove the last available admin. Self-demotion is rejected. Counts exclude suspended, locked, unverified and deletion-pending admins; the advisory lock is shared with bootstrap and account deletion. Concurrent attempts serialize and recheck the actor's current eligibility.
+- Actual role/status changes increment `authVersion`, revoke target sessions/reset links and append a minimal User audit record in one transaction. Suspension also revokes OTP/Telegram challenges. Repeated unchanged commands return `changed:false` without another User audit or forced logout. After promotion/demotion/reinstatement the target must log in again; old sessions do not become valid again.
+- `status:"verified"` is the agreed **reinstate command**, not permission to manufacture verification. It clears suspension while preserving verification timestamps and login lockout. A previously unverified user returns `Created` and must finish normal verification. Reinstatement does not issue a second credit grant or create a verification event. Pending-deletion targets are rejected with `409 USER_PENDING_DELETION`.
+- Errors use `{ error, code }`: `400 INVALID_USER_ID/INVALID_ROLE/INVALID_STATUS/INVALID_PAGE/INVALID_QUERY/SELF_DEMOTION_FORBIDDEN`; `404 NOT_FOUND/USER_NOT_FOUND`; `409 LAST_ADMIN/USER_NOT_ELIGIBLE/USER_PENDING_DELETION`.
+- These three are admin-authorized routes with the agreed existing paths, not token-free service-only routes. A later migration under `/internal` needs coordinated Admin client/gateway/mesh changes; it is not silently performed here. The internal Telegram route remains private.
+
+Admin's own audit/events occur after User returns 200. User's transactional audit is not a distributed transaction or a replacement for Admin's audit/outbox.
+
+Required client integration (not applied to other services here):
+
+- In `admin-service/app/routers/users.py`, forward the inbound administrator's `Authorization` header on every outbound User search/role/status request, and the test-verification override if used. Handle downstream non-200 responses explicitly rather than turning them into a generic 500. Set `USER_SERVICE_BASE_URL` to the real User service only after this is wired.
+- Linkerd identifies the calling workload; the bearer session identifies the administrator. Removing the Order lookup secret does not remove these admin-session checks.
+- In `frontend/src/lib/adminUsers.ts`, read `result.items` instead of an array/`content`; map `userId = item.id`, `isAdmin = item.role === "admin"`, and `hasMore = result.page * 20 < result.total`. Keep frontend-to-Admin routes unchanged.
+
+For example, the Admin client must include `headers={"Authorization": request.headers.get("authorization", "")}` in its outgoing `httpx` calls. Never log this header.
+
+Isolated local test (PostgreSQL on port 5554, no real messages/accounts):
+
+```powershell
+npm.cmd run build
+npm.cmd run test:integration:admin-users
+```
+
+The test creates/drops only its own `user_admin_routes_it_<random>` database. It exercises real HTTP authorization, search, persistent promote/demote/suspend/reinstate, credential revocation, rollback on audit failure, concurrency and the token-free lookup contract. It is **not** proof of live Linkerd enforcement or real Admin-to-User integration.
 
 ### Admin Service / load tests
 
@@ -458,7 +505,7 @@ POST /api/v1/user/admin/users/<uuid>/verify
 Authorization: Bearer <actual-admin-session-token>
 Content-Type: application/json
 
-{"reason":"D3 load-test setup"}
+{"reason":"Synthetic load-test setup"}
 ```
 
 This sets missing email/Telegram verification timestamps on synthetic non-production users. It does not grant admin roles, change Telegram identity IDs, unlock accounts, or reinstate suspended users. Suspended accounts and accounts pending deletion are rejected. The first actual change is audited with the admin UUID, target UUID, reason and time. Repeating the request is idempotent; `UserVerified` is queued once through the existing outbox.
@@ -467,13 +514,13 @@ It defaults to `404` unless `ENABLE_TEST_VERIFICATION=true` and `APP_ENV` is exp
 
 Admin Service must forward its administrator's real `Authorization` header when calling this endpoint. Fake `admin-*` tokens and caller-supplied identity headers do not authenticate an admin. Use the deployment-only first-admin bootstrap command above to establish the first real admin; this test-verification endpoint does not grant roles. No public first-admin shortcut is introduced. The optional inverse operation is deliberately not added because reversing verification/credits needs a separate agreed workflow.
 
-### Infrastructure and Admin Service integration review
+### Deployment acceptance checklist
 
 - User Service uses opaque bearer session tokens, not JWTs. The gateway sends `Authorization` directly to `/api/v1/user/internal/authorize` (`POST` or the original request method is accepted). It then injects `x-user-id`, `x-is-admin`, and `x-permitted-action` from that response after stripping client-supplied copies early. The gateway and frontend nginx configurations now call this canonical path; existing deployed callers can temporarily use the legacy alias.
 - Gateway authentication proves identity; each service must still check permission. `x-permitted-action=false` is a valid authenticated `Created` account and must not be allowed to create/accept orders. Services must not be publicly reachable through a route that bypasses this trusted gateway boundary.
-- In the previously fetched Admin branch, `core/security.py` calls `/api/v1/user/me/authorize` and expects `role`/`email`. Its owner must migrate it to `/api/v1/user/internal/authorize` over private service DNS and check `authenticated`, `isAdmin`, and `permittedAction`; only `userId` is guaranteed as identity. That branch is not modified here. Its role/status/search relays also need an agreed User Service contract and forwarded credentials; they are not implemented by these two new endpoints.
-- Rebuild the User image and run the migration Job. Configure the dedicated Order lookup secret. For load tests only, explicitly set the non-production `APP_ENV` and enable the override. Keep the production override disabled. Apply the gateway chart update to block `/api/v1/user/internal` externally.
-- The local machine currently has no selected Kubernetes context. The gateway configuration was reviewed and chart checks run locally; no live Envoy cluster or full service-to-service flow was tested here. Run `helm test` and an authenticated end-to-end order test in the team's cluster before treating integration as complete.
+- Verify the exact-route Linkerd allow/deny checks above before deploying the token-free lookup. Rebuild the User image and apply existing migrations through the migration Job; this token removal needs no new migration. Coordinate unused Order header/configuration and deployment-secret cleanup with their owners. For load tests only, set the non-production `APP_ENV` and enable the override. Keep the production override disabled.
+- Verify public access to `/api/v1/user/internal` is blocked. Test the real Admin relay with ordinary-user denial and admin success, then test sign-in, both verification steps, Kafka/Credit's one-time starting grant, and Order create/accept/contact with two consenting accounts. Contact links open Telegram; the app does not host or store chat messages. Verify unrelated users cannot access another order's contact details.
+- Run cluster policy tests and authenticated end-to-end checks before treating deployment as complete. Local application tests do not prove live gateway or Linkerd enforcement.
 
 ### Isolated lifecycle integration test
 
@@ -485,4 +532,4 @@ npm.cmd run build
 npm.cmd run test:integration:lifecycle
 ```
 
-The script creates a uniquely named temporary database, applies all migrations, starts a test API, and exercises deletion, restoration, cleanup, last-admin concurrency, service-token access, non-admin denial and audited test verification. It then drops only its own temporary database. It neither changes the normal `user_db` records nor sends email/Telegram messages, and does not change your `.env`.
+The script creates a uniquely named temporary database, applies all migrations, starts a test API, and exercises deletion, restoration, cleanup, last-admin concurrency, token-free lookup eligibility, non-admin denial and audited test verification. It then drops only its own temporary database. It neither changes the normal `user_db` records nor sends email/Telegram messages, and does not change your `.env`.
