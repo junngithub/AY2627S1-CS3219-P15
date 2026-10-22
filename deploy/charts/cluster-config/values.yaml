@@ -1,0 +1,25 @@
+# Set per cluster in values/clusters/<cluster>/cluster-config.yaml, mostly
+# from `terraform output` in infra/<cluster>/aws.
+region: ""
+
+# Kafka's broker volumes (charts/foc-kafka leaves the class empty = default).
+storageClass:
+  name: gp3
+  default: true
+
+# Namespace Envoy Gateway runs the proxies in (charts/envoy-gateway).
+envoyNamespace: envoy-gateway-system
+
+# RDS CA bundle (files/), copied into each env namespace as ConfigMap
+# <rdsCa.configMap>; foc-service mounts it (databaseCa) so node-postgres can
+# verify RDS's certificate.
+rdsCa:
+  configMap: rds-ca
+  file: files/rds-ca-ap-southeast-1.pem
+
+# One entry per env in this cluster:
+#   - name: dev
+#     namespace: foc-dev
+#     secretsRoleArn: ""  # optional role to assume; "" = the node role
+#     gatewayTargetGroupArn: <terraform output envs.dev.gateway_target_group>
+envs: []

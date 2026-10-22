@@ -1,0 +1,12 @@
+apiVersion: v2
+name: cert-manager
+description: >-
+  Wrapper around the official cert-manager chart (vendored under charts/). One
+  per cluster, namespace cert-manager. Issues Linkerd's trust anchor and
+  identity issuer certificates (ADR-0012, charts/linkerd-identity).
+type: application
+version: 0.1.0
+dependencies:
+  - name: cert-manager
+    version: v1.21.2
+    repository: oci://quay.io/jetstack/charts

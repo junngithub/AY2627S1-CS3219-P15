@@ -45,7 +45,7 @@ public class HttpClients implements CreditClient, SupplierClient, UserClient, Ad
     public void reserve(UUID orderId, String requesterId, int amount, UserAccount caller) {
         try {
             credits.post()
-                    .uri("/api/v1/credit/reserve")
+                    .uri("/api/v1/credit/internal/reserve")
                     .headers(headers -> identify(headers, caller))
                     .body(new ReserveRequest(orderId, requesterId, amount))
                     .retrieve()
@@ -61,7 +61,7 @@ public class HttpClients implements CreditClient, SupplierClient, UserClient, Ad
     public void returnReserved(UUID orderId, UserAccount caller) {
         try {
             credits.post()
-                    .uri("/api/v1/credit/release")
+                    .uri("/api/v1/credit/internal/release")
                     .headers(headers -> identify(headers, caller))
                     .body(new ReleaseRequest(orderId))
                     .retrieve()

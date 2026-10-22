@@ -5,3 +5,5 @@ env:
   # Floci's Postgres proxy uses a self-signed certificate (see DB_SSL in
   # common.yaml); JDBC takes the same opt-out as sslmode.
   PGSSLMODE: disable
+generatedSecrets:
+  order-user-lookup: [ORDER_USER_LOOKUP_TOKEN]

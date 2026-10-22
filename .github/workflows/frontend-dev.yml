@@ -1,0 +1,50 @@
+# Build the frontend and publish it to dev's S3 bucket behind CloudFront
+# (infra/nonprod/aws/frontend.tf). The build has no per-env settings: the app
+# calls /api/v1/... on its own origin, which CloudFront sends to the gateway.
+name: frontend-dev
+
+# Manual only for now: the NUS AWS account denies GitHub OIDC, so the AWS
+# login step fails. Publish from a laptop (infra/docs/cloud-dev.md, step 8).
+# In an account without that limit, restore:
+#   push: { branches: [main], paths: [frontend/**, .github/workflows/frontend-dev.yml] }
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # OIDC → AWS role foc-ci
+
+concurrency:
+  group: frontend-dev
+  cancel-in-progress: true # only the newest build matters
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - run: cat ../.github/cloud/dev.env | grep -v '^#' >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22 # same as frontend/Dockerfile
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Upload
+        run: |
+          # Hashed bundles never change: cache for a year. Old ones stay, so a
+          # page loaded just before this deploy can still fetch its bundles.
+          aws s3 sync dist/assets "s3://$FRONTEND_BUCKET/assets" --cache-control "public,max-age=31536000,immutable"
+          aws s3 sync dist "s3://$FRONTEND_BUCKET" --exclude "assets/*" --exclude index.html --cache-control "public,max-age=300"
+          # Last, so it only ever points at bundles that are already uploaded.
+          aws s3 cp dist/index.html "s3://$FRONTEND_BUCKET/index.html" --cache-control no-cache
+      - name: Invalidate
+        run: aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_ID" --paths "/*"

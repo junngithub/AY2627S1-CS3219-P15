@@ -6,6 +6,8 @@ import { buildApp } from '../src/app.js';
 import { creditLog, creditOrder, creditUser, db, seedOrder, seedUser } from './helpers.js';
 
 const BASE = '/api/v1/credit';
+// Order's calls: under /internal, which the gateway blocks (ADR-0012).
+const INTERNAL = `${BASE}/internal`;
 
 let app: FastifyInstance;
 
@@ -55,14 +57,14 @@ describe('GET /me/balance', () => {
   });
 });
 
-describe('POST /reserve', () => {
+describe('POST /internal/reserve', () => {
   it('reserves credits, deducts balance, and writes a RESERVATION log', async () => {
     const requesterId = await seedUser(20);
     const orderId = randomUUID();
 
     const res = await app.inject({
       method: 'POST',
-      url: `${BASE}/reserve`,
+      url: `${INTERNAL}/reserve`,
       payload: { orderId, requesterId, amount: 5 },
     });
 
@@ -85,7 +87,7 @@ describe('POST /reserve', () => {
 
     const res = await app.inject({
       method: 'POST',
-      url: `${BASE}/reserve`,
+      url: `${INTERNAL}/reserve`,
       payload: { orderId: randomUUID(), requesterId, amount: 5 },
     });
 
@@ -101,7 +103,7 @@ describe('POST /reserve', () => {
   it('404 CREDIT_USER_NOT_FOUND for an unknown requester', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: `${BASE}/reserve`,
+      url: `${INTERNAL}/reserve`,
       payload: { orderId: randomUUID(), requesterId: randomUUID(), amount: 5 },
     });
     expect(res.statusCode).toBe(404);
@@ -112,7 +114,7 @@ describe('POST /reserve', () => {
     const requesterId = await seedUser(20);
     const res = await app.inject({
       method: 'POST',
-      url: `${BASE}/reserve`,
+      url: `${INTERNAL}/reserve`,
       payload: { orderId: randomUUID(), requesterId, amount: 0 },
     });
     expect(res.statusCode).toBe(400);
@@ -123,7 +125,7 @@ describe('POST /reserve', () => {
     const requesterId = await seedUser(20);
     const res = await app.inject({
       method: 'POST',
-      url: `${BASE}/reserve`,
+      url: `${INTERNAL}/reserve`,
       payload: { orderId: randomUUID(), requesterId, amount: -5 },
     });
     expect(res.statusCode).toBe(400);
@@ -136,14 +138,14 @@ describe('POST /reserve', () => {
 
     const first = await app.inject({
       method: 'POST',
-      url: `${BASE}/reserve`,
+      url: `${INTERNAL}/reserve`,
       payload: { orderId, requesterId, amount: 5 },
     });
     expect(first.statusCode).toBe(201);
 
     const dup = await app.inject({
       method: 'POST',
-      url: `${BASE}/reserve`,
+      url: `${INTERNAL}/reserve`,
       payload: { orderId, requesterId, amount: 5 },
     });
     expect(dup.statusCode).toBe(409);
@@ -157,7 +159,7 @@ describe('POST /reserve', () => {
     const requesterId = await seedUser(20);
     const res = await app.inject({
       method: 'POST',
-      url: `${BASE}/reserve`,
+      url: `${INTERNAL}/reserve`,
       payload: { orderId: 'not-a-uuid', requesterId, amount: 5 },
     });
     expect(res.statusCode).toBe(400);
@@ -168,7 +170,7 @@ describe('POST /reserve', () => {
     const requesterId = await seedUser(20);
     const res = await app.inject({
       method: 'POST',
-      url: `${BASE}/reserve`,
+      url: `${INTERNAL}/reserve`,
       payload: { orderId: randomUUID(), requesterId },
     });
     expect(res.statusCode).toBe(400);
@@ -179,7 +181,7 @@ describe('POST /reserve', () => {
     const requesterId = await seedUser(20);
     const res = await app.inject({
       method: 'POST',
-      url: `${BASE}/reserve`,
+      url: `${INTERNAL}/reserve`,
       payload: { orderId: randomUUID(), requesterId, amount: 1.5 },
     });
     expect(res.statusCode).toBe(400);
@@ -187,14 +189,14 @@ describe('POST /reserve', () => {
   });
 });
 
-describe('POST /release', () => {
+describe('POST /internal/release', () => {
   it('refunds the requester, removes the order, and writes a RETURN log', async () => {
     const requesterId = await seedUser(15);
     const orderId = await seedOrder(requesterId, 5);
 
     const res = await app.inject({
       method: 'POST',
-      url: `${BASE}/release`,
+      url: `${INTERNAL}/release`,
       payload: { orderId },
     });
 
@@ -213,7 +215,7 @@ describe('POST /release', () => {
   it('404 CREDIT_ORDER_NOT_FOUND for an unknown order', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: `${BASE}/release`,
+      url: `${INTERNAL}/release`,
       payload: { orderId: randomUUID() },
     });
     expect(res.statusCode).toBe(404);
@@ -224,13 +226,20 @@ describe('POST /release', () => {
     const requesterId = await seedUser(15);
     const orderId = await seedOrder(requesterId, 5);
 
-    const first = await app.inject({ method: 'POST', url: `${BASE}/release`, payload: { orderId } });
+    const first = await app.inject({ method: 'POST', url: `${INTERNAL}/release`, payload: { orderId } });
     expect(first.statusCode).toBe(200);
 
-    const second = await app.inject({ method: 'POST', url: `${BASE}/release`, payload: { orderId } });
+    const second = await app.inject({ method: 'POST', url: `${INTERNAL}/release`, payload: { orderId } });
     expect(second.statusCode).toBe(404);
 
     const [user] = await db.select().from(creditUser).where(eq(creditUser.userId, requesterId));
     expect(user?.balance).toBe(20); // refunded once
+  });
+});
+
+describe('old paths before the /internal prefix', () => {
+  it.each(['/reserve', '/release'])('POST %s is gone (404)', async (path) => {
+    const res = await app.inject({ method: 'POST', url: `${BASE}${path}`, payload: {} });
+    expect(res.statusCode).toBe(404);
   });
 });

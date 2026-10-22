@@ -2,10 +2,33 @@
 name: admin
 image:
   name: foc/admin-service
-port: 3000 # placeholder until admin-service exists
+port: 8084 # admin-service/Dockerfile
 healthPath: /health
+database:
+  enabled: true # DATABASE_URL from Secret admin-db (charts/foc-database, ADR-0010)
+migrate:
+  enabled: true # Alembic, before each deploy (ADR-0011); the Dockerfile's `migrate` stage
 kafka:
-  user: admin # reads foc.admin.commands, writes foc.admin.events (ADR-0004)
+  user: admin # writes foc.admin.events (ADR-0004)
 env:
   # Peers this service calls over HTTP (short names resolve within the env's namespace).
-  USER_SERVICE_URL: http://user:8080 # list / promote / suspend / reinstate users
+  USER_SERVICE_BASE_URL: http://user:8080 # list / promote / suspend / reinstate users
+  ORDER_SERVICE_BASE_URL: http://order:8083
+  # Kafka: only foc.admin.events is in the event catalog (charts/foc-kafka) and
+  # the ACLs. An empty topic skips that publish; nothing consumes them yet.
+  KAFKA_TOPIC_CONFLICT_CASE_CREATED: ""
+  KAFKA_TOPIC_USER_PROMOTED: ""
+  KAFKA_TOPIC_USER_DEMOTED: ""
+  KAFKA_TOPIC_USER_SUSPENDED: ""
+  KAFKA_TOPIC_USER_REINSTATED: ""
+  # Its debug listener reads its own topics, which the ACLs don't allow.
+  KAFKA_CONSUMER_ENABLED: "false"
+secretEnv:
+  # Gemini key. Optional: without it every conflict case ends as ai_failed and
+  # waits for an admin. Locally: kubectl -n foc create secret generic admin-ai
+  # --from-literal=AI_PROVIDER_API_KEY=<key>, then restart admin. Cloud:
+  # Secrets Manager foc/<env>/admin-ai (a placeholder until a key exists).
+  AI_PROVIDER_API_KEY: { secret: admin-ai, key: AI_PROVIDER_API_KEY, optional: true }
+mesh: # who may call admin (ADR-0012)
+  # order opens an escalation: POST /api/v1/admin/conflicts.
+  callers: [gateway, order]

@@ -18,7 +18,7 @@ env:
   CREDIT_SERVICE_URL: http://credit:3000 # reserve / release credits
   SUPPLIER_SERVICE_URL: http://supplier:8081 # validate pickup/dropoff locations
   RATING_SERVICE_URL: http://rating:3000 # requester / courier rating
-  ADMIN_SERVICE_URL: http://admin:3000 # open an escalation
+  ADMIN_SERVICE_URL: http://admin:8084 # open an escalation
   USER_SERVICE_URL: http://user:8080 # profile (email, Telegram)
 secretEnv:
   # JDBC can't use DATABASE_URL (postgresql://), so application-k8s.yml builds
@@ -28,6 +28,8 @@ secretEnv:
   PGDATABASE: { secret: order-db, key: PGDATABASE }
   PGUSER: { secret: order-db, key: PGUSER }
   PGPASSWORD: { secret: order-db, key: PGPASSWORD }
+  ORDER_USER_LOOKUP_TOKEN:
+    { secret: order-user-lookup, key: ORDER_USER_LOOKUP_TOKEN }
 resources: # a JVM needs more than the chart default
   requests:
     cpu: 100m

@@ -1,0 +1,6 @@
+dependencies:
+- name: linkerd-crds
+  repository: https://helm.linkerd.io/edge
+  version: 2026.10.1
+digest: sha256:1183a06ce1e9fa2d6647e4a7857cdc0a95b16826f9212bddcab2eedee9ff3735
+generated: "2026-10-18T18:44:38.280351+08:00"

@@ -24,14 +24,17 @@ describe('OpenAPI docs', () => {
     expect(Object.keys(spec.paths)).toEqual(
       expect.arrayContaining([
         '/api/v1/credit/me/balance',
-        '/api/v1/credit/reserve',
-        '/api/v1/credit/release',
+        '/api/v1/credit/internal/reserve',
+        '/api/v1/credit/internal/release',
         '/health',
       ]),
     );
+    // The old paths before the /internal prefix are gone.
+    expect(spec.paths).not.toHaveProperty(['/api/v1/credit/reserve']);
+    expect(spec.paths).not.toHaveProperty(['/api/v1/credit/release']);
     // The reserve body schema is carried through from the TypeBox schema.
     expect(
-      spec.paths['/api/v1/credit/reserve'].post.requestBody.content['application/json'].schema
+      spec.paths['/api/v1/credit/internal/reserve'].post.requestBody.content['application/json'].schema
         .properties,
     ).toHaveProperty('amount');
   });

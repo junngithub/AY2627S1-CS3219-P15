@@ -1,6 +1,9 @@
 # ADR-0010: One Postgres instance per cluster, one database per service
 
-- **Status:** Accepted. Local implemented and tested on 2026-10-01; cloud not built.
+- **Status:** Accepted. Local implemented and tested on 2026-10-01. Cloud
+  written 2026-10-21 (`infra/nonprod/aws/rds.tf`, `secrets.tf`, External
+  Secrets; shape in [ADR-0013](0013-cloudfront-vpc-origin-and-external-secrets.md));
+  not yet applied.
 - **Date:** 2026-10-01
 
 ## Context
