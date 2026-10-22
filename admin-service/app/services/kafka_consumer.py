@@ -17,7 +17,7 @@ _RETRY_DELAY_SECONDS = 3
 
 
 def _topics() -> list[str]:
-    # No subscription yet. Do not read topics this service publishes.
+    # Nothing to read yet. Do not subscribe to topics this service publishes.
     return []
 
 
@@ -53,13 +53,13 @@ async def start_consumer() -> None:
     global _consumer, _task
     _ensure_logging()
     topics = _topics()
-    if not topics:
-        logger.info("Kafka listener has no topics; not subscribing")
+    if not settings.kafka_consumer_enabled or not topics:
+        logger.info("Kafka listener disabled")
         return
 
     _consumer = AIOKafkaConsumer(
         *topics,
-        bootstrap_servers=settings.kafka_bootstrap_servers,
+        **settings.kafka_client_options(),
         group_id="admin-service-listener",
         value_deserializer=lambda raw: json.loads(raw.decode("utf-8")),
         auto_offset_reset="latest",
