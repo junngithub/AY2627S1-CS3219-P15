@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { deletionDeadline, deletionIsDue } from "./account-lifecycle";
-import { isUuid, serviceTokenMatches, testVerificationAllowed } from "./integration-access";
+import { isUuid, testVerificationAllowed } from "./integration-access";
 
 describe("account deletion dates", () => {
   it("adds six calendar months, clamps month ends and preserves UTC time", () => {
@@ -18,12 +18,6 @@ describe("account deletion dates", () => {
 });
 
 describe("integration access boundaries", () => {
-  it("requires a configured matching service token", () => {
-    assert.equal(serviceTokenMatches(undefined, "secret"), false);
-    assert.equal(serviceTokenMatches("", ""), false);
-    assert.equal(serviceTokenMatches("wrong", "secret"), false);
-    assert.equal(serviceTokenMatches("secret", "secret"), true);
-  });
   it("requires an explicit flag and a known non-production environment", () => {
     for (const environment of ["production", "prod", "unknown", ""]) {
       assert.equal(testVerificationAllowed("true", environment), false);

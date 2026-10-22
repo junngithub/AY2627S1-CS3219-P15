@@ -6,7 +6,7 @@ import { config } from "../config";
 import { prisma } from "../db";
 import { AppError } from "../errors";
 import { asyncHandler } from "../http";
-import { isUuid, serviceTokenMatches } from "../integration-access";
+import { isUuid } from "../integration-access";
 import { hashSessionToken } from "../security";
 import { accountNextSteps, accountStatus } from "../status";
 import { enqueueUserVerified, lockVerificationUser } from "../verification-events";
@@ -17,7 +17,8 @@ export function createUserIntegrationRouter(): Router {
   const router = Router();
 
   router.get("/internal/users/:userId/telegram", asyncHandler(async (request, response) => {
-    if (!serviceTokenMatches(request.header("x-service-token"), config.orderUserLookupToken)) throw hidden();
+    // Caller authentication is enforced by the Order-only Linkerd route policy.
+    // Never expose this route through the public gateway or an unprotected port.
     const userId = request.params.userId;
     if (!isUuid(userId)) throw new AppError(400, "INVALID_USER_ID", "A valid user UUID is required");
     const user = await prisma.user.findUnique({ where: { id: userId } });

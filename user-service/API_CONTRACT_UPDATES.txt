@@ -9,7 +9,7 @@ endpoint is changed by these edits. Swagger at /api-docs documents the API.
 ------------------------------------------------------------
 Replace the existing Auth line with:
 
-Auth: every endpoint (except explicitly marked public or service-token-only)
+Auth: every endpoint (except explicitly marked public or service-authenticated)
 requires Authorization: Bearer <token>, validated via User Service
 POST /api/v1/user/internal/authorize over private service DNS.
 
@@ -19,9 +19,10 @@ User Service auth exceptions: POST /api/v1/user/signup, /verify-email,
 /resend-verification, /login, /forgot-password, and /reset-password are public
 (all suffixes above are relative to /api/v1/user). Telegram verification and
 profile operations require the user's bearer session. User Service issues
-opaque session tokens, not JWTs. The internal Telegram lookup instead requires
-the dedicated X-Service-Token described in its row; it is blocked at the public
-gateway. The load-test verification override requires a verified admin bearer
+opaque session tokens, not JWTs. The internal Telegram lookup instead relies on
+Linkerd mTLS and an enforced Order-only route policy, with no application shared
+token; it is blocked at the public gateway. No token/mesh mode setting is needed.
+The load-test verification override requires a verified admin bearer
 session and the non-production feature flag described below.
 
 2. IN "1. User Service", REPLACE SIGNUP'S PURPOSE
@@ -100,7 +101,7 @@ New callers must use /api/v1/user/internal/authorize. The Envoy and frontend
 nginx configurations in this checkout are updated to the new path; other
 branches and deployed configurations must migrate before removing the alias.
 The internal prefix is blocked at both public proxies. This authorization
-endpoint requires a user bearer session, not the Order lookup service token.
+endpoint still requires a user bearer session after the Order lookup secret is removed.
 Roll out the updated User image FIRST, then update/reload Envoy and nginx.
 Switching callers while the old User image is running would break authorization.
 
@@ -124,16 +125,17 @@ cross-service deletion event is introduced by this endpoint.
 ------------------------------------------------------------
 Method: GET
 Endpoint: /api/v1/user/internal/users/{userId}/telegram
-Body / Params: userId is a UUID path parameter. X-Service-Token:
-<dedicated-shared-secret>. No body.
+Body / Params: userId (path); no body
 Purpose: Internal Order-to-User contact lookup. Returns
 200 { userId, telegramHandle } for a verified, non-suspended account that has
 not passed its deletion deadline. Handle has no leading @. Response is
-Cache-Control: no-store. Invalid UUID: 400 INVALID_USER_ID. Missing or incorrect
-service token: 404 NOT_FOUND. Missing/suspended/expired account:
-404 USER_NOT_FOUND. Unverified account: 409 USER_NOT_VERIFIED. User bearer
-tokens or identity headers alone do not authorize this lookup. The dedicated
-secret must never reach the frontend. Order authenticates its own caller,
+Cache-Control: no-store. Invalid UUID: 400 INVALID_USER_ID.
+Missing/suspended/expired account: 404 USER_NOT_FOUND.
+Unverified account: 409 USER_NOT_VERIFIED. No X-Service-Token or user bearer
+header is required by the application for this route. Deployed caller access
+MUST be enforced by Linkerd's Order-only policy, not caller-supplied identity
+headers. Without the mesh, any reachable local caller can perform lookups:
+isolated development only, never public exposure. Order authenticates its caller,
 derives the acting UUID from trusted identity, and enforces order participation.
 
 Method: POST
@@ -160,8 +162,8 @@ provided. Admin Service must forward its real administrator's bearer token.
 The table includes planned requirements. /me/escalate and all /friends routes
 are not implemented yet. SES email delivery passed manual local frontend tests;
 deployed-environment setup/testing remains. Login-lockout email is still missing. Admin
-search/role/suspension integration also needs an agreed User Service contract;
-the test-verification override is not a replacement for those operations.
+search/role/status endpoints are implemented as specified in section 11 below;
+the Admin relay must forward real bearer credentials before using them.
 
 9. EVENT CATALOG: CONFIRM WITH CREDIT SERVICE OWNER BEFORE CHANGING CONVENTIONS
 ------------------------------------------------------------
@@ -199,13 +201,20 @@ Order format to this event by documentation alone, or change only one service.
 
 10. TEAM HANDOFF / DEPLOYMENT CHECKLIST
 ------------------------------------------------------------
-Order Service owner: add the private Telegram lookup client in Order. Use trusted caller
-identity and order access checks. Do not trust a frontend-supplied acting UUID.
+Order Service owner: the merged Order client now calls the private Telegram
+lookup. Continue using trusted caller identity and order access checks. Do not
+trust a frontend-supplied acting UUID. Remove its obsolete X-Service-Token header
+and lookup-token configuration; User no longer checks them. Existing headers are
+ignored, allowing separate client rollout.
 
-Infrastructure owner: review the separate gateway commit; rebuild User, run its migration Job,
-configure ORDER_USER_LOOKUP_TOKEN for User and securely provide it to Order.
-Order sends that value in X-Service-Token. Never store this secret in frontend
-configuration. Only for load tests, set APP_ENV to the real non-production
+Infrastructure owner: verify the exact lookup route's Order-only Linkerd policy
+allows Order and denies gateway/unmeshed/unlisted clients, with no public-port
+bypass, BEFORE deploying this image. Rebuild User and run its normal migration
+Job; token removal requires no new migration. Remove obsolete lookup-secret
+references from User/Order values and environment secret wiring before deleting
+any shared secret resource. There is no token/mesh switch to set. This branch
+does not edit shared Helm values or delete secrets. Only for load tests,
+set APP_ENV to the real non-production
 environment and ENABLE_TEST_VERIFICATION=true. Keep production disabled.
 The first real admin can now be established through the deployment-only command
 node dist/bootstrap-admin.js --user-id <verified-user-uuid> --confirm
@@ -214,31 +223,68 @@ existing migrations applied. It rejects existing admins or a previous bootstrap
 audit marker, audits the promotion and revokes the target's old sessions/reset
 links. The promoted account must sign in again. This is not an HTTP endpoint;
 there is no new bootstrap route to add to the contract. See the README for the
-full operational procedure. Normal role-management APIs remain separate work.
+full operational procedure. Normal role-management APIs are in section 11.
 
-Admin Service owner: in the previously fetched Admin branch, core/security.py calls
-/api/v1/user/me/authorize and expects role/email. Use /api/v1/user/internal/authorize and
-check authenticated, isAdmin and permittedAction; userId is the identity field.
-Forward the real admin Authorization header for the new verification override.
-Recheck this finding against the latest Admin code before applying changes.
+Admin Service owner: merged Admin code now uses gateway identity headers; the
+earlier /me/authorize finding is obsolete. Forward the real inbound admin
+Authorization header to all User search/role/status calls and the verification
+override. User independently checks current admin/session state. See section 11
+and the README's Admin integration instructions; no mock admin-* tokens are accepted.
 
-Frontend owner: reconcile the earlier user-service-frontend-integration proposal with
-latest frontend work. Signup needs name; email verification needs { email, otp },
-not { token }. Wire the Telegram challenge/OTP flow and test with real auth
-enabled; demo mode skips User Service requests in the older proposal. The current
-authorization-route migration only updates frontend nginx proxy configuration
-and its documentation, not React pages or forms. Review deletion UI/session
-behavior as part of testing.
+Frontend owner: the actual signup/email/Telegram/login/password-reset flow
+passed local manual tests on 20 October. Do not merge the older proposal over
+the current pages. For admin lists, reconcile result.items (not content), id
+(not userId), and role === "admin" (not isAdmin), plus page/total pagination.
+No frontend source is changed here. Review logout discoverability separately.
 
 Together: run real sign-in through Envoy, both verification steps, Credit
 onboarding, and Order create/accept with the Telegram lookup. Check ordinary
 users cannot call admin operations and public requests cannot reach the private
 lookup. Local service tests do not prove the complete deployed journey.
 
-Tests already run locally: 48 automated tests, TypeScript build, isolated
-PostgreSQL lifecycle/integration test, Docker build/start/migration and gateway
-chart lint/render. The authorization migration also passed nginx syntax and
-temporary-container public-path blocking checks. The Docker build/start/migration
-check predates this route migration; the running User container has not been
-rebuilt for the new route. No live Kubernetes gateway test has been run from this laptop.
-The temporary integration database is removed after testing.
+11. ADMIN USER MANAGEMENT - ADD THREE ROWS (22 OCTOBER 2026)
+------------------------------------------------------------
+All three require Authorization: Bearer <real-admin-session-token>. Admin must
+forward this header on its outbound calls. UUID-only / x-is-admin headers are
+not administrator credentials. Invalid/non-admin callers
+get 404; each mutation rechecks current actor/session state inside its transaction.
+
+Method: GET
+Endpoint: /api/v1/user/search
+Body / Params: ?q=&page= ; admin bearer header
+Purpose: Search account name/email case-insensitively or exact UUID. q max 100
+characters, page 1-100000 (default 1), page size 20. Returns 200
+{ items: [{ id, name, email, role, status }], page, total }. role is admin/user;
+status is Created/Verified/Suspended. Stable ordering, expired deletion records
+excluded, Cache-Control: no-store. Passwords/tokens/private Telegram IDs omitted.
+Malformed query: 400 INVALID_QUERY or INVALID_PAGE.
+
+Method: POST
+Endpoint: /api/v1/user/{userId}/role
+Body / Params: { role: "admin" | "user" } ; UUID path parameter; admin bearer header
+Purpose: Persist promotion/demotion. Returns 200 { userId, role, status, changed }.
+Only active unlocked fully verified targets can be promoted. Self-demotion is
+rejected; last available admin cannot be demoted. Actual changes atomically
+update the role, increment authVersion, revoke sessions/reset links and record
+User audit. Unchanged retries return changed:false. The target logs in again.
+
+Method: POST
+Endpoint: /api/v1/user/{userId}/status
+Body / Params: { status: "suspended" | "verified" } ; UUID path parameter; admin bearer header
+Purpose: Persist suspension/reinstatement. Returns 200
+{ userId, role, status, changed }. The body value "verified" means remove
+suspension, NOT mark verification complete. An unfinished user returns Created;
+timestamps and password lockout are preserved. Actual changes revoke sessions
+and reset links; suspension additionally revokes OTP/Telegram challenges. No
+extra credit event/grant is produced. Last available admin cannot be suspended.
+
+Mutation errors: 400 INVALID_USER_ID / INVALID_ROLE / INVALID_STATUS /
+SELF_DEMOTION_FORBIDDEN; 404 USER_NOT_FOUND or hidden caller denial;
+409 LAST_ADMIN / USER_NOT_ELIGIBLE / USER_PENDING_DELETION.
+
+These use the requested admin-authorized paths, not new unauthenticated internal
+APIs. User stores its transactional audit; Admin still owns its own audit/events
+after 200. This is not a distributed transaction. Current Admin relay forwarding
+and frontend items/id/role mapping must be updated by their owners. No shared
+contract file, Admin/frontend source or deployed mesh setting is edited here.
+See the README's Admin integration instructions and deployment acceptance checklist.

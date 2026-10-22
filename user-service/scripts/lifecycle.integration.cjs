@@ -20,7 +20,6 @@ test("account lifecycle and service integration in an isolated PostgreSQL databa
     process.env.EMAIL_PROVIDER = "development"; // Never send real email from this fixture.
     process.env.APP_ENV = "test";
     process.env.ENABLE_TEST_VERIFICATION = "true";
-    process.env.ORDER_USER_LOOKUP_TOKEN = randomBytes(32).toString("base64url");
     process.env.KAFKA_BROKERS = "";
     process.env.TELEGRAM_BOT_TOKEN = "";
     process.env.TELEGRAM_BOT_USERNAME = "";
@@ -86,12 +85,10 @@ test("account lifecycle and service integration in an isolated PostgreSQL databa
     }
     console.log("PASS: canonical internal authorize and legacy alias preserve bearer authentication, methods, identity headers and permissions");
     const lookup = `/internal/users/${target.id}/telegram`;
-    const serviceHeaders = { "x-service-token": process.env.ORDER_USER_LOOKUP_TOKEN };
     const spoofHeaders = { "x-is-admin": "true", "x-user-id": adminA.id, "x-permitted-action": "true" };
-    assert.equal((await request(lookup, "GET", undefined, adminTokenA, spoofHeaders)).status, 404);
-    assert.equal((await request(lookup, "GET", undefined, undefined, { "x-service-token": "wrong" })).status, 404);
-    assert.equal((await request("/internal/users/not-a-uuid/telegram", "GET", undefined, undefined, serviceHeaders)).status, 400);
-    assert.equal((await request(lookup, "GET", undefined, undefined, serviceHeaders)).status, 409);
+    assert.equal((await request("/internal/users/not-a-uuid/telegram")).status, 400);
+    assert.equal((await request(lookup)).status, 409);
+    assert.equal((await request(`/internal/users/${adminA.id}/telegram`)).status, 200);
 
     const override = `/admin/users/${target.id}/verify`;
     assert.equal((await request(override, "POST", { reason: "Load-test setup" }, undefined, spoofHeaders)).status, 404);
@@ -111,14 +108,15 @@ test("account lifecycle and service integration in an isolated PostgreSQL databa
     assert.equal(audit.length, 1);
     assert.equal(audit[0].actorUserId, adminA.id);
     assert.equal(audit[0].reason, "D3 load-test setup");
-    const contact = await request(lookup, "GET", undefined, undefined, serviceHeaders);
+    const contact = await request(lookup);
     assert.equal(contact.status, 200);
     assert.equal(contact.cache, "no-store");
     assert.deepEqual(contact.body, { userId: target.id, telegramHandle: target.telegramHandle });
     assert.equal((await prisma.user.findUnique({ where: { id: target.id } })).role, "USER");
     const suspended = await user({ accessStatus: "SUSPENDED" });
     assert.equal((await request(`/admin/users/${suspended.id}/verify`, "POST", { reason: "Load-test setup" }, adminTokenA)).status, 409);
-    assert.equal((await request(`/internal/users/${suspended.id}/telegram`, "GET", undefined, undefined, serviceHeaders)).status, 404);
+    assert.equal((await request(`/internal/users/${suspended.id}/telegram`)).status, 404);
+    assert.equal((await request("/internal/users/5999fc1e-1496-45a0-af8e-53ebf70669ba/telegram")).status, 404);
     for (const [account, expiresAt] of [
       [suspended, new Date(Date.now() + 600_000)], [owner, new Date(Date.now() - 1000)],
     ]) {
@@ -132,7 +130,7 @@ test("account lifecycle and service integration in an isolated PostgreSQL databa
     assert.equal(actualIdentity.status, 200);
     assert.equal(actualIdentity.body.userId, owner.id);
     assert.equal(actualIdentity.body.isAdmin, false);
-    console.log("PASS: scoped service-token lookup; spoofed headers and non-admin override denied; audit and verification event idempotent");
+    console.log("PASS: token-free internal lookup preserves account eligibility checks; spoofed admin headers and non-admin override denied; audit and verification event idempotent");
 
     const oldSession = await login(owner);
     const rawReset = randomBytes(32).toString("base64url");
@@ -168,6 +166,7 @@ test("account lifecycle and service integration in an isolated PostgreSQL databa
     const repeatRecord = await prisma.user.findUnique({ where: { id: owner.id } });
     assert.equal(repeat.toISOString(), repeatRecord.scheduledDeletionAt.toISOString());
     await prisma.user.update({ where: { id: owner.id }, data: { scheduledDeletionAt: new Date(Date.now() - 1000) } });
+    assert.equal((await request(`/internal/users/${owner.id}/telegram`)).status, 404);
     const fakeActive = randomBytes(32).toString("base64url");
     await prisma.authSession.create({ data: { userId: owner.id, tokenHash: hashSessionToken(fakeActive), expiresAt: new Date(Date.now() + 600_000) } });
     assert.equal((await request("/login", "POST", { email: owner.email, password })).status, 401);

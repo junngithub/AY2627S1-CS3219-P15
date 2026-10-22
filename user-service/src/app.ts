@@ -6,6 +6,7 @@ import { openApiDocument } from "./openapi";
 import { createUsersRouter } from "./routes/users";
 import { createUserIntegrationRouter } from "./routes/user-integration";
 import type { EmailSender } from "./email";
+import { createAdminUsersRouter } from "./routes/admin-users";
 
 export function createApp(eventPublisher?: UserEventPublisher, emailSender?: EmailSender) {
   const app = express();
@@ -31,6 +32,7 @@ export function createApp(eventPublisher?: UserEventPublisher, emailSender?: Ema
 
   app.use("/api/v1/user", createUsersRouter(emailSender, eventPublisher));
   app.use("/api/v1/user", createUserIntegrationRouter());
+  app.use("/api/v1/user", createAdminUsersRouter());
 
   app.use((_request, response) => {
     response.status(404).json({ error: "Endpoint not found", code: "NOT_FOUND" });
