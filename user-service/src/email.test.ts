@@ -39,14 +39,15 @@ describe("email configuration", () => {
     assert.ok(createEmailSender({ provider: "ses", region: "ap-southeast-1", fromAddress: "sender@example.com" }) instanceof SesEmailSender);
     const disabled = createEmailSender({ provider: "disabled" });
     for (const call of [() => disabled.sendVerificationOtp("recipient@example.com", "123456", 10),
-      () => disabled.sendPasswordResetLink("recipient@example.com", "https://example.com/reset-password?token=secret", 30)]) {
+      () => disabled.sendPasswordResetLink("recipient@example.com", "https://example.com/reset-password?token=secret", 30),
+      () => disabled.sendAccountLocked("recipient@example.com", "https://example.com/forgot-password")]) {
       await assert.rejects(call, (error: unknown) => error instanceof AppError && error.status === 503 && error.code === "EMAIL_NOT_CONFIGURED");
     }
   });
 });
 
 describe("SES email delivery without real emails", () => {
-  it("sends single-recipient UTF-8 verification and reset emails without logging their secrets", async (context) => {
+  it("sends single-recipient UTF-8 verification, reset and lockout emails without logging their secrets", async (context) => {
     const logs: unknown[][] = [];
     context.mock.method(console, "log", (...args: unknown[]) => { logs.push(args); });
     const commands: SendEmailCommand[] = [];
@@ -54,7 +55,8 @@ describe("SES email delivery without real emails", () => {
     const link = "https://example.com/reset-password?token=private-reset-token";
     await sender.sendVerificationOtp("student@u.nus.edu", "123456", 10);
     await sender.sendPasswordResetLink("student@u.nus.edu", link, 30);
-    assert.equal(commands.length, 2);
+    await sender.sendAccountLocked("student@u.nus.edu", "https://example.com/forgot-password");
+    assert.equal(commands.length, 3);
     for (const command of commands) {
       assert.ok(command instanceof SendEmailCommand);
       assert.equal(command.input.FromEmailAddress, "sender@gmail.com");
@@ -64,6 +66,8 @@ describe("SES email delivery without real emails", () => {
     }
     assert.match(commands[0].input.Content!.Simple!.Body!.Text!.Data!, /123456[\s\S]*10 minutes/);
     assert.match(commands[1].input.Content!.Simple!.Body!.Text!.Data!, /private-reset-token[\s\S]*30 minutes/);
+    assert.match(commands[2].input.Content!.Simple!.Body!.Text!.Data!, /locked[\s\S]*https:\/\/example.com\/forgot-password/);
+    assert.ok(!commands[2].input.Content!.Simple!.Body!.Text!.Data!.includes("private-reset-token"));
     const output = JSON.stringify(logs);
     for (const secret of ["123456", link, "student@u.nus.edu", "sender@gmail.com"]) assert.ok(!output.includes(secret));
     assert.match(output, /SES accepted/);
@@ -77,7 +81,8 @@ describe("SES email delivery without real emails", () => {
       failure.name = name;
       const sender = new SesEmailSender("sender@example.com", { send: async () => { throw failure; } });
       for (const call of [() => sender.sendVerificationOtp("recipient@example.com", "123456", 10),
-        () => sender.sendPasswordResetLink("recipient@example.com", "https://example.com/?token=reset-secret", 30)]) {
+        () => sender.sendPasswordResetLink("recipient@example.com", "https://example.com/?token=reset-secret", 30),
+        () => sender.sendAccountLocked("recipient@example.com", "https://example.com/forgot-password")]) {
         await assert.rejects(call, (error: unknown) => error instanceof AppError && error.status === 503
           && error.code === "EMAIL_DELIVERY_FAILED" && !error.message.includes("raw-secret"));
       }

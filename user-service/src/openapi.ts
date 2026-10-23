@@ -391,6 +391,7 @@ export const openApiDocument = {
       post: {
         tags: ["Authentication"],
         summary: "Log in and create a session",
+        description: "Public. Locks after five failed password attempts by default (configurable). Attempts one warning email when entering lockout, directing the owner to the frontend forgot-password page. Concurrent failures are counted under a row lock. Already-locked accounts are not notified repeatedly. Correct login before the threshold resets attempts; password reset unlocks login. All login failures keep the same generic 401, including delivery failures. Warnings use the configured email provider, are not queued for retry, and have no exactly-once delivery guarantee.",
         requestBody: {
           required: true,
           content: {

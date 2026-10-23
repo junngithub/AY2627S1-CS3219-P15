@@ -5,6 +5,7 @@ import { AppError } from "./errors";
 export interface EmailSender {
   sendVerificationOtp(email: string, otp: string, expiresInMinutes: number): Promise<void>;
   sendPasswordResetLink(email: string, link: string, expiresInMinutes: number): Promise<void>;
+  sendAccountLocked(email: string, recoveryUrl: string): Promise<void>;
 }
 
 export interface SesEmailClient {
@@ -22,6 +23,11 @@ export class SesEmailSender implements EmailSender {
   async sendPasswordResetLink(email: string, link: string, expiresInMinutes: number): Promise<void> {
     await this.send(email, "Friends on Campus - Reset your password",
       `Reset your Friends on Campus password using this link:\n${link}\n\nThis link expires in ${expiresInMinutes} minutes and can be used once. Do not share it.\nIf you did not request this, you can ignore this email.`, "password-reset");
+  }
+
+  async sendAccountLocked(email: string, recoveryUrl: string): Promise<void> {
+    await this.send(email, "Friends on Campus - Account locked",
+      `Your Friends on Campus account has been locked after repeated failed login attempts.\n\nReset your password to unlock it: ${recoveryUrl}\n\nIf these attempts were not yours, do not share any verification codes or reset links.`, "account-lockout");
   }
 
   private async send(email: string, subject: string, text: string, kind: string): Promise<void> {
@@ -50,6 +56,7 @@ export class SesEmailSender implements EmailSender {
 class DisabledEmailSender implements EmailSender {
   async sendVerificationOtp(): Promise<void> { this.unavailable(); }
   async sendPasswordResetLink(): Promise<void> { this.unavailable(); }
+  async sendAccountLocked(): Promise<void> { this.unavailable(); }
   private unavailable(): never {
     throw new AppError(503, "EMAIL_NOT_CONFIGURED", "Email delivery is not configured.");
   }
@@ -68,6 +75,10 @@ export function createEmailSender(settings: EmailConfiguration): EmailSender {
 }
 
 export class DevelopmentEmailSender implements EmailSender {
+  async sendAccountLocked(): Promise<void> {
+    console.log("[development email] Account-lockout notification requested");
+  }
+
   async sendVerificationOtp(email: string, otp: string, expiresInMinutes: number): Promise<void> {
     console.log(
       `[development email] Verification OTP for ${email}: ${otp} (expires in ${expiresInMinutes} minutes)`,

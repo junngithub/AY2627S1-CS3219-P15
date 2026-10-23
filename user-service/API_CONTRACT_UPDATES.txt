@@ -161,7 +161,8 @@ provided. Admin Service must forward its real administrator's bearer token.
 ------------------------------------------------------------
 The table includes planned requirements. /me/escalate and all /friends routes
 are not implemented yet. SES email delivery passed manual local frontend tests;
-deployed-environment setup/testing remains. Login-lockout email is still missing. Admin
+deployed-environment setup/testing remains. Lockout notifications are implemented
+as described in section 12; real inbox delivery still needs a controlled check. Admin
 search/role/status endpoints are implemented as specified in section 11 below;
 the Admin relay must forward real bearer credentials before using them.
 
@@ -288,3 +289,29 @@ after 200. This is not a distributed transaction. Current Admin relay forwarding
 and frontend items/id/role mapping must be updated by their owners. No shared
 contract file, Admin/frontend source or deployed mesh setting is edited here.
 See the README's Admin integration instructions and deployment acceptance checklist.
+
+12. UPDATE LOGIN'S PURPOSE (F2.3)
+------------------------------------------------------------
+Keep POST /api/v1/user/login and { email, password } unchanged. Use:
+
+F2/F2.2/F2.3. Public. Success returns
+{ token, tokenType, expiresAt, user: { id, name, email, status } }.
+Locks the account after five failed password attempts by default and attempts
+one warning email on the transition into lockout. Counters are serialized under
+a user-row lock; concurrent/repeated attempts cannot each trigger a warning for
+the same lockout. Correct login before the threshold resets failed attempts.
+The warning directs the owner to the frontend forgot-password page. Successful
+password reset unlocks the account and revokes existing sessions. Suspended,
+already-locked and deletion-expired accounts do not trigger repeated warnings.
+Login failures always return 401 INVALID_CREDENTIALS with the same generic
+message, including when sending fails; lockout/delivery status is not disclosed.
+
+Delivery note: uses the existing SES/development/disabled provider, not the
+Kafka outbox. A failed warning is not queued for retry; the account stays locked. A crash
+after saving lockout may lose the warning. SDK retries may cause duplicate
+delivery after an ambiguous network response. There is no exactly-once delivery
+guarantee or backfill for accounts locked before deployment. Existing SES and
+FRONTEND_BASE_URL settings apply; no new endpoint/body, migration, dependency or
+AWS permission is introduced. Automated checks use fake SES; actual lockout
+email receipt remains a deployment acceptance check. The shared contract itself
+has not been edited by this guide.
