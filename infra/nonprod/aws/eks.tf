@@ -23,6 +23,8 @@ resource "aws_iam_role_policy_attachment" "cluster" {
 }
 
 resource "aws_eks_cluster" "this" {
+  count = var.eks_enabled ? 1 : 0
+
   name     = var.cluster_name
   version  = var.kubernetes_version
   role_arn = aws_iam_role.cluster.arn
@@ -102,7 +104,9 @@ resource "aws_launch_template" "node" {
 # Spot can be reclaimed with 2 minutes' notice; the node group replaces the
 # node and pods restart, which non-prod tolerates.
 resource "aws_eks_node_group" "default" {
-  cluster_name    = aws_eks_cluster.this.name
+  count = var.eks_enabled ? 1 : 0
+
+  cluster_name    = aws_eks_cluster.this[0].name
   node_group_name = "default"
   node_role_arn   = aws_iam_role.node.arn
   subnet_ids      = [for s in aws_subnet.private : s.id]
@@ -130,9 +134,9 @@ resource "aws_eks_node_group" "default" {
 }
 
 resource "aws_eks_addon" "this" {
-  for_each = toset(["vpc-cni", "kube-proxy", "coredns"])
+  for_each = var.eks_enabled ? toset(["vpc-cni", "kube-proxy", "coredns"]) : toset([])
 
-  cluster_name                = aws_eks_cluster.this.name
+  cluster_name                = aws_eks_cluster.this[0].name
   addon_name                  = each.value
   resolve_conflicts_on_update = "OVERWRITE"
 
@@ -144,7 +148,9 @@ resource "aws_eks_addon" "this" {
 # deployed by Argo CD (deploy/charts/cluster-config). Its permissions come
 # from the node role (AmazonEBSCSIDriverPolicy above).
 resource "aws_eks_addon" "ebs_csi" {
-  cluster_name                = aws_eks_cluster.this.name
+  count = var.eks_enabled ? 1 : 0
+
+  cluster_name                = aws_eks_cluster.this[0].name
   addon_name                  = "aws-ebs-csi-driver"
   resolve_conflicts_on_update = "OVERWRITE"
 
@@ -152,19 +158,35 @@ resource "aws_eks_addon" "ebs_csi" {
 }
 
 resource "aws_eks_access_entry" "admin" {
-  for_each = toset(var.cluster_admin_arns)
+  for_each = var.eks_enabled ? toset(var.cluster_admin_arns) : toset([])
 
-  cluster_name  = aws_eks_cluster.this.name
+  cluster_name  = aws_eks_cluster.this[0].name
   principal_arn = each.value
 }
 
 resource "aws_eks_access_policy_association" "admin" {
   for_each = aws_eks_access_entry.admin
 
-  cluster_name  = aws_eks_cluster.this.name
+  cluster_name  = aws_eks_cluster.this[0].name
   principal_arn = each.value.principal_arn
   policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
   access_scope {
     type = "cluster"
   }
+}
+
+# The cluster became optional (var.eks_enabled); keep the existing objects.
+moved {
+  from = aws_eks_cluster.this
+  to   = aws_eks_cluster.this[0]
+}
+
+moved {
+  from = aws_eks_node_group.default
+  to   = aws_eks_node_group.default[0]
+}
+
+moved {
+  from = aws_eks_addon.ebs_csi
+  to   = aws_eks_addon.ebs_csi[0]
 }

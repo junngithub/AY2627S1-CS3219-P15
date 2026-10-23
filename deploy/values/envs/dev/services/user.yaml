@@ -20,3 +20,5 @@ env:
 # Secrets from Secrets Manager foc/dev/<name> (infra/nonprod/aws/secrets.tf).
 externalSecrets:
   user-otp: [OTP_SECRET]
+  # Placeholder until the bot exists: paste token + username into foc/dev/user-telegram.
+  user-telegram: [TELEGRAM_BOT_TOKEN, TELEGRAM_BOT_USERNAME]
