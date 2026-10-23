@@ -18,6 +18,13 @@ Email and Telegram verification, password recovery/change, account deletion, adm
 
 A deployment-only first-admin bootstrap command is available. It promotes an explicitly selected verified account; it is not an HTTP endpoint and never runs automatically.
 
+## Architecture and database guides
+
+- [Architecture and verification flow](docs/architecture.md): service boundaries, external integrations, design decisions and deployment assumptions.
+- [Database schema](docs/schema.md): table relationship diagram, field explanations, constraints and account-state rules.
+
+These guides describe the implementation in this checkout, not proof of what is currently deployed. The executable database definition is [prisma/schema.prisma](prisma/schema.prisma); Swagger remains the reference for implemented HTTP operations.
+
 ## Swagger API documentation
 
 While the User Service is running, open:
