@@ -32,7 +32,9 @@ resource "aws_security_group" "gateway_lb" {
 
 # Pods use the cluster security group, so it must let the NLB in.
 resource "aws_vpc_security_group_ingress_rule" "gateway_lb_to_pods" {
-  security_group_id            = aws_eks_cluster.this.vpc_config[0].cluster_security_group_id
+  count = var.eks_enabled ? 1 : 0
+
+  security_group_id            = aws_eks_cluster.this[0].vpc_config[0].cluster_security_group_id
   description                  = "Gateway NLB to Envoy pods"
   from_port                    = var.gateway_target_port
   to_port                      = var.gateway_target_port
@@ -77,4 +79,9 @@ resource "aws_lb_listener" "gateway" {
     type             = "forward"
     target_group_arn = aws_lb_target_group.gateway[each.value].arn
   }
+}
+
+moved {
+  from = aws_vpc_security_group_ingress_rule.gateway_lb_to_pods
+  to   = aws_vpc_security_group_ingress_rule.gateway_lb_to_pods[0]
 }

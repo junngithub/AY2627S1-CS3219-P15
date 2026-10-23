@@ -13,6 +13,12 @@ variable "cluster_name" {
   default = "foc-nonprod"
 }
 
+variable "eks_enabled" {
+  description = "false removes the EKS cluster and its nodes (most of dev's cost) and keeps everything else: VPC, RDS and its data, secrets, NLB, CloudFront. deploy/eks-down.sh / eks-up.sh."
+  type        = bool
+  default     = true
+}
+
 variable "kubernetes_version" {
   description = "EKS version. Keep it in standard support: extended support costs 6x per hour."
   type        = string
