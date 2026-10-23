@@ -28,6 +28,7 @@ import {
 import { accountNextSteps, accountStatus } from "../status";
 import { requestTelegramVerification, verifyTelegramOtp } from "../telegram";
 import { enqueueUserVerified, lockVerificationUser, VerificationEventDispatcher } from "../verification-events";
+import { recordFailedLogin } from "../login-security";
 
 function requiredString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
@@ -386,15 +387,16 @@ export function createUsersRouter(
         user.accessStatus === "SUSPENDED" ||
         deletionIsDue(user)
       ) {
-        if (user && !passwordMatches && !user.lockedAt) {
-          const attempts = user.failedLoginAttempts + 1;
-          await prisma.user.update({
-            where: { id: user.id },
-            data: {
-              failedLoginAttempts: attempts,
-              lockedAt: attempts >= config.loginMaxAttempts ? new Date() : null,
-            },
-          });
+        if (user && !passwordMatches) {
+          const notificationEmail = await recordFailedLogin(user.id, user.passwordHash);
+          if (notificationEmail) {
+            try {
+              await emailSender.sendAccountLocked(notificationEmail, new URL("/forgot-password", config.frontendBaseUrl).toString());
+            } catch {
+              // Preserve the same login response even when SES is unavailable.
+              console.error("[user email] Account-lockout notification delivery failed");
+            }
+          }
         }
         throw genericFailure;
       }
