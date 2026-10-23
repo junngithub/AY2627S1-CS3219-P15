@@ -10,16 +10,26 @@
  * narrow screen rather than bursting the viewport).
  *
  * Calls GET /api/v1/supplier/admin and PATCH /api/v1/supplier/{id}/status,
- * which Supplier F1.3.1 restricts to admins and logs with a timestamp. The
- * service does not yet check who is calling; see docs/open-items.md.
+ * which Supplier F1.3.1 restricts to admins and logs with a timestamp.
+ *
+ * Edit (PATCH /api/v1/supplier/{id}) and Delete (DELETE /api/v1/supplier/{id})
+ * added with Claude Code (Claude Opus 5.5) on 2026-10-23. Both are admin only
+ * and logged by the service.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert } from '../components/ui/Alert';
 import { Button } from '../components/ui/Button';
+import { EditSupplierDialog } from '../components/supplier/EditSupplierDialog';
 import { ConfirmDialog } from '../components/ui/Dialog';
 import { errorMessage } from '../lib/api';
-import { formatHours, fetchSuppliersForAdmin, setSupplierStatus, type Supplier } from '../lib/suppliers';
+import {
+  deleteSupplier,
+  fetchSuppliersForAdmin,
+  formatHours,
+  setSupplierStatus,
+  type Supplier,
+} from '../lib/suppliers';
 import styles from './AdminSuppliersPage.module.css';
 
 type Filter = 'pending' | 'approved' | 'rejected' | 'all';
@@ -40,6 +50,16 @@ export function AdminSuppliersPage() {
   const [pendingDecision, setPendingDecision] = useState<
     { supplier: Supplier; status: Supplier['status'] } | null
   >(null);
+  const [editing, setEditing] = useState<Supplier | null>(null);
+  // NFR9.1.1: deleting is irreversible, so it asks first.
+  const [deleting, setDeleting] = useState<Supplier | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  // The edit dialog offers every category already in use as a chip.
+  const knownCategories = useMemo(
+    () => [...new Set((rows ?? []).flatMap((s) => s.categories.map((c) => c.name)))].sort(),
+    [rows],
+  );
 
   const load = useCallback(async () => {
     setError(null);
@@ -62,6 +82,7 @@ export function AdminSuppliersPage() {
 
     setWorking(supplier.id);
     setError(null);
+    setNotice(null);
     try {
       await setSupplierStatus(supplier.id, status);
       // Re-read rather than patching locally, so the list reflects what the
@@ -73,6 +94,28 @@ export function AdminSuppliersPage() {
       // reading as an outage.
       setError(
         errorMessage(error, `Could not reach the Supplier Service, so ${supplier.name} is unchanged.`),
+      );
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function remove() {
+    if (deleting === null) return;
+    const supplier = deleting;
+
+    setWorking(supplier.id);
+    setError(null);
+    setNotice(null);
+    try {
+      await deleteSupplier(supplier.id);
+      await load();
+      setDeleting(null);
+      setNotice(`${supplier.name} was deleted.`);
+    } catch (error) {
+      setDeleting(null);
+      setError(
+        errorMessage(error, `Could not reach the Supplier Service, so ${supplier.name} was not deleted.`),
       );
     } finally {
       setWorking(null);
@@ -106,6 +149,7 @@ export function AdminSuppliersPage() {
       </header>
 
       {error ? <Alert variant="danger">{error}</Alert> : null}
+      {notice ? <Alert variant="success">{notice}</Alert> : null}
 
       {rows !== null && rows.length === 0 && error === null ? (
         <div className={styles.empty}>
@@ -168,6 +212,16 @@ export function AdminSuppliersPage() {
                           Reject
                         </Button>
                       ) : null}
+                      <Button variant="secondary" onClick={() => setEditing(supplier)}>
+                        Edit
+                      </Button>
+                      <Button
+                        variant="danger"
+                        aria-label={`Delete ${supplier.name}`}
+                        onClick={() => setDeleting(supplier)}
+                      >
+                        Delete
+                      </Button>
                     </div>
                   </td>
                 </tr>
@@ -201,6 +255,39 @@ export function AdminSuppliersPage() {
         busy={working !== null}
         onConfirm={decide}
         onCancel={() => setPendingDecision(null)}
+      />
+
+      <EditSupplierDialog
+        supplier={editing}
+        knownCategories={knownCategories}
+        onClose={() => setEditing(null)}
+        onSaved={(saved) => {
+          setEditing(null);
+          setError(null);
+          setNotice(`${saved.name} was updated.`);
+          // Re-read, so the row shows what the service stored.
+          void load();
+        }}
+      />
+
+      {/* NFR9.1.2: say plainly what deleting does. */}
+      <ConfirmDialog
+        open={deleting !== null}
+        title="Delete this supplier?"
+        consequence={
+          deleting === null ? null : (
+            <>
+              {deleting.name} is removed for good and can no longer be chosen as a pickup or
+              delivery point. Orders already placed keep their copy of the location. This cannot
+              be undone.
+            </>
+          )
+        }
+        confirmLabel="Delete"
+        destructive
+        busy={working !== null}
+        onConfirm={remove}
+        onCancel={() => setDeleting(null)}
       />
 
       {/*
