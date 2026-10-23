@@ -330,6 +330,8 @@ The database is exposed locally on port `5554`; the API is bound to `127.0.0.1:8
 
 ## Verification commands
 
+`npm test` discovers `.test.ts` files recursively under `src` and passes explicit paths to Node with the `tsx` loader. This works on Windows and Linux/Node 20 without relying on shell wildcard expansion. It fails rather than silently succeeding if no tests are found.
+
 ```powershell
 npm test
 npm run build

@@ -8,7 +8,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "bootstrap:admin": "node dist/bootstrap-admin.js",
-    "test": "tsx --test src/**/*.test.ts",
+    "test": "node scripts/unit-tests.cjs",
     "test:integration:password-reset": "node --test scripts/password-reset.integration.cjs",
     "test:integration:onboarding": "node --test scripts/onboarding.integration.cjs",
     "test:integration:lifecycle": "node --test scripts/lifecycle.integration.cjs",
