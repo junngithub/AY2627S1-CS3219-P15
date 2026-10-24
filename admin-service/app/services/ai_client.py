@@ -1,26 +1,35 @@
 import asyncio
+import base64
 import json
 import logging
-from urllib.parse import urlparse
 
 import httpx
 
 from app.config import settings
 from app.models.conflict_case import FaultParty
+from app.services.order_photos import EvidencePhoto
 
 logger = logging.getLogger(__name__)
 
 _VALID_PARTIES = {p.value for p in FaultParty}
 
 _PROMPT = (
-    "You are assessing a delivery dispute. The image(s) show the item before collection and after "
-    "delivery. Decide who is at fault: 'requester' (claim is false/unfounded or damage pre-existed), "
+    "You are assessing a delivery dispute. Each image is labeled just before it: "
+    "'collection' is the item when the courier picked it up, 'delivery' is the item "
+    "when the courier dropped it off, and 'dispute' is an extra photo from the requester. "
+    "Decide who is at fault: 'requester' (claim is false/unfounded or damage pre-existed), "
     "'courier' (different item, new damage, or no proof of delivery), or 'no-fault' "
     "(inconclusive or neither party's doing).\n"
     "Reply with ONLY a JSON object, no prose, no code fences:\n"
     '{"fault_party": "requester|courier|no-fault", "confidence": <0.0-1.0>, "reasoning": "<short>"}\n'
     "Requester's report: "
 )
+
+_ROLE_LABEL = {
+    "collection": "collection: photo of the item when the courier collected it.",
+    "delivery": "delivery: photo of the item when the courier delivered it.",
+    "dispute": "dispute: extra photo the requester attached with this report.",
+}
 
 _RESPONSE_SCHEMA = {
     "type": "OBJECT",
@@ -30,15 +39,6 @@ _RESPONSE_SCHEMA = {
         "reasoning": {"type": "STRING"},
     },
     "required": ["fault_party", "confidence", "reasoning"],
-}
-
-# External URL fetch supports these image types. Unknown extensions default to jpeg.
-_MIME_BY_EXT = {
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".png": "image/png",
-    ".webp": "image/webp",
-    ".bmp": "image/bmp",
 }
 
 
@@ -61,21 +61,21 @@ def _parse(text: str) -> AIRecommendation | None:
     return AIRecommendation(party, confidence, str(data.get("reasoning", "")))
 
 
-def _mime_type(url: str) -> str:
-    path = urlparse(url).path.lower()
-    for ext, mime in _MIME_BY_EXT.items():
-        if path.endswith(ext):
-            return mime
-    return "image/jpeg"
-
-
-def _image_part(url: str) -> dict | None:
-    """Public https URL for Gemini to fetch. This service does not download the photo."""
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        logger.error("Evidence photo URL is not http(s): %s", url)
-        return None
-    return {"file_data": {"mime_type": _mime_type(url), "file_uri": url}}
+def content_parts(photos: list[EvidencePhoto], comment: str) -> list[dict]:
+    """One text label, then the image bytes, for every photo, then the report."""
+    parts: list[dict] = []
+    for photo in photos:
+        parts.append({"text": _ROLE_LABEL.get(photo.role, photo.role)})
+        parts.append(
+            {
+                "inline_data": {
+                    "mime_type": photo.mime_type,
+                    "data": base64.b64encode(photo.data).decode(),
+                }
+            }
+        )
+    parts.append({"text": _PROMPT + comment})
+    return parts
 
 
 def _extract_text(payload: dict) -> str:
@@ -91,26 +91,18 @@ def _extract_text(payload: dict) -> str:
 
 
 async def get_fault_recommendation(
-    before_photo_url: str, after_photo_url: str, comment: str
+    photos: list[EvidencePhoto], comment: str
 ) -> AIRecommendation | None:
     """Returns None on ANY failure (HTTP, timeout, unparseable, invalid enum/confidence)."""
     if not settings.ai_provider_api_key:
         logger.error("AI_PROVIDER_API_KEY is not set")
         return None
 
-    urls = [u for u in dict.fromkeys([before_photo_url, after_photo_url]) if u]
     model = settings.ai_model
     endpoint = (
         f"{settings.ai_provider_base_url.rstrip('/')}/v1beta/models/{model}:generateContent"
     )
-
-    parts: list[dict] = []
-    for url in urls:
-        image = _image_part(url)
-        if image is None:
-            return None
-        parts.append(image)
-    parts.append({"text": _PROMPT + comment})
+    parts = content_parts(photos, comment)
 
     payload = {
         "contents": [{"role": "user", "parts": parts}],

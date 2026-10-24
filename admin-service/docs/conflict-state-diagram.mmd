@@ -1,0 +1,14 @@
+stateDiagram-v2
+    direction TB
+    [*] --> created: Order reports the conflict
+
+    created --> ai_evaluated: Gemini returns a fault
+    created --> ai_failed: Gemini times out or cannot read photos
+
+    ai_evaluated --> under_review: admin claims
+    ai_failed --> under_review: admin claims
+
+    ai_evaluated --> resolved: deadline follows Gemini
+    under_review --> resolved: admin resolves, or deadline follows Gemini
+
+    resolved --> [*]

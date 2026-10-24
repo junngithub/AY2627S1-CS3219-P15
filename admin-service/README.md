@@ -2,7 +2,8 @@
 
 FastAPI + PostgreSQL + Kafka service for Friend on Campus (FoC) admin operations:
 user search/promote/demote/suspend/reinstate (F1), and delivery-conflict intake,
-AI evaluation, claim, and resolution (F3).
+AI evaluation, claim, and resolution (F3). See
+[`docs/schema.md`](docs/schema.md) for the data model.
 
 Listens on **8084**. Interactive docs at `http://localhost:8084/docs` once the app is up.
 
@@ -38,6 +39,7 @@ admin-service/
 │   │   ├── kafka_producer.py     # shared event envelope + topic publishes
 │   │   ├── kafka_consumer.py     # listener; no topics subscribed yet
 │   │   ├── ai_client.py          # Gemini Flash fault recommendation
+│   │   ├── order_photos.py       # fetch evidence bytes from Order Service
 │   │   ├── audit.py              # single write path into audit_logs
 │   │   ├── conflict_resolution.py# the only resolve path (manual + auto)
 │   │   └── scheduler.py          # job registration / cancel (APScheduler)
@@ -75,7 +77,7 @@ admin-service/
 
 | Caller | Mechanism | Failure |
 |---|---|---|
-| Admin UI / admin user | Gateway sets `x-user-id`, `x-is-admin=true`, and `x-permitted-action=true` (role `ADMIN`, account active, email and Telegram verified) | **404** (never 403) |
+| Admin UI / admin user | Gateway sets `x-user-id`, `x-is-admin=true`, and `x-permitted-action=true` (role `ADMIN`, account active, email and Telegram verified). Search and role/status changes also forward that caller's `Authorization` bearer to User Service | **404** (never 403) |
 | Order Service (intake) | No auth. `POST /api/v1/admin/conflicts` is open | — |
 
 A missing user id, a non-admin, and an admin who is not permitted all get the same **404**.
@@ -109,13 +111,20 @@ POST /api/v1/admin/conflicts
   "orderId": "ord-123",
   "reporterUserId": "u-1",
   "comment": "Item arrived damaged",
-  "photos": ["https://.../before.jpg", "https://.../after.jpg"]
+  "photos": [
+    "<orderId>/collection.jpg",
+    "<orderId>/delivery.png",
+    "<orderId>/dispute.webp"
+  ]
 }
 ```
 
 Returns **201**. Idempotent per `orderId`: a retry returns the existing case.
-The case is saved as `created` immediately; AI runs as a background job so a
-slow VLM cannot time out Order Service.
+`photos` are Order's private object keys, in collection / delivery / dispute
+order. The case is saved as `created` immediately; AI runs as a background job
+so a slow VLM cannot time out Order Service. That job reads each key from
+Order's photo bucket (`GetObject`) and sends the bytes to Gemini. A missing
+object records `ai_failed`.
 
 **Admin:**
 
@@ -273,8 +282,9 @@ stack is down).
 - First admin. Promote requires an existing admin, so this service cannot create
   the first one. The mock treats any `admin-*` bearer token as an admin. There
   is no bootstrap or seed for a real first admin account.
-- AI integration. `ai_client.py` calls Gemini 3.8 Flash after intake and passes
-  each photo as a public URL (`file_data.file_uri`). Gemini fetches the image.
-  Copy `.env.example` to `.env` and set `AI_PROVIDER_API_KEY` to a Google AI
-  Studio key. Compose reads that file. An empty key, a timeout, a non-public
-  URL, or an unusable reply records `ai_failed`.
+- AI integration. `ai_client.py` calls Gemini 3.8 Flash after intake. Photos
+  are read from Order's bucket and sent as inline base64 (`inline_data`),
+  each with a collection / delivery / dispute label. Copy `.env.example` to
+  `.env` and set `AI_PROVIDER_API_KEY` to a Google AI Studio key. Compose
+  reads that file. An empty key, a timeout, a missing object, or an unusable
+  reply records `ai_failed`.

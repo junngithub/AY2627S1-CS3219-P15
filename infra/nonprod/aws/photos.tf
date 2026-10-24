@@ -1,6 +1,6 @@
-# Order photos (collection, delivery, dispute; up to 10 MB each). Private:
-# only the node role can write (node-permissions.tf). Nothing reads them
-# back yet; the frontend only shows whether a photo exists.
+# Order photos (collection, delivery, dispute; up to 10 MB each). Private.
+# The node role writes them (order) and reads them (admin). The frontend
+# only shows whether a photo exists.
 resource "aws_s3_bucket" "photos" {
   for_each = toset(var.envs)
 
