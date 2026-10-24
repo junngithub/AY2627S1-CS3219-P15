@@ -62,10 +62,11 @@ data "aws_iam_policy_document" "node_workloads" {
     }
   }
 
-  # order-service: collection, delivery and dispute photos (order.photos.mode=s3).
+  # order-service writes collection, delivery and dispute photos.
+  # admin-service reads the same keys for the conflict AI job.
   statement {
     sid       = "OrderPhotos"
-    actions   = ["s3:PutObject", "s3:DeleteObject"]
+    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
     resources = [for b in aws_s3_bucket.photos : "${b.arn}/*"]
   }
 }

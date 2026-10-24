@@ -54,7 +54,15 @@ class Settings(BaseSettings):
 
     # Downstream services
     user_service_base_url: str = "http://user-service:8000"
-    order_service_base_url: str = "http://order-service:8000"
+    order_service_base_url: str = "http://order-service:8083"
+    # Order's photo bucket. Keys arrive on conflict intake. Empty access key
+    # uses the node role (Kubernetes). Endpoint + keys are for local MinIO.
+    order_photos_bucket: str = ""
+    order_photos_region: str = "ap-southeast-1"
+    order_photos_endpoint: str = ""
+    order_photos_access_key: str = ""
+    order_photos_secret_key: str = ""
+    order_photos_path_style: bool = False
 
     # AI / VLM — Gemini Flash. Only AI_PROVIDER_API_KEY is required.
     # 2.5 Flash is closed to new API keys; 3.8 Flash is the current free-tier model.
