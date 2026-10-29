@@ -1,8 +1,9 @@
 # Admin Service
 
 FastAPI + PostgreSQL + Kafka service for Friend on Campus (FoC) admin operations:
-user search/promote/demote/suspend/reinstate (F1), and delivery-conflict intake,
-AI evaluation, claim, and resolution (F3). See
+user search/promote/demote/suspend/reinstate (F1), delivery-conflict intake,
+AI evaluation, claim, and resolution (F3), plus user-report and suspension-appeal
+queues. See
 [`docs/schema.md`](docs/schema.md) for the data model.
 
 Listens on **8084**. Interactive docs at `http://localhost:8084/docs` once the app is up.
@@ -10,7 +11,7 @@ Listens on **8084**. Interactive docs at `http://localhost:8084/docs` once the a
 ## What this service owns
 
 - Admin-only HTTP APIs (authorization checked against User Service on every request).
-- Conflict cases and an append-only `audit_logs` table (its own Postgres).
+- Conflict cases, user reports, suspension appeals, and an append-only `audit_logs` table (its own Postgres).
 - Kafka **producer** events that other services consume (Order, User, etc.).
 - Durable APScheduler jobs for AI evaluation, deadline reminders, and auto-resolve.
 
@@ -28,24 +29,28 @@ admin-service/
 │   │   └── security.py           # require_admin: gateway identity headers, 404 not 403
 │   ├── models/
 │   │   ├── conflict_case.py      # conflict_cases + ConflictStatus / FaultParty
+│   │   ├── moderation.py         # user_reports + suspension_appeals
 │   │   └── audit_log.py          # append-only audit trail
 │   ├── schemas/
 │   │   ├── admin.py              # user list / action DTOs
-│   │   └── conflict.py           # conflict request/response DTOs
+│   │   ├── conflict.py           # conflict request/response DTOs
+│   │   └── moderation.py         # report and appeal DTOs
 │   ├── routers/
 │   │   ├── users.py              # /api/v1/admin/users*
-│   │   └── conflicts.py          # /api/v1/admin/conflicts*
+│   │   ├── conflicts.py          # /api/v1/admin/conflicts*
+│   │   └── moderation.py         # /api/v1/admin/reports* and /appeals*
 │   ├── services/
 │   │   ├── kafka_producer.py     # shared event envelope + topic publishes
 │   │   ├── kafka_consumer.py     # listener; no topics subscribed yet
 │   │   ├── ai_client.py          # Gemini Flash fault recommendation
 │   │   ├── order_photos.py       # fetch evidence bytes from Order Service
 │   │   ├── audit.py              # single write path into audit_logs
+│   │   ├── moderation.py         # report and appeal intake, dismiss, reject
 │   │   ├── conflict_resolution.py# the only resolve path (manual + auto)
 │   │   └── scheduler.py          # job registration / cancel (APScheduler)
 │   └── jobs/
 │       └── conflict_jobs.py      # AI eval, reminder, auto-resolve (own DB session)
-├── alembic/                      # migrations (init + conflict stages)
+├── alembic/                      # migrations through 0004_user_reports_and_appeals
 ├── tests/
 ├── mock_user_service.py          # local stub for User Service
 ├── docker-compose.yml            # Postgres, mock User Service, app (Kafka is Order's)
@@ -79,6 +84,7 @@ admin-service/
 |---|---|---|
 | Admin UI / admin user | Gateway sets `x-user-id`, `x-is-admin=true`, and `x-permitted-action=true` (role `ADMIN`, account active, email and Telegram verified). Search and role/status changes also forward that caller's `Authorization` bearer to User Service | **404** (never 403) |
 | Order Service (intake) | No auth. `POST /api/v1/admin/conflicts` is open | — |
+| User Service (report and appeal intake) | No auth. `POST /api/v1/admin/reports` and `POST /api/v1/admin/appeals` are open. Call them from User Service, not from the browser | — |
 
 A missing user id, a non-admin, and an admin who is not permitted all get the same **404**.
 
@@ -95,8 +101,59 @@ Health (no auth): `GET /health` → `{ "status": "ok" }`.
 | GET | `/api/v1/admin/users?search=&page=1` | Relays to User Service search |
 | POST | `/api/v1/admin/users/{user_id}/promote` | Relays role=`admin`; audits; Kafka `UserPromoted` |
 | POST | `/api/v1/admin/users/{user_id}/demote` | Cannot demote self; role=`user`; `UserDemoted` |
-| POST | `/api/v1/admin/users/{user_id}/suspend` | Relays status=`suspended`; `UserSuspended` |
-| POST | `/api/v1/admin/users/{user_id}/reinstate` | Relays status=`verified`; `UserReinstated` |
+| POST | `/api/v1/admin/users/{user_id}/suspend` | Relays status=`suspended`; closes open reports against that user as `actioned`; `UserSuspended` |
+| POST | `/api/v1/admin/users/{user_id}/reinstate` | Relays status=`verified`; closes that user's open appeal as `reinstated`; `UserReinstated` |
+
+### Reports — `/api/v1/admin/reports`
+
+**Intake (no auth).** Does not suspend the reported user.
+
+```http
+POST /api/v1/admin/reports
+```
+
+```json
+{
+  "reporterUserId": "u-1",
+  "reportedUserId": "u-2",
+  "comment": "Did not hand over the item"
+}
+```
+
+Returns **201**. While that pair has an open report, a retry returns the same row and keeps the original comment. A user cannot report themselves (**422**).
+
+**Admin:**
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/v1/admin/reports?status=` | `open`, `dismissed`, or `actioned` |
+| GET | `/api/v1/admin/reports/{report_id}` | Detail |
+| POST | `/api/v1/admin/reports/{report_id}/dismiss` | `open` → `dismissed`. Does not suspend. **409** if it is not open |
+
+### Appeals — `/api/v1/admin/appeals`
+
+**Intake (no auth).** Does not reinstate the user. User Service checks the password and that the account is suspended before calling this.
+
+```http
+POST /api/v1/admin/appeals
+```
+
+```json
+{
+  "userId": "u-2",
+  "message": "The report was about someone else"
+}
+```
+
+Returns **201**. While that user has an open appeal, a retry returns the same row and keeps the original message.
+
+**Admin:**
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/v1/admin/appeals?status=` | `open`, `rejected`, or `reinstated` |
+| GET | `/api/v1/admin/appeals/{appeal_id}` | Detail |
+| POST | `/api/v1/admin/appeals/{appeal_id}/reject` | `open` → `rejected`. The suspension stays. **409** if it is not open |
 
 ### Conflicts — `/api/v1/admin/conflicts`
 
@@ -264,10 +321,14 @@ pytest
 
 `tests/test_settings.py` covers the Kubernetes settings: the database URL form
 and the Kafka login (no live stack).
-`tests/test_conflicts.py` covers the 404-not-403 admin check (ASGI, no live stack).
-`tests/conftest.py` also exposes a live-API client fixture against
-`http://localhost:8084` with `Authorization: Bearer admin-sahana` (skips if the
-stack is down).
+`tests/test_gateway.py` covers the 404-not-403 admin check (ASGI, no live stack).
+`tests/test_order_photos.py` covers the S3 key read and the Gemini `inline_data`
+layout with a fake bucket (no live stack).
+`tests/test_moderation.py` covers report and appeal intake, dismiss, reject,
+and the suspend/reinstate close, with an in-memory session (no live stack).
+`tests/test_conflict.py` and `tests/test_user.py` call the Compose stack and
+skip when Admin Service is not reachable at `http://localhost:8084`. Admin
+calls send `x-user-id`, `x-is-admin`, and `x-permitted-action`.
 
 ## Still open
 
@@ -279,6 +340,9 @@ stack is down).
 - A failed Kafka publish is only logged. The database commits first, and if
   Kafka is down the API still succeeds. There is no outbox to retry that event
   later.
+- User reports and suspension appeals are stored here. User Service does not
+  call `POST /api/v1/admin/reports` or `POST /api/v1/admin/appeals` yet, and
+  the frontend has no report form, appeal form, or admin queue for them.
 - First admin. Promote requires an existing admin, so this service cannot create
   the first one. The mock treats any `admin-*` bearer token as an admin. There
   is no bootstrap or seed for a real first admin account.

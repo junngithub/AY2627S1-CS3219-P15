@@ -6,8 +6,8 @@ from app.config import settings
 from app.core.security import AdminDep, CurrentAdmin
 from app.database import get_db
 from app.schemas.admin import ActionResult, UserListResponse
-from app.services import audit
-from app.services import kafka_producer
+from app.services import audit, kafka_producer
+from app.services.moderation import close_open_appeals, close_open_reports
 
 router = APIRouter(prefix="/api/v1/admin/users", tags=["admin-users"])
 
@@ -79,6 +79,7 @@ async def suspend_user(
     if resp.status_code != 200:
         raise HTTPException(status_code=resp.status_code, detail="User Service rejected suspension")
 
+    await close_open_reports(db, user_id, admin.user_id)
     await audit.record(db, admin_id=admin.user_id, action="suspend", target_id=user_id)
     await db.commit()
     await kafka_producer.publish_user_suspended(user_id=user_id, admin_id=admin.user_id)
@@ -96,6 +97,7 @@ async def reinstate_user(
         raise HTTPException(status_code=resp.status_code, detail="User Service rejected reinstatement")
 
     # F1.3.2 — reinstatement specifically called out as needing admin ID + timestamp.
+    await close_open_appeals(db, user_id, admin.user_id)
     await audit.record(db, admin_id=admin.user_id, action="reinstate", target_id=user_id)
     await db.commit()
     await kafka_producer.publish_user_reinstated(user_id=user_id, admin_id=admin.user_id)

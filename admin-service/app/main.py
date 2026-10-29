@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.routers import conflicts, users
+from app.routers import conflicts, moderation, users
 from app.services import kafka_consumer, kafka_producer, scheduler
 
 
@@ -21,6 +21,8 @@ app = FastAPI(title="Admin Service", lifespan=lifespan)
 
 app.include_router(users.router)
 app.include_router(conflicts.router)
+app.include_router(moderation.reports)
+app.include_router(moderation.appeals)
 
 
 @app.get("/health")

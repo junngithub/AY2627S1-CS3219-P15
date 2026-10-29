@@ -7,7 +7,12 @@ from sqlalchemy import pool
 
 from app.config import settings
 from app.database import Base
-from app.models import AuditLog, ConflictCase  # noqa: F401 — register models on Base.metadata
+from app.models import (  # noqa: F401 — register models on Base.metadata
+    AuditLog,
+    ConflictCase,
+    SuspensionAppeal,
+    UserReport,
+)
 
 config = context.config
 # configparser treats % as interpolation; escape it (URL-encoded passwords).
