@@ -52,6 +52,11 @@ describe("HTTP foundation", () => {
     assert.ok(document.paths["/api/v1/user/search"]);
     assert.ok(document.paths["/api/v1/user/{userId}/role"]);
     assert.ok(document.paths["/api/v1/user/{userId}/status"]);
+    for (const path of ["friends", "friends/request", "friends/requests", "friends/{requestId}/accept", "friends/{requestId}/reject", "friends/{friendUserId}"]) {
+      const operations = document.paths[`/api/v1/user/${path}`] as Record<string, { security: unknown }>;
+      assert.ok(operations);
+      assert.deepEqual(Object.values(operations)[0].security, [{ bearerAuth: [] }]);
+    }
     assert.equal(document.paths["/api/v1/user/authorize"], undefined);
     assert.deepEqual(Object.keys(document.components.securitySchemes), ["bearerAuth"]);
     const lookup = document.paths["/api/v1/user/internal/users/{userId}/telegram"] as { get: { security: unknown } };
@@ -94,6 +99,16 @@ describe("HTTP foundation", () => {
 });
 
 describe("request validation before database access", () => {
+  it("requires bearer authentication for every friendship operation, ignoring spoofed identity", async () => {
+    for (const [endpoint, method] of [["friends", "GET"], ["friends/requests", "GET"], ["friends/request", "POST"],
+      ["friends/not-a-uuid/accept", "POST"], ["friends/not-a-uuid/reject", "POST"], ["friends/not-a-uuid", "DELETE"]]) {
+      const response = await fetch(`${baseUrl}/api/v1/user/${endpoint}`, { method, headers: {
+        "x-user-id": "5999fc1e-1496-45a0-af8e-53ebf70669ba", "x-is-admin": "true", "x-permitted-action": "true",
+      } });
+      assert.equal(response.status, 401);
+      assert.equal(response.headers.get("cache-control"), "no-store");
+    }
+  });
   it("hides admin search and mutations from missing credentials and spoofed headers", async () => {
     for (const [endpoint, method] of [["search", "GET"], ["not-a-uuid/role", "POST"], ["not-a-uuid/status", "POST"]]) {
       const response = await fetch(`${baseUrl}/api/v1/user/${endpoint}`, { method,

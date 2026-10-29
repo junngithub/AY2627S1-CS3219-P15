@@ -16,6 +16,7 @@
     "test:integration:email": "node --test scripts/email.integration.cjs",
     "test:integration:admin-users": "node --test scripts/admin-users.integration.cjs",
     "test:integration:lockout": "node --test scripts/lockout.integration.cjs",
+    "test:integration:friendships": "node --test scripts/friendships.integration.cjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
   },

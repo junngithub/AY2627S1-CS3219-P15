@@ -1,10 +1,12 @@
+import { friendshipPaths, friendshipSchemas } from "./friendships-openapi";
+
 export const openApiDocument = {
   openapi: "3.0.3",
   info: {
     title: "Friends on Campus - User Service API",
     version: "1.0.0",
     description:
-      "Authentication and onboarding endpoints implemented by the Friends on Campus User Service.",
+      "Account, authentication, onboarding and friendship endpoints implemented by the Friends on Campus User Service.",
   },
   servers: [
     {
@@ -16,6 +18,7 @@ export const openApiDocument = {
     { name: "Service", description: "Service health" },
     { name: "Authentication", description: "Public signup, verification and login operations" },
     { name: "User", description: "Authenticated user operations" },
+    { name: "Friendships", description: "Private friend requests and bidirectional friendships" },
   ],
   components: {
     securitySchemes: {
@@ -27,6 +30,7 @@ export const openApiDocument = {
       },
     },
     schemas: {
+      ...friendshipSchemas,
       Error: {
         type: "object",
         required: ["error", "code"],
@@ -184,6 +188,7 @@ export const openApiDocument = {
     },
   },
   paths: {
+    ...friendshipPaths,
     "/health": {
       get: {
         tags: ["Service"],

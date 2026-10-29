@@ -2,7 +2,8 @@ FRIENDS ON CAMPUS - USER SERVICE CONTRACT EDITS
 Based on the API contract pasted on 18 October 2026.
 
 This is a copy-and-paste edit guide, not a replacement for the whole team's
-contract. The shared document itself has NOT been edited. No other service's
+contract. These instructions are manual edits for the shared Google Docs
+contract; this repository update has NOT edited that document. No other service's
 endpoint is changed by these edits. Swagger at /api-docs documents the API.
 
 1. UPDATE AUTH UNDER "Conventions"
@@ -159,12 +160,16 @@ provided. Admin Service must forward its real administrator's bearer token.
 
 8. ADD AN IMPLEMENTATION-STATUS NOTE UNDER THE USER SERVICE TABLE
 ------------------------------------------------------------
-The table includes planned requirements. /me/escalate and all /friends routes
-are not implemented yet. SES email delivery passed manual local frontend tests;
+The table includes planned requirements. /me/escalate is not implemented yet.
+Friendship operations are implemented in this checkout as described in section
+13, including the new pending-request list. The friendship HTTP integration suite
+passed against disposable local PostgreSQL; live/frontend and deployed acceptance
+remain unproven. SES email delivery passed manual local frontend tests;
 deployed-environment setup/testing remains. Lockout notifications are implemented
 as described in section 12; real inbox delivery still needs a controlled check. Admin
-search/role/status endpoints are implemented as specified in section 11 below;
-the Admin relay must forward real bearer credentials before using them.
+search/role/status endpoints are implemented as specified in section 11 below.
+The merged Admin relay now forwards real bearer credentials; deployed relay
+acceptance and frontend response mapping remain outstanding.
 
 9. EVENT CATALOG: CONFIRM WITH CREDIT SERVICE OWNER BEFORE CHANGING CONVENTIONS
 ------------------------------------------------------------
@@ -203,18 +208,24 @@ Order format to this event by documentation alone, or change only one service.
 10. TEAM HANDOFF / DEPLOYMENT CHECKLIST
 ------------------------------------------------------------
 Order Service owner: the merged Order client now calls the private Telegram
-lookup. Continue using trusted caller identity and order access checks. Do not
-trust a frontend-supplied acting UUID. Remove its obsolete X-Service-Token header
-and lookup-token configuration; User no longer checks them. Existing headers are
-ignored, allowing separate client rollout.
+lookup without X-Service-Token; its lookup-token application configuration,
+Compose entry and example environment settings have been removed. Continue
+using trusted caller identity and order access checks. Do not trust a
+frontend-supplied acting UUID. Live lookup/mesh acceptance remains outstanding.
 
 Infrastructure owner: verify the exact lookup route's Order-only Linkerd policy
 allows Order and denies gateway/unmeshed/unlisted clients, with no public-port
 bypass, BEFORE deploying this image. Rebuild User and run its normal migration
 Job; token removal requires no new migration. Remove obsolete lookup-secret
 references from User/Order values and environment secret wiring before deleting
-any shared secret resource. There is no token/mesh switch to set. This branch
-does not edit shared Helm values or delete secrets. Only for load tests,
+any shared secret resource. Those references still exist in repository deployment
+values/environment wiring and Terraform. There is no token/mesh switch to set.
+These documentation edits do not change Helm values or delete secrets.
+Telegram deployment wiring now maps token/username from user-telegram, with dev
+Secrets Manager source foc/dev/user-telegram and one polling replica. Terraform
+seeds empty placeholders; real secret values and live delivery are unverified.
+Without a bot token outside development, challenges return 503 TELEGRAM_NOT_CONFIGURED.
+Only for load tests,
 set APP_ENV to the real non-production
 environment and ENABLE_TEST_VERIFICATION=true. Keep production disabled.
 The first real admin can now be established through the deployment-only command
@@ -226,11 +237,14 @@ links. The promoted account must sign in again. This is not an HTTP endpoint;
 there is no new bootstrap route to add to the contract. See the README for the
 full operational procedure. Normal role-management APIs are in section 11.
 
-Admin Service owner: merged Admin code now uses gateway identity headers; the
-earlier /me/authorize finding is obsolete. Forward the real inbound admin
-Authorization header to all User search/role/status calls and the verification
-override. User independently checks current admin/session state. See section 11
-and the README's Admin integration instructions; no mock admin-* tokens are accepted.
+Admin Service owner: merged Admin code now forwards the real inbound admin
+Authorization header on User search/promote/demote/suspend/reinstate calls and
+explicitly handles downstream non-200 responses. User independently checks
+current admin/session state. Deployment values select http://user:8080; live
+relay acceptance remains outstanding. There is no test-verification relay route
+in admin-service/app/routers/users.py; any future caller of the override must
+also forward a real admin bearer session. See section 11 and the README's Admin
+integration notes; no mock admin-* tokens are accepted.
 
 Frontend owner: the actual signup/email/Telegram/login/password-reset flow
 passed local manual tests on 20 October. Do not merge the older proposal over
@@ -285,8 +299,8 @@ SELF_DEMOTION_FORBIDDEN; 404 USER_NOT_FOUND or hidden caller denial;
 
 These use the requested admin-authorized paths, not new unauthenticated internal
 APIs. User stores its transactional audit; Admin still owns its own audit/events
-after 200. This is not a distributed transaction. Current Admin relay forwarding
-and frontend items/id/role mapping must be updated by their owners. No shared
+after 200. This is not a distributed transaction. Admin relay forwarding is
+implemented; frontend items/id/role mapping still needs updating. No shared
 contract file, Admin/frontend source or deployed mesh setting is edited here.
 See the README's Admin integration instructions and deployment acceptance checklist.
 
@@ -315,3 +329,108 @@ FRONTEND_BASE_URL settings apply; no new endpoint/body, migration, dependency or
 AWS permission is introduced. Automated checks use fake SES; actual lockout
 email receipt remains a deployment acceptance check. The shared contract itself
 has not been edited by this guide.
+
+13. FRIENDSHIPS - UPDATE FIVE ROWS AND ADD REQUEST LIST (27 OCTOBER 2026)
+------------------------------------------------------------
+Apply these changes manually to the User Service table in the shared Google
+Docs contract. This guide is not evidence that the external document was edited.
+Update the existing send/accept/reject/list/remove rows, and ADD the new
+GET /api/v1/user/friends/requests row so recipients can discover request IDs.
+
+All six endpoints require Authorization: Bearer <real-user-session-token>.
+The actual session and current account state are checked; x-user-id or other
+identity headers alone are not credentials. Callers must be active, with neither
+deletion requested nor scheduled. Following the contract's auth-only rule,
+completed email/Telegram verification and permittedAction=true are not additional
+requirements. There is no Order participation lookup. All responses use
+Cache-Control: no-store. Friendship user summaries contain only id/name; no
+passwords, email, Telegram details or role are returned.
+
+Method: POST
+Endpoint: /api/v1/user/friends/request
+Body / Params: { targetUserId }; target account UUID; bearer header
+Purpose: Send an invitation. Returns 201
+{ requestId, senderId, recipientId, status: "pending", createdAt }.
+Rejects self-requests. The target must exist, be active and have no pending
+deletion. At most one pending or accepted row may exist per unordered pair,
+including crossed/concurrent sends; conflicts return 409, never auto-accept.
+
+Method: GET
+Endpoint: /api/v1/user/friends/requests
+Body / Params: ?direction=incoming|outgoing&page=1&pageSize=20 ; bearer header
+Purpose: NEW ROW. Discover pending incoming (default) or outgoing invitations.
+Returns 200 { items: [{ requestId, status: "pending", createdAt,
+sender: { id, name }, recipient: { id, name } }], page, pageSize, total }.
+Only pending rows with an available peer are returned; rejected/removed history
+is not exposed by this list.
+
+Method: POST
+Endpoint: /api/v1/user/friends/{requestId}/accept
+Body / Params: requestId UUID in path; no body; bearer header
+Purpose: Recipient only. Returns 200
+{ requestId, status: "accepted", changed }. Pending becomes accepted with
+changed:true; repeating acceptance while still accepted returns changed:false.
+The sender must remain available, including on a retry. A sender or unrelated
+caller receives 404; incompatible state receives 409.
+
+Method: POST
+Endpoint: /api/v1/user/friends/{requestId}/reject
+Body / Params: requestId UUID in path; no body; bearer header
+Purpose: Recipient only. Returns 200
+{ requestId, status: "rejected", changed }. Pending becomes rejected with
+changed:true; repeating rejection while still rejected returns changed:false.
+An available recipient may reject even when the sender is suspended or pending
+deletion. A sender or unrelated caller receives 404; incompatible state is 409.
+
+Method: GET
+Endpoint: /api/v1/user/friends
+Body / Params: ?page=1&pageSize=20 ; bearer header
+Purpose: List accepted friends in either direction. Returns 200
+{ items: [{ id, name }], page, pageSize, total }. Suspended peers and peers with
+deletion requested/scheduled are excluded, as they are from the request list.
+
+Method: DELETE
+Endpoint: /api/v1/user/friends/{friendUserId}
+Body / Params: other user's UUID in path (NOT requestId); no body; bearer header
+Purpose: Changes an accepted relationship to REMOVED. Returns 204 with no body;
+idempotent even if no accepted relationship exists. Does not cancel a pending
+invitation. An available caller may remove an unavailable peer.
+
+Both lists: page defaults to 1 (integer 1-100000); pageSize defaults to 20
+(integer 1-100). Stable order is createdAt descending, then request UUID
+ascending. total counts matching visible rows before pagination.
+
+Errors: 400 INVALID_USER_ID for missing/malformed UUIDs (including requestId),
+SELF_FRIEND_REQUEST for sending to self, INVALID_PAGINATION or INVALID_DIRECTION
+for malformed list queries; 401 UNAUTHORIZED for unusable session/account;
+404 USER_NOT_FOUND for missing/unavailable send target or
+FRIEND_REQUEST_NOT_FOUND for missing request/wrong actor;
+409 FRIENDSHIP_ALREADY_EXISTS for an active unordered relation,
+FRIEND_REQUEST_NOT_PENDING for incompatible accept/reject state, or
+USER_NOT_AVAILABLE when the acceptance sender is unavailable.
+
+Storage: Friendship.id is requestId; status is PENDING/ACCEPTED/REJECTED/REMOVED
+in PostgreSQL and lowercase on the wire. Rejected/removed rows remain history;
+resending creates a fresh UUID, so an old request cannot accept a new invitation.
+Both User foreign keys cascade on physical account deletion. Migration
+20261027000000_friendships adds a not-self CHECK and a custom partial unique
+index on the unordered pair while PENDING/ACCEPTED. These SQL constraints are
+not fully represented by Prisma 5's schema; use the migration workflow rather
+than relying on db push. This guide claims no normal-database migration or
+deployment. Reported validation on 27 October 2026: Prisma Client generation,
+prisma validate, TypeScript build, 74/74 unit tests and
+node --check scripts/friendships.integration.cjs passed.
+test:integration:friendships passed
+against real local PostgreSQL in a disposable user_friendships_it_<random>
+database, which was dropped afterward. It covered all six HTTP endpoints,
+auth denials/spoofing, input bounds, discovery/privacy, bidirectionality and
+idempotency, fresh IDs on re-invitation, concurrent crossed sends/accept-reject,
+direct database self/pair constraints, transactional revoked-session checks,
+pagination and cascades. All five existing isolated regression suites also
+passed after the new migration/code: email, lifecycle, admin-bootstrap,
+admin-users and lockout (six isolated suites total). All temporary test databases
+were cleaned up by their scripts. Only the Compose db service was started; no
+normal database was migrated or normal account mutated, no real messages were
+sent, and the application container and Telegram poller were not started.
+Account escalation remains unimplemented; live/frontend friendship acceptance,
+load acceptance and the complete cross-service end-to-end flow remain unproven.

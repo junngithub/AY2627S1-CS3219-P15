@@ -6,7 +6,7 @@ We already have an executable schema in [prisma/schema.prisma](../prisma/schema.
 
 ## Table relationships
 
-All seven tables belong to the User Service PostgreSQL database. They are not separate databases or containers. The diagram shows selected columns; the tables below explain every stored field.
+All eight tables belong to the User Service PostgreSQL database. They are not separate databases or containers. The diagram shows selected columns; the tables below explain every stored field.
 
 ```mermaid
 erDiagram
@@ -15,6 +15,8 @@ erDiagram
     User ||--o{ PasswordResetToken : has
     User ||--o{ TelegramVerificationChallenge : has
     User ||--o| UserVerifiedOutbox : queues
+    User ||--o{ Friendship : sends
+    User ||--o{ Friendship : receives
 
     User {
         uuid id PK
@@ -27,6 +29,14 @@ erDiagram
         datetime telegramVerifiedAt "nullable"
         UserRole role
         AccessStatus accessStatus
+    }
+    Friendship {
+        uuid id PK "API requestId"
+        uuid senderId FK
+        uuid recipientId FK
+        FriendshipStatus status
+        datetime createdAt
+        datetime updatedAt
     }
     EmailVerificationOtp {
         uuid id PK
@@ -69,10 +79,10 @@ erDiagram
 ```
 
 - **PK (primary key):** uniquely identifies a row. Every table uses an application-generated UUID `id`.
-- **FK (foreign key):** a database-enforced reference to another row. The five child tables above use `userId` to reference `User.id`.
+- **FK (foreign key):** a database-enforced reference to another row. Five child tables use `userId` to reference `User.id`; `Friendship` references `User.id` twice, through `senderId` and `recipientId`.
 - **UK (unique key):** prevents duplicate values. Nullable unique fields allow multiple rows with no value, but not duplicate non-null values.
 - **Nullable:** the field can be empty (`null`), usually meaning an action has not happened yet.
-- **One-to-many:** one user may have zero or many OTPs, sessions, reset tokens and Telegram challenges. Each child belongs to exactly one user.
+- **One-to-many:** one user may have zero or many OTPs, sessions, reset tokens and Telegram challenges. A user may also send and receive many friendship rows; each friendship has exactly one sender and one distinct recipient.
 - **One-to-zero-or-one:** one user may have at most one verification-outbox row, enforced by its unique `userId`.
 
 `UserAuditLog` intentionally has no relationship line: its UUID references are **not foreign keys**. This lets the minimal audit record survive account removal. UUIDs still identify records and should be treated as sensitive, not as anonymous data.
@@ -107,6 +117,26 @@ Every table has `id` (UUID, primary key, generated with `uuid()`) and `createdAt
 | `updatedAt` | Timestamp maintained by Prisma on account updates. |
 
 The name/email/handle rules are application validation; the schema does not impose a 100-character database limit on `name` or a database email-domain check. Required/unique fields, UUID types, enums and foreign keys are database constraints.
+
+### Friendship: invitations, accepted friends and history
+
+| Field | Meaning / rule |
+| --- | --- |
+| `senderId` | Required UUID FK to `User.id`; relation role `FriendshipSender`. Physical sender deletion cascades the row. |
+| `recipientId` | Required UUID FK to `User.id`; relation role `FriendshipRecipient`. Physical recipient deletion cascades the row. |
+| `status` | `FriendshipStatus`: `PENDING` (default), `ACCEPTED`, `REJECTED` or `REMOVED`. API responses use lowercase. |
+| `updatedAt` | Timestamp maintained by Prisma when the row changes. |
+
+The common `id` is the API's `requestId`; `createdAt` records the invitation's creation. `User.sentFriendships` and `User.receivedFriendships` are Prisma navigation properties for the two roles, not additional account columns. An accepted friendship is mutual even though its original sender/recipient remain stored.
+
+The [20261027000000_friendships migration](../prisma/migrations/20261027000000_friendships/migration.sql) adds two custom SQL constraints that Prisma 5 cannot fully express:
+
+- `Friendship_not_self` CHECK enforces `senderId <> recipientId`.
+- `Friendship_active_pair_key` is a unique index on `(LEAST(senderId, recipientId), GREATEST(senderId, recipientId))` only where status is `PENDING` or `ACCEPTED`. This enforces at most one active relation for the unordered pair, including crossed/concurrent requests.
+
+Rejected/removed rows do not occupy the active-pair index, so history can coexist with a later invitation. Resending inserts a new row with a fresh UUID; it never repurposes an old request ID. A crossed request conflicts instead of auto-accepting. The application permits `PENDING` to become `ACCEPTED` or `REJECTED`, and removal changes only `ACCEPTED` to `REMOVED`. These transition/actor rules are application checks; the enum alone does not enforce them. Same-action accept/reject retries are idempotent while the resulting state remains current; removal never cancels a pending request.
+
+Only an active caller with no deletion requested/scheduled may use friendship APIs; completed email/Telegram verification is not an additional requirement. Suspended/deleting peers are excluded from friend/request lists and send targets. Acceptance requires an available sender, including retries; rejection/removal can operate on an existing relation with an unavailable peer. These availability rules filter/check account rows rather than deleting friendship history or changing its status. API user summaries expose only `id`/`name`, never email, Telegram, role or credentials.
 
 ### EmailVerificationOtp: email verification attempts
 
@@ -200,7 +230,7 @@ Login lockout (`lockedAt`) and pending deletion (`scheduledDeletionAt`) are also
 
 ## Expiry, deletion and indexes
 
-Each of the five FK-linked child tables uses `onDelete: Cascade`: physically deleting a `User` also deletes its OTPs, sessions, reset tokens, Telegram challenges and outbox row. Scheduling deletion is not immediate physical deletion. It revokes credentials, sets a deadline and lets the cleanup worker remove the account after that deadline. Correct-password login before the deadline can cancel the request; it does not restore old revoked sessions.
+All six FK-linked child tables use `onDelete: Cascade`: physically deleting a `User` also deletes its OTPs, sessions, reset tokens, Telegram challenges, outbox row and friendships where it is sender or recipient. Scheduling deletion is not immediate physical deletion. It revokes credentials, sets a deadline and lets the cleanup worker remove the account after that deadline. Correct-password login before the deadline can cancel the request; it does not restore old revoked sessions.
 
 There is no automatic retention sweep for all expired OTP/session/reset/challenge rows described by this schema. Expiry makes a credential unusable through application checks; it does not by itself delete its row. Audit retention and any future cleanup policy need separate operational decisions.
 
@@ -209,6 +239,7 @@ Explicit non-unique indexes are:
 | Table | Indexed fields |
 | --- | --- |
 | `User` | `accessStatus`; `scheduledDeletionAt` |
+| `Friendship` | `(senderId, status, createdAt, id)`; `(recipientId, status, createdAt, id)` |
 | `EmailVerificationOtp` | `(userId, createdAt)`; `expiresAt` |
 | `AuthSession` | `userId`; `expiresAt` |
 | `PasswordResetToken` | `userId`; `expiresAt` |
@@ -218,8 +249,10 @@ Explicit non-unique indexes are:
 
 An index helps PostgreSQL locate matching rows without scanning the whole table. Primary/unique constraints also create indexes. Indexes do not independently enforce code expiry or application permissions.
 
+The custom unique `Friendship_active_pair_key` described above is additional to these non-unique indexes. Use the migration SQL to install it and the not-self CHECK; `prisma db push` alone does not reproduce those protections.
+
 ## Changing the schema safely
 
 Changing documentation does not change PostgreSQL. A future structural change normally requires updating `schema.prisma`, generating/reviewing a migration, applying it to the intended database through the project's migration workflow, regenerating Prisma Client and testing the affected flows. Existing databases need migrations; rebuilding an application image alone is not enough.
 
-Keep this guide aligned with the executable schema. Friendship and account-escalation storage are not implemented and are intentionally absent from the diagram. For setup and existing test commands, use the [README](../README.md) rather than copying credentials or duplicating command lists here.
+Keep this guide aligned with the executable schema and custom migration SQL. Friendship storage is implemented in this checkout by migration `20261027000000_friendships`. Reported validation on 27 October 2026 passed Prisma Client generation, `prisma validate`, the TypeScript build, 74/74 unit tests and the friendship integration script's `node --check`. All six isolated integration suites passed after the new migration/code: friendships, email, lifecycle, admin-bootstrap, admin-users and lockout. The friendship suite applied migrations to real local PostgreSQL in a disposable `user_friendships_it_<random>` database; it checked direct self/pair constraints, concurrency, fresh request IDs and cascades alongside HTTP behavior. All temporary test databases were cleaned up by their scripts. No normal database was migrated or normal account mutated, no real messages were sent, and the application container and Telegram poller were not started. Live/frontend, deployed, load and cross-service end-to-end acceptance remain unproven. Account-escalation storage remains unimplemented and absent from the diagram. For setup and existing test commands, use the [README](../README.md) rather than copying credentials or duplicating command lists here.

@@ -14,7 +14,7 @@ Owns user registration, verification, authentication, profile status, account li
 - Interactive Swagger/OpenAPI documentation
 - Docker Compose configuration for the service and its own PostgreSQL database
 
-Email and Telegram verification, password recovery/change, account deletion, admin user search/role/status updates, and login-lockout notifications are implemented. Order can look up Telegram handles through a service-authenticated endpoint. An audited admin verification override is available for non-production load tests. Email delivery supports AWS SES when configured, with a development logger for local work. Telegram uses a real verification bot when configured, or a development logger locally without a bot. Account escalation and friendship management remain to be implemented. Cross-service integration still needs acceptance testing.
+Email and Telegram verification, password recovery/change, account deletion, admin user search/role/status updates, login-lockout notifications, and friendship management are implemented in this checkout. Order can look up Telegram handles through a private endpoint whose caller access relies on the Order-only mesh policy. An audited admin verification override is available for non-production load tests. Email delivery supports AWS SES when configured, with a development logger for local work. Telegram uses a real verification bot when configured, or a development logger locally without a bot. Account escalation remains to be implemented. Cross-service integration still needs acceptance testing.
 
 A deployment-only first-admin bootstrap command is available. It promotes an explicitly selected verified account; it is not an HTTP endpoint and never runs automatically.
 
@@ -277,6 +277,8 @@ To enable actual Telegram messages:
 
 The implementation uses outbound long polling, so local testing does not require AWS or a public webhook. Run **one poller per bot**: if User Service has several replicas, set `TELEGRAM_POLLING_ENABLED=false` on all but one poller, or arrange a dedicated worker. Each environment should have its own bot. Production deployments must inject credentials through their secret configuration.
 
+Repository deployment values now wire `TELEGRAM_BOT_TOKEN` and `TELEGRAM_BOT_USERNAME` from the optional `user-telegram` Kubernetes Secret. Dev values map both keys from Secrets Manager `foc/dev/user-telegram`, select one replica and enable polling. Terraform seeds empty placeholder values; this does not prove that real credentials have been supplied or deployed. Without a bot token outside development, challenge requests return `503 TELEGRAM_NOT_CONFIGURED`. Live secret values and bot delivery have not been verified by this documentation review.
+
 ### Verification event and Credit integration
 
 The `UserVerified` event is saved atomically in `UserVerifiedOutbox` after both verification checks. Email verification alone no longer publishes it. When Kafka is configured, a worker retries pending rows every five seconds and marks them published only after Kafka acknowledges the send. If Kafka is disabled, rows remain pending. Retries preserve the event ID and occurrence time; Credit must continue to handle duplicates idempotently.
@@ -308,6 +310,41 @@ Authorization: Bearer <token>
 ```
 
 `/me` returns `{ id, name, email, telegramHandle, status, isAdmin }`. The `id` is the user's UUID. `nextSteps` in signup, email verification, and `/me/status` uses the codes `VERIFY_EMAIL`, `VERIFY_TELEGRAM`, `CONTACT_ADMIN`, and `CANCEL_PENDING_DELETION`.
+
+### Friendships
+
+All six operations require `Authorization: Bearer <real-user-session-token>` and return `Cache-Control: no-store`. User checks the actual session and current account state; identity headers alone do not authenticate the caller. The caller must be active with neither deletion requested nor scheduled. Following the contract's authentication-only rule, friendship operations do not additionally require completed email/Telegram verification or `permittedAction=true`. No Order participation lookup is performed.
+
+Paths below are relative to `/api/v1/user`:
+
+| Method and path | Body / query | Success response |
+| --- | --- | --- |
+| `POST /friends/request` | `{ "targetUserId": "<user-uuid>" }` | `201 { requestId, senderId, recipientId, status: "pending", createdAt }` |
+| `GET /friends/requests` | `?direction=incoming&page=1&pageSize=20` | `200 { items: [{ requestId, status: "pending", createdAt, sender: { id, name }, recipient: { id, name } }], page, pageSize, total }` |
+| `POST /friends/{requestId}/accept` | No body | `200 { requestId, status: "accepted", changed }` |
+| `POST /friends/{requestId}/reject` | No body | `200 { requestId, status: "rejected", changed }` |
+| `GET /friends` | `?page=1&pageSize=20` | `200 { items: [{ id, name }], page, pageSize, total }` |
+| `DELETE /friends/{friendUserId}` | No body; other user's UUID in path | `204`, no body |
+
+`direction` is `incoming` (default) or `outgoing`; the request list contains only pending invitations. Both lists default to page `1`, page size `20`; page must be an integer from `1` to `100000`, and page size from `1` to `100`. They sort by creation time descending, then request UUID ascending, and `total` counts all matching visible rows before pagination. User summaries contain only `id` and `name`; friendship responses expose no passwords, email, Telegram details or role.
+
+Only the invitation's recipient may accept/reject. The first change returns `changed: true`; repeating the same action on that request returns `changed: false` while it remains in that resulting state. An incompatible state returns `409`. Deletion changes an accepted relationship to `REMOVED` and is idempotent, including when no accepted friendship exists; it does not cancel pending invitations. A new invitation after rejection/removal receives a fresh UUID. An old request ID cannot accept a later invitation.
+
+At most one pending or accepted relationship may exist for an unordered pair, including crossed/concurrent sends. A second active request returns `409`; crossed invitations never auto-accept. Rejected and removed rows remain history until an account is physically deleted. Suspended users and users with deletion requested/scheduled are excluded as peers from both lists and cannot receive requests. Accepting requires the sender to remain available, including an acceptance retry. An available caller can still reject an existing invitation from an unavailable sender or remove an accepted friendship with an unavailable peer.
+
+| Error | Meaning |
+| --- | --- |
+| `400 INVALID_USER_ID` | Missing/malformed UUID, including request IDs |
+| `400 SELF_FRIEND_REQUEST` | Sending to yourself |
+| `400 INVALID_PAGINATION` / `INVALID_DIRECTION` | Invalid list query |
+| `401 UNAUTHORIZED` | Invalid/expired/revoked session, suspended caller or caller pending deletion |
+| `404 USER_NOT_FOUND` | Send target is missing or unavailable |
+| `404 FRIEND_REQUEST_NOT_FOUND` | Missing request or caller is not its recipient, including the sender |
+| `409 FRIENDSHIP_ALREADY_EXISTS` | Pending or accepted relationship already exists in either direction |
+| `409 FRIEND_REQUEST_NOT_PENDING` | Accept/reject conflicts with the request's current state |
+| `409 USER_NOT_AVAILABLE` | Acceptance sender is unavailable |
+
+The new [friendship migration](prisma/migrations/20261027000000_friendships/migration.sql) creates the table, not-self check and partial unique index on unordered active pairs. Apply it through the intended environment's migration workflow and regenerate Prisma Client before running the updated service. `prisma db push` alone does not install the custom SQL constraints. The friendship integration suite passed against a disposable local PostgreSQL database, including the migration and direct constraint checks; see the verification results below. This does not establish deployment or migration of the normal database.
 
 ## Run without Docker
 
@@ -358,7 +395,21 @@ npm.cmd run test:integration:lockout
 
 These five suites create and drop their own disposable databases, not the normal `user_db`. They do not send real messages or change normal accounts. Never point these fixtures at a shared or production database. The lockout suite uses fake SES and exercises the five-attempt threshold, concurrent attempts, one notification per lockout, generic failure responses during delivery failure, password-reset recovery, stale password checks, and unavailable-account handling.
 
+For the friendship suite, with local PostgreSQL available on port `5554`, run:
+
+```powershell
+npm.cmd run prisma:generate
+npm.cmd run build
+npm.cmd run test:integration:friendships
+```
+
+The suite applies migrations to a randomly named `user_friendships_it_<random>` database, starts its own HTTP test server on an ephemeral loopback port, and drops that database afterward. It does not migrate normal `user_db` or start email/Telegram/Kafka workers. It covers all six HTTP endpoints, authentication denials and identity spoofing, input bounds, request discovery/privacy, bidirectional friendships and idempotency, fresh request IDs after rejection/removal, concurrent crossed sends and accept/reject races, direct database self/pair constraints, transactional revoked-session checks, pagination and deletion cascades.
+
 Validation on 23 October 2026: 68 unit tests, TypeScript build, all five isolated suites, and the production Docker build passed. Local frontend signup, real SES email/Telegram verification, login and emailed password reset were manually tested on 20 October. Lockout-warning inbox delivery has not been manually exercised. These results do not prove live Linkerd enforcement, the real Admin relay, or the complete Kafka/Credit/Order flow.
+
+Earlier checks on 27 October 2026, before the friendship implementation: 68/68 unit tests and the TypeScript build passed. Docker was initially unavailable (`dockerDesktopLinuxEngine` missing). That limitation was superseded when Docker started and all six isolated suites passed as recorded below; the earlier 68-test result remains historical.
+
+Latest reported results on 27 October 2026: Prisma Client generation, `prisma validate`, the TypeScript build, 74/74 unit tests (including OpenAPI reference/path/security integrity) and `node --check scripts/friendships.integration.cjs` passed. All six isolated integration suites passed after the new migration/code: friendships, email, lifecycle, admin-bootstrap, admin-users and lockout. The friendship suite used real local PostgreSQL in a disposable `user_friendships_it_<random>` database. All temporary test databases were cleaned up by their scripts. Only the Compose `db` service was started; no normal database was migrated or normal account mutated, no real messages were sent, and the application container and Telegram poller were not started. Live/frontend friendship acceptance, deployed behavior, load acceptance and the complete cross-service end-to-end journey remain unproven.
 
 To test password recovery against the real local service and PostgreSQL, run these from `user-service` with Docker Desktop running:
 
@@ -385,9 +436,10 @@ See [API_CONTRACT_UPDATES.txt](API_CONTRACT_UPDATES.txt) for exact edits to the 
 
 - Add authenticated `POST /api/v1/user/request-telegram-verification`, no body, response `202 { telegramBotUrl, expiresAt }`; errors include `401`, `429`, and `503`.
 - Keep `POST /api/v1/user/verify-telegram` authenticated with `{ otp }`, response `{ status, nextSteps }`. Keep the existing password recovery and profile password endpoints.
+- Update the friendship rows and add `GET /api/v1/user/friends/requests` as described in section 13 of the contract edit guide. Clients discover recipient request IDs through that list; request actions use `requestId`, while removal uses `friendUserId`. These are manual shared-contract edits; this checkout has not edited the Google Docs contract.
 - Infrastructure and Credit Service owners: run the normal migration Job with the new image, then test that Credit grants 20 credits only after both verification steps. The event format is unchanged; delivery now retries from the database.
 - Infrastructure owner: rebuild the User image and configure `EMAIL_PROVIDER=ses`, `SES_FROM_EMAIL`, `AWS_REGION=ap-southeast-1` and the deployed `FRONTEND_BASE_URL`. Supply approved workload AWS access with `ses:SendEmail` scoped to the sender identity, not a developer's expiring local credentials. Configure bot secrets and one poller per bot as well. SES is still sandboxed: verify demo recipients in the same account/region. Do not enable development email logging in production.
-- User-side Admin search/role/status endpoints are now implemented; see the integration section below. Admin must forward real bearer credentials, and the Admin frontend response mapping still needs reconciliation. Still outstanding: deployed-environment verification (including a controlled lockout-warning inbox check), account escalation to Admin and friendships. The complete frontend/Order/Credit/Admin journey has not been demonstrated by local onboarding and service-level tests.
+- User-side Admin search/role/status endpoints, Admin's bearer-header forwarding and User friendship operations are implemented; see the integration sections. The Admin frontend response mapping still needs reconciliation. Still outstanding: deployed-environment verification (including a controlled lockout-warning inbox check), live/frontend friendship acceptance testing and account escalation to Admin. The complete frontend/Order/Credit/Admin journey has not been demonstrated by local onboarding and service-level tests.
 
 ## Account deletion (F5)
 
@@ -401,7 +453,7 @@ Content-Type: application/json
 
 Returns `202 { message, scheduledDeletionAt }`. The deadline is six calendar months later, clamping month-end dates when necessary. All current sessions, outstanding reset links and verification challenges are revoked immediately. The last active administrator cannot schedule deletion (`409 LAST_ADMIN`).
 
-Correct-password login before the deadline cancels deletion and creates a new session; old sessions remain revoked. Login and authorization reject an account whose deadline has passed, even if the cleanup worker has not run yet. The worker runs every `USER_DELETION_SWEEP_INTERVAL_SECONDS` (default 3600), removes up to 100 expired accounts per run, and uses database locks to coordinate with login and other workers. User-owned sessions, OTPs, challenges and verification outbox rows are removed through foreign-key cascades. A minimal audit trail stores UUIDs/action/reason, not profile fields. Other services retain their own records; no unagreed cross-service deletion event is invented here.
+Correct-password login before the deadline cancels deletion and creates a new session; old sessions remain revoked. Login and authorization reject an account whose deadline has passed, even if the cleanup worker has not run yet. The worker runs every `USER_DELETION_SWEEP_INTERVAL_SECONDS` (default 3600), removes up to 100 expired accounts per run, and uses database locks to coordinate with login and other workers. User-owned sessions, OTPs, challenges, verification outbox rows and friendships in either participant role are removed through foreign-key cascades. A minimal audit trail stores UUIDs/action/reason, not profile fields. Other services retain their own records; no unagreed cross-service deletion event is invented here.
 
 ## First-admin bootstrap (deployment only)
 
@@ -472,7 +524,7 @@ No `X-Service-Token` is required. Caller authentication is delegated to Linkerd 
 
 Before deploying this version, the infrastructure owner must verify sidecar injection, the Order service-account identity, the Order-only `/api/v1/user/internal/users` route policy, denied access for gateway/unmeshed/unlisted callers, and no public or unprotected port bypass. The current User mesh values declare this policy, but source configuration is not proof of live enforcement. mTLS encryption alone is insufficient.
 
-Order's owner can remove the outgoing header and its token configuration. Infrastructure must remove the unused lookup-secret references from User/Order deployment values and environment secret wiring before deleting any shared secret resource. This User-only change does not edit those files or delete secrets. Leftover headers/settings are ignored by User, so the clients can migrate separately. The old `ORDER_USER_LOOKUP_TOKEN` and `ORDER_USER_LOOKUP_AUTH` settings are no longer read; stale entries in an existing ignored `.env` are harmless and can be removed locally.
+Order's merged client no longer sends `X-Service-Token` or reads its lookup-token configuration; its application configuration, Compose file and example environment have been updated. Obsolete `ORDER_USER_LOOKUP_TOKEN` references still remain in User/Order deployment values and environment secret wiring, and Terraform still defines the shared secret. Infrastructure must review and remove those references before deleting any shared secret resource. These documentation edits do not change deployment configuration or delete secrets. The old `ORDER_USER_LOOKUP_TOKEN` and `ORDER_USER_LOOKUP_AUTH` settings are no longer read by User; stale entries in an existing ignored `.env` can be removed locally.
 
 For isolated local Postman testing, call `http://localhost:8080/api/v1/user/internal/users/<uuid>/telegram` without a token. Without Linkerd, **any caller that can reach this route can perform lookups**. Keep Compose on a trusted development machine/network, do not expose it through a tunnel or public port, and do not use a raw host server bound to all interfaces. A loopback host binding does not authenticate other local processes or containers on the Compose network.
 
@@ -498,13 +550,13 @@ These match the relay routes requested by Admin Service. No schema migration is 
 
 Admin's own audit/events occur after User returns 200. User's transactional audit is not a distributed transaction or a replacement for Admin's audit/outbox.
 
-Required client integration (not applied to other services here):
+Client integration status and remaining handoff:
 
-- In `admin-service/app/routers/users.py`, forward the inbound administrator's `Authorization` header on every outbound User search/role/status request, and the test-verification override if used. Handle downstream non-200 responses explicitly rather than turning them into a generic 500. Set `USER_SERVICE_BASE_URL` to the real User service only after this is wired.
+- `admin-service/app/routers/users.py` now forwards the inbound administrator's `Authorization` header through `_user_call` for search, promote, demote, suspend and reinstate, and explicitly handles downstream non-200 responses. Deployment values set `USER_SERVICE_BASE_URL=http://user:8080`. This is source/configuration evidence; the real relay still needs acceptance testing. The non-production test-verification override has no relay route in this file; any future caller must also supply the real admin bearer session.
 - Linkerd identifies the calling workload; the bearer session identifies the administrator. Removing the Order lookup secret does not remove these admin-session checks.
 - In `frontend/src/lib/adminUsers.ts`, read `result.items` instead of an array/`content`; map `userId = item.id`, `isAdmin = item.role === "admin"`, and `hasMore = result.page * 20 < result.total`. Keep frontend-to-Admin routes unchanged.
 
-For example, the Admin client must include `headers={"Authorization": request.headers.get("authorization", "")}` in its outgoing `httpx` calls. Never log this header.
+Admin forwards only the authorization credential to User, not gateway identity headers as a substitute for it. Never log this header.
 
 Isolated local test (PostgreSQL on port 5554, no real messages/accounts):
 
