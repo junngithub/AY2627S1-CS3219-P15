@@ -363,6 +363,7 @@ export function createUsersRouter(
   router.post(
     "/login",
     asyncHandler(async (request, response) => {
+      response.set("Cache-Control", "no-store");
       const emailInput = requiredString(request.body?.email);
       const password = requiredString(request.body?.password);
       const genericFailure = new AppError(
@@ -383,8 +384,6 @@ export function createUsersRouter(
       if (
         !user ||
         !passwordMatches ||
-        user.lockedAt ||
-        user.accessStatus === "SUSPENDED" ||
         deletionIsDue(user)
       ) {
         if (user && !passwordMatches) {
@@ -401,6 +400,11 @@ export function createUsersRouter(
         throw genericFailure;
       }
 
+      if (user.accessStatus === "SUSPENDED") {
+        throw new AppError(403, "ACCOUNT_SUSPENDED", "Your account is suspended. You may submit an appeal");
+      }
+      if (user.lockedAt) throw genericFailure;
+
       const token = generateSessionToken();
       const expiresAt = new Date(Date.now() + config.sessionTtlHours * 60 * 60_000);
       const loggedInAt = new Date();
@@ -408,8 +412,11 @@ export function createUsersRouter(
       const updatedUser = await prisma.$transaction(async (transaction) => {
         await lockVerificationUser(transaction, user.id);
         const current = await transaction.user.findUnique({ where: { id: user.id } });
-        if (!current || current.passwordHash !== user.passwordHash || current.lockedAt
-          || current.accessStatus === "SUSPENDED" || deletionIsDue(current)) throw genericFailure;
+        if (!current || current.passwordHash !== user.passwordHash || deletionIsDue(current)) throw genericFailure;
+        if (current.accessStatus === "SUSPENDED") {
+          throw new AppError(403, "ACCOUNT_SUSPENDED", "Your account is suspended. You may submit an appeal");
+        }
+        if (current.lockedAt) throw genericFailure;
         if (current.scheduledDeletionAt) {
           await transaction.userAuditLog.create({ data: {
             actorUserId: user.id, targetUserId: user.id, action: "ACCOUNT_DELETION_CANCELLED", reason: "Owner logged in before deletion deadline",

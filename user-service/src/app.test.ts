@@ -52,6 +52,10 @@ describe("HTTP foundation", () => {
     assert.ok(document.paths["/api/v1/user/search"]);
     assert.ok(document.paths["/api/v1/user/{userId}/role"]);
     assert.ok(document.paths["/api/v1/user/{userId}/status"]);
+    const appeals = document.paths["/api/v1/user/appeals"] as { post: { security: unknown } };
+    const reports = document.paths["/api/v1/user/reports"] as { post: { security: unknown } };
+    assert.deepEqual(appeals.post.security, []);
+    assert.deepEqual(reports.post.security, [{ bearerAuth: [] }]);
     for (const path of ["friends", "friends/request", "friends/requests", "friends/{requestId}/accept", "friends/{requestId}/reject", "friends/{friendUserId}"]) {
       const operations = document.paths[`/api/v1/user/${path}`] as Record<string, { security: unknown }>;
       assert.ok(operations);
@@ -99,6 +103,30 @@ describe("HTTP foundation", () => {
 });
 
 describe("request validation before database access", () => {
+  it("rejects malformed and oversized credential JSON without logging its contents", async () => {
+    const logged: unknown[][] = [];
+    const original = console.error;
+    console.error = (...values: unknown[]) => { logged.push(values); };
+    try {
+      const invalid = await fetch(`${baseUrl}/api/v1/user/appeals`, { method: "POST", headers: { "content-type": "application/json" },
+        body: '{"password":"NeverLogThisPassword",' });
+      assert.equal(invalid.status, 400);
+      assert.equal((await invalid.json() as { code: string }).code, "INVALID_JSON");
+      const oversized = await fetch(`${baseUrl}/api/v1/user/appeals`, { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password: "NeverLogThisPassword", message: "x".repeat(33000) }) });
+      assert.equal(oversized.status, 413);
+      assert.equal((await oversized.json() as { code: string }).code, "REQUEST_TOO_LARGE");
+      assert.equal(logged.length, 0);
+    } finally { console.error = original; }
+  });
+  it("requires a real session for reports but not for appeal validation", async () => {
+    const report = await fetch(`${baseUrl}/api/v1/user/reports`, { method: "POST", headers: { "x-is-admin": "true", "x-user-id": "spoofed" } });
+    assert.equal(report.status, 401);
+    const appeal = await fetch(`${baseUrl}/api/v1/user/appeals`, { method: "POST" });
+    assert.equal(appeal.status, 401);
+    assert.equal((await appeal.json() as { code: string }).code, "INVALID_CREDENTIALS");
+    assert.equal(appeal.headers.get("cache-control"), "no-store");
+  });
   it("requires bearer authentication for every friendship operation, ignoring spoofed identity", async () => {
     for (const [endpoint, method] of [["friends", "GET"], ["friends/requests", "GET"], ["friends/request", "POST"],
       ["friends/not-a-uuid/accept", "POST"], ["friends/not-a-uuid/reject", "POST"], ["friends/not-a-uuid", "DELETE"]]) {

@@ -19,6 +19,8 @@ flowchart TB
     kafka --> credit[Credit Service: one-time starting credits]
     order[Order Service] -->|Internal Telegram-handle lookup| user
     admin[Admin Service] -->|Search, role and status APIs with admin bearer session| user
+    user -->|Private report and appeal intake POSTs| admin
+    admin -->|Owns report and appeal records| admindb[(Admin database)]
 ```
 
 - **User Service** validates input, checks credentials and permissions, and changes account records. Prisma is its database-access library, not a separate service or database.
@@ -26,7 +28,7 @@ flowchart TB
 - **SES** delivers account emails. It does not own our user accounts, passwords or verification decisions.
 - **Telegram** delivers verification messages through our bot. The bot code is inside User Service, not a separate container in the local Compose setup. Direct contact links open Telegram; User Service does not host or store chat messages.
 - **Kafka** carries the verification event asynchronously. Credit Service owns balances and the starting-credit grant; User Service does not write Credit's database.
-- **Order and Admin** are API consumers. Their arrows describe integration interfaces, not proof that every client or deployed policy has passed end-to-end testing.
+- **Order and Admin** consume User APIs. User also submits validated reports and suspension appeals to Admin, which owns their records, queues and review decisions in its own database. These arrows describe integration interfaces, not proof that every client or deployed policy has passed end-to-end testing.
 
 ## Authentication and internal access
 
@@ -42,6 +44,9 @@ These integration interfaces have different authentication boundaries:
 | Order's Telegram-handle lookup | Private networking and the deployed Order-only Linkerd route policy. There is no application shared-token check. |
 | User-side Admin search/role/status operations | A real eligible administrator's bearer session, forwarded by Admin Service. Being inside the cluster is not sufficient. |
 | Friendship operations | A real user's bearer session and an active account with no deletion requested/scheduled. No additional verification or Order participation requirement. |
+| User report submission | Real bearer session; active reporter with neither deletion requested nor scheduled, with session/account rechecked before forwarding. |
+| Suspension appeal submission | Public email/password check; only a correctly authenticated suspended, unlocked account before its deletion deadline can proceed. No session is issued. |
+| User-to-Admin report/appeal intake | Private, route-specific caller access required. Admin currently trusts User's validation and does not authenticate intake at application level. |
 
 The public gateway must block `/api/v1/user/internal`. Linkerd mTLS identifies/encrypts service calls, but route authorization is also required to restrict callers. Without the mesh, any caller able to reach the Telegram lookup can use it. Local loopback binding is a development precaution, not a substitute for authentication or network policy. See the README for rollout and allow/deny acceptance tests.
 
@@ -112,6 +117,24 @@ Lists order by creation time descending and request UUID ascending. Each list re
 
 The migration must be applied to the intended database before the updated service runs; `db push` alone cannot install its custom SQL constraints. Reported validation on 27 October 2026 passed Prisma Client generation, `prisma validate`, the TypeScript build, 74/74 unit tests and the friendship integration script's `node --check`. All six isolated integration suites passed after the new migration/code: friendships, email, lifecycle, admin-bootstrap, admin-users and lockout. The friendship suite applied migrations to real local PostgreSQL in a disposable `user_friendships_it_<random>` database. It exercised all six HTTP endpoints, access/privacy rules, idempotency/re-invitation, concurrency, direct SQL constraints, session rechecks, pagination and cascades. All temporary test databases were cleaned up by their scripts. Only the Compose database service was started; the friendship suite used its own ephemeral HTTP server. No normal database was migrated or normal account mutated, no real messages were sent, and the application container and Telegram poller were not started. Live/frontend, deployed, load and cross-service end-to-end acceptance remain unproven.
 
+## Reports, suspension appeals and login
+
+User's `POST /api/v1/user/reports` derives the reporter from a real session, validates `{ reportedUserId, comment }`, rejects self-reporting and requires an existing target before its deletion deadline. Suspended targets and targets awaiting future deletion remain reportable. Comment/message text is trimmed to 1–4000 characters. User's public `POST /api/v1/user/appeals` accepts `{ email, password, message }`, normalizes email and trims/verifies the password as login does. Unknown/wrong/locked/deletion-expired credentials receive generic `401 INVALID_CREDENTIALS`; correct credentials for an active account receive `409 ACCOUNT_NOT_SUSPENDED`. The account is rechecked under a lock before forwarding, and no account lock is held over HTTP.
+
+Login returns `403 ACCOUNT_SUSPENDED` after a correct password for a suspended account before its deletion deadline, even when `lockedAt` is set: suspension precedes lockout. No session is issued and the lock is not cleared. Unknown accounts, wrong passwords, active locked accounts and expired deletion retain generic `401`. Appeals still reject locked accounts with generic `401`; password reset must clear the lock first. This is the explicitly approved exception to the backlog's generic-error rule. Appeals issue no session and do not reinstate or cancel deletion. Existing suspension/reinstatement operations are unchanged. Generic `/me/escalate` and Created-account verification help still need an agreed API.
+
+User forwards camelCase `{ reporterUserId, reportedUserId, comment }` or `{ userId, message }` to Admin's respective `POST /api/v1/admin/reports` and `/api/v1/admin/appeals`. Passwords/tokens are never forwarded. A validated, identity-matched, allowlisted snake_case Admin record is returned with `201` and `Cache-Control: no-store`; exact DTOs and errors are in the README. Admin retains the original text when returning an existing open report for a reporter/target pair or an existing open appeal for a user. Deduplication applies while open, not for the user's lifetime. Submission itself performs no suspension/reinstatement. User's eight tables and schema diagram remain unchanged: report/appeal storage belongs to Admin, with no new User migration or outbox.
+
+The Admin client defaults to a 5-second timeout (configurable up to 30 seconds), rejects redirects, bounds responses to 32 KiB and does not retry automatically. An empty `ADMIN_SERVICE_BASE_URL` leaves other account APIs usable but makes eligible intake return `503 ADMIN_NOT_CONFIGURED`. A configured value must be an HTTP(S) origin without credentials, path beyond `/`, query or fragment. Network errors, timeouts and upstream `429`/`5xx` become sanitized `503`; rejected/invalid responses become `502`, and upstream conflicts become `409 ADMIN_CONFLICT`. Raw errors and payloads are not logged or returned.
+
+Appeals use a bounded process-local limiter keyed by normalized email hash: 10 attempts per 15 minutes, including unknown emails, at most 10,000 entries, returning `429` at the attempt/capacity limit. Restart resets it and replicas do not share it. Ingress throttling remains required. This guard is not a durable or distributed attempt counter.
+
+Deployment handoff remains outstanding: allow the exact public User appeal POST without bearer preauthorization, retain bearer protection for User reports, configure `ADMIN_SERVICE_BASE_URL=http://admin:8084`, and permit User-to-Admin traffic only to intake POSTs. Current Admin mesh callers allow gateway/order and deny User. Block external Admin intake POSTs, including FastAPI trailing-slash redirect variants, while preserving authenticated Admin GET queues/detail and review routes. Admin intake trusts User and must not be publicly reachable as a bypass. Frontend report/appeal forms, login `403` handling and friendship UI belong to their owner. This User Service PR makes no infrastructure, Admin or frontend edits.
+
+The global error handler adds `Cache-Control: no-store`, maps malformed/oversized JSON to `400 INVALID_JSON` / `413 REQUEST_TOO_LARGE` (32 KiB request limit), and avoids logging raw parser/database errors. Unexpected `500` failures log only a constant message, protecting credentials and request bodies.
+
+Final reported checks on 30 October 2026 passed: TypeScript build, Prisma generation/validation, 83/83 unit tests, all seven isolated integration suites (email, lifecycle, admin-bootstrap, admin-users, lockout, friendships and account-support), strict new-unit-test type checking and integration-script syntax checks. All temporary databases were cleaned up. Support integration used real User HTTP/PostgreSQL with an HTTP Admin stub, not the actual Admin application or database. The Node 20 production Docker build and network-isolated smoke test passed (Node 20.20.2, non-root, 256 MiB, no `.env`, health/OpenAPI checks; no database or real Admin exercised). The 183-package install audit and Docker `npm ci` reported zero vulnerabilities. No normal database was migrated, no real email/bot messages were sent and no cloud deployment occurred. Actual Admin, cloud/frontend, gateway/mesh, load and full cross-service acceptance remain unproven; infrastructure changes are handoff only.
+
 ## Why these choices?
 
 | Choice | Reason and trade-off |
@@ -149,11 +172,11 @@ Repository values now wire the optional `user-telegram` Secret's token/username 
 
 ## Current boundaries and remaining work
 
-Implemented areas include signup, both verifications, login/session authorization, profile/status, password recovery/change, login lockout notifications, scheduled account deletion, first-admin bootstrap, User-side Admin management APIs and friendships. The [schema guide](schema.md) explains their stored records.
+Implemented areas include signup, both verifications, login/session authorization, profile/status, password recovery/change, login lockout notifications, scheduled account deletion, first-admin bootstrap, User-side Admin management APIs, friendships, user reports and suspension appeals. The [schema guide](schema.md) explains User-owned records; Admin owns report/appeal storage.
 
 Still outstanding or requiring separate acceptance:
 
-- Account escalation to Admin is not implemented; no escalation table is present. Friendship service-level tests passed, but live/frontend and deployed acceptance remain unproven.
+- Generic `/me/escalate` and Created-account verification help still need an agreed API. Reports and suspension appeals passed the recorded service checks using an HTTP Admin stub. Actual Admin integration, frontend and deployed acceptance remain unproven, as does live/frontend friendship acceptance.
 - Emails are not a durable job queue. A delivery failure or process crash can lose a lockout warning; the verification outbox covers Kafka events, not email sending.
 - Cross-service flows and live gateway/mesh enforcement need acceptance tests in the intended environment. Service-level tests do not prove deployed integration.
 - Load acceptance is unproven: no User load suite/report was found for NFR3 (60,000 accounts, 95% of auth/lookups under 1 second) or NFR6 (100 concurrent users, 95% under 2 seconds). The verification override is test setup, not evidence that these targets pass.
@@ -171,4 +194,5 @@ Still outstanding or requiring separate acceptance:
 | Login lockout and account deletion | [login-security.ts](../src/login-security.ts), [account-lifecycle.ts](../src/account-lifecycle.ts) |
 | Administrator operations | [admin-users.ts](../src/admin-users.ts), [admin-bootstrap.ts](../src/admin-bootstrap.ts) |
 | Friendship lifecycle and HTTP routes | [friendships.ts](../src/friendships.ts), [friendship routes](../src/routes/friendships.ts) |
+| Report/appeal validation, limiter and Admin client | [account-support.ts](../src/account-support.ts), [support routes](../src/routes/account-support.ts), [admin-intake.ts](../src/admin-intake.ts) |
 | Schema and database changes | [schema.prisma](../prisma/schema.prisma), [migrations](../prisma/migrations) |

@@ -17,6 +17,7 @@
     "test:integration:admin-users": "node --test scripts/admin-users.integration.cjs",
     "test:integration:lockout": "node --test scripts/lockout.integration.cjs",
     "test:integration:friendships": "node --test scripts/friendships.integration.cjs",
+    "test:integration:account-support": "node --test scripts/account-support.integration.cjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
   },
@@ -27,6 +28,10 @@
     "express": "^4.19.2",
     "kafkajs": "^2.2.4",
     "swagger-ui-express": "^5.0.1"
+  },
+  "overrides": {
+    "body-parser": "1.20.9",
+    "qs": "6.16.1"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",

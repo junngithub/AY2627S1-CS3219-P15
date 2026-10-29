@@ -1,6 +1,6 @@
 # User Service
 
-Owns user registration, verification, authentication, profile status, account lifecycle, and friendships for Friends on Campus.
+Owns user registration, verification, authentication, profile status, account lifecycle, friendships, and validated report/appeal intake for Friends on Campus.
 
 ## Current implementation
 
@@ -9,12 +9,12 @@ Owns user registration, verification, authentication, profile status, account li
 - Six-digit email OTPs (only hashes are stored)
 - Password hashing with Node.js `scrypt` and a unique salt per password
 - Opaque bearer sessions (only token hashes are stored)
-- Generic login failures, lockout after a configurable number of failed attempts, and a lockout notification through the configured email provider
+- Generic credential failures with an approved correct-password suspension exception, configurable login lockout, and lockout notifications through the configured email provider
 - Account status and profile retrieval
 - Interactive Swagger/OpenAPI documentation
 - Docker Compose configuration for the service and its own PostgreSQL database
 
-Email and Telegram verification, password recovery/change, account deletion, admin user search/role/status updates, login-lockout notifications, and friendship management are implemented in this checkout. Order can look up Telegram handles through a private endpoint whose caller access relies on the Order-only mesh policy. An audited admin verification override is available for non-production load tests. Email delivery supports AWS SES when configured, with a development logger for local work. Telegram uses a real verification bot when configured, or a development logger locally without a bot. Account escalation remains to be implemented. Cross-service integration still needs acceptance testing.
+Email and Telegram verification, password recovery/change, account deletion, admin user search/role/status updates, login-lockout notifications, friendship management, user reports and suspension appeals are implemented in this checkout. Reports and appeals are validated here and stored/reviewed by Admin Service. Order can look up Telegram handles through a private endpoint whose caller access relies on the Order-only mesh policy. An audited admin verification override is available for non-production load tests. Email delivery supports AWS SES when configured, with a development logger for local work. Telegram uses a real verification bot when configured, or a development logger locally without a bot. Generic `/me/escalate` and Created-account verification help still need an agreed API. Cross-service integration still needs acceptance testing.
 
 A deployment-only first-admin bootstrap command is available. It promotes an explicitly selected verified account; it is not an HTTP endpoint and never runs automatically.
 
@@ -180,9 +180,9 @@ The fifth failed password attempt locks the account by default (`LOGIN_MAX_ATTEM
 
 On the transition into lockout, the service attempts an account-locked warning through the existing email provider. It directs the owner to `FRONTEND_BASE_URL/forgot-password`, not a pre-created reset token. Resetting the password unlocks login and revokes old sessions. Already-locked accounts are not notified repeatedly; suspended and deletion-expired accounts do not trigger these warnings. Previously locked accounts are not backfilled on deployment.
 
-All failed logins still return the same `401 INVALID_CREDENTIALS`, including when notification delivery fails. The response does not say whether the account exists, is locked, or received email. SES uses the existing sender/region/permissions; development mode logs a generic notification marker without the recipient address or recovery link, and disabled email sends nothing. Delivery errors are sanitized. See the email limitations above: one application send attempt per transition does not guarantee exactly one delivered email or durable delivery.
+Unknown accounts, wrong passwords, active locked accounts and deletion-expired accounts return the same `401 INVALID_CREDENTIALS`, including when notification delivery fails. With the correct password and before the deletion deadline, a suspended account returns `403 ACCOUNT_SUSPENDED` even when `lockedAt` is set: suspension is checked before lockout. No session is issued and the lock is not cleared. This is the explicitly approved exception to the backlog's generic-login-error rule. Appeals still reject locked accounts with generic `401`; password reset must clear the lock before an appeal can proceed. Suspension/reinstatement behavior is unchanged. SES uses the existing sender/region/permissions; development mode logs a generic notification marker without the recipient address or recovery link, and disabled email sends nothing. Delivery errors are sanitized. See the email limitations above: one application send attempt per transition does not guarantee exactly one delivered email or durable delivery.
 
-There is no new endpoint, dependency, database migration, frontend change or AWS permission required by this feature. A deployment still needs the existing SES configuration and a reachable `FRONTEND_BASE_URL`.
+The lockout notification needs the existing SES configuration and a reachable `FRONTEND_BASE_URL`, with no additional AWS permission or migration. The suspension response needs frontend handling and the separate appeal endpoint below.
 
 ```http
 POST /api/v1/user/login
@@ -346,7 +346,40 @@ At most one pending or accepted relationship may exist for an unordered pair, in
 
 The new [friendship migration](prisma/migrations/20261027000000_friendships/migration.sql) creates the table, not-self check and partial unique index on unordered active pairs. Apply it through the intended environment's migration workflow and regenerate Prisma Client before running the updated service. `prisma db push` alone does not install the custom SQL constraints. The friendship integration suite passed against a disposable local PostgreSQL database, including the migration and direct constraint checks; see the verification results below. This does not establish deployment or migration of the normal database.
 
+### User reports and suspension appeals
+
+| Operation | Request | Access / result |
+| --- | --- | --- |
+| `POST /api/v1/user/reports` | `{ reportedUserId, comment }` | Real bearer session; `201` Admin report record |
+| `POST /api/v1/user/appeals` | `{ email, password, message }` | Public credential check for a suspended account; `201` Admin appeal record |
+
+Both text fields are trimmed and must contain 1–4000 characters (`400 INVALID_SUPPORT_TEXT`). Responses use `Cache-Control: no-store`. Reports derive the reporter UUID from the actual session, ignoring supplied identity headers/body IDs; the caller must be active with neither deletion requested nor scheduled (`401 UNAUTHORIZED` otherwise). The session/account is rechecked transactionally. The reported UUID must be valid (`400 INVALID_USER_ID`), different from the reporter (`400 SELF_REPORT`), and belong to an existing account whose deletion deadline has not passed (`404 USER_NOT_FOUND`). A suspended target or one awaiting a future deletion deadline may still be reported. Submission does not suspend anyone.
+
+Appeals normalize email and trim passwords using the same password verification as login. With valid input, unknown accounts, wrong passwords, locked accounts and deletion-expired accounts receive generic `401 INVALID_CREDENTIALS`; a correctly authenticated active account receives `409 ACCOUNT_NOT_SUSPENDED`. The suspended account is rechecked under its account lock. Submission creates no session, cancels no deletion and does not reinstate the account. Created-account verification help and generic `/api/v1/user/me/escalate` are not implemented.
+
+The public appeal route has a best-effort limiter keyed by the normalized email's hash: 10 requests per 15 minutes per process, including unknown emails. It stores at most 10,000 entries and returns `429 TOO_MANY_APPEAL_ATTEMPTS` when the limit or live-entry capacity is reached. It resets on process restart and is not distributed; ingress rate limiting remains required.
+
+User sends only `{ reporterUserId, reportedUserId, comment }` to Admin's `POST /api/v1/admin/reports`, or `{ userId, message }` to `POST /api/v1/admin/appeals`. Passwords and bearer tokens are never forwarded. Returned records are validated, identity-matched and restricted to these fields:
+
+- Report: `{ id, reporter_user_id, reported_user_id, comment, status, created_at, closed_at, closed_by_admin_id }`; status is `open`, `dismissed` or `actioned`.
+- Appeal: `{ id, user_id, message, status, created_at, closed_at, closed_by_admin_id }`; status is `open`, `rejected` or `reinstated`.
+
+Admin deduplicates one open report per ordered reporter/target pair and one open appeal per user. Retries return the existing row and retain its original text. This is open-record deduplication, not a lifetime submission limit; a closed record allows a later submission. User adds no report/appeal tables or migration and holds no account lock during the HTTP call. Admin owns persistence and review; existing suspension/reinstatement operations remain unchanged.
+
+| Setting | Behavior |
+| --- | --- |
+| `ADMIN_SERVICE_BASE_URL` | Defaults to empty: eligible support submissions return `503 ADMIN_NOT_CONFIGURED`, while other account APIs remain usable. Must be an HTTP(S) origin with no credentials, path beyond `/`, query or fragment. |
+| `ADMIN_REQUEST_TIMEOUT_MS` | Default `5000`, capped at `30000` ms. |
+
+The example environment uses `http://localhost:8084`; User's local Compose default uses `http://host.docker.internal:8084`. No real `.env` is changed by this work. The client rejects redirects, limits responses to 32 KiB, uses the configured timeout and performs no automatic retry. Network/timeout errors and Admin `429`/`5xx` become sanitized `503 ADMIN_UNAVAILABLE`; malformed responses become `502 ADMIN_INVALID_RESPONSE`, other rejected statuses become `502 ADMIN_REQUEST_REJECTED`, and upstream `409` becomes `409 ADMIN_CONFLICT`. Raw upstream errors and payloads are not logged or returned. A failed response can follow a persisted Admin record; a manual retry uses the open-record deduplication above.
+
+Malformed JSON returns `400 INVALID_JSON`; a request body over the 32 KiB parser limit returns `413 REQUEST_TOO_LARGE`. The global error handler sets `Cache-Control: no-store`, does not log raw parser/database errors, and logs only a constant message for unexpected `500 INTERNAL_ERROR` failures, avoiding credential/body disclosure.
+
+Final reported checks on 30 October 2026 passed: TypeScript build, Prisma generation/validation, 83/83 unit tests, all seven isolated integration suites (email, lifecycle, admin-bootstrap, admin-users, lockout, friendships and account-support), strict new-unit-test type checking and integration-script syntax checks. All temporary databases were cleaned up. Support integration used real User HTTP/PostgreSQL with an HTTP Admin stub, not the actual Admin application or database. The Node 20 production Docker build and network-isolated smoke test passed (Node 20.20.2, non-root, 256 MiB, no `.env`, health/OpenAPI checks; no database or real Admin exercised). The 183-package install audit and Docker `npm ci` reported zero vulnerabilities. No normal database was migrated, no real email/bot messages were sent and no cloud deployment occurred. Actual Admin, cloud/frontend, gateway/mesh, load and full cross-service acceptance remain unproven; infrastructure changes are handoff only.
+
 ## Run without Docker
+
+Dependency hardening: User's root `package.json` overrides `body-parser` to `1.20.9` and `qs` to `6.16.1`. These patch releases address the high-severity compressed-body trailing-bytes denial of service ([body-parser advisory](https://github.com/expressjs/body-parser/security/advisories/GHSA-27r3-jxmh-p828)) and the moderate-severity comma-array serialization denial of service ([qs advisory](https://github.com/ljharb/qs/security/advisories/GHSA-6pq8-jhm2-2vcw)). Express `4.22.3` pins the affected versions, so an ordinary targeted update cannot select the fixes; the overrides retain the same dependency major versions without adding a new dependency or upgrading Express's major version. Keep the overrides until upstream dependency declarations accept patched releases, then review removal with the lockfile and regression checks. The refresh changed only two lockfile package entries: `body-parser` `1.20.8` to `1.20.9` and `qs` `6.16.0` to `6.16.1`; Express remains `4.22.3`. Install and final Docker dependency audits reported zero vulnerabilities.
 
 Install dependencies and generate the Prisma client:
 
@@ -409,7 +442,7 @@ Validation on 23 October 2026: 68 unit tests, TypeScript build, all five isolate
 
 Earlier checks on 27 October 2026, before the friendship implementation: 68/68 unit tests and the TypeScript build passed. Docker was initially unavailable (`dockerDesktopLinuxEngine` missing). That limitation was superseded when Docker started and all six isolated suites passed as recorded below; the earlier 68-test result remains historical.
 
-Latest reported results on 27 October 2026: Prisma Client generation, `prisma validate`, the TypeScript build, 74/74 unit tests (including OpenAPI reference/path/security integrity) and `node --check scripts/friendships.integration.cjs` passed. All six isolated integration suites passed after the new migration/code: friendships, email, lifecycle, admin-bootstrap, admin-users and lockout. The friendship suite used real local PostgreSQL in a disposable `user_friendships_it_<random>` database. All temporary test databases were cleaned up by their scripts. Only the Compose `db` service was started; no normal database was migrated or normal account mutated, no real messages were sent, and the application container and Telegram poller were not started. Live/frontend friendship acceptance, deployed behavior, load acceptance and the complete cross-service end-to-end journey remain unproven.
+Reported results on 27 October 2026: Prisma Client generation, `prisma validate`, the TypeScript build, 74/74 unit tests (including OpenAPI reference/path/security integrity) and `node --check scripts/friendships.integration.cjs` passed. All six isolated integration suites passed after the new migration/code: friendships, email, lifecycle, admin-bootstrap, admin-users and lockout. The friendship suite used real local PostgreSQL in a disposable `user_friendships_it_<random>` database. All temporary test databases were cleaned up by their scripts. Only the Compose `db` service was started; no normal database was migrated or normal account mutated, no real messages were sent, and the application container and Telegram poller were not started. Live/frontend friendship acceptance, deployed behavior, load acceptance and the complete cross-service end-to-end journey remain unproven.
 
 To test password recovery against the real local service and PostgreSQL, run these from `user-service` with Docker Desktop running:
 
@@ -439,7 +472,14 @@ See [API_CONTRACT_UPDATES.txt](API_CONTRACT_UPDATES.txt) for exact edits to the 
 - Update the friendship rows and add `GET /api/v1/user/friends/requests` as described in section 13 of the contract edit guide. Clients discover recipient request IDs through that list; request actions use `requestId`, while removal uses `friendUserId`. These are manual shared-contract edits; this checkout has not edited the Google Docs contract.
 - Infrastructure and Credit Service owners: run the normal migration Job with the new image, then test that Credit grants 20 credits only after both verification steps. The event format is unchanged; delivery now retries from the database.
 - Infrastructure owner: rebuild the User image and configure `EMAIL_PROVIDER=ses`, `SES_FROM_EMAIL`, `AWS_REGION=ap-southeast-1` and the deployed `FRONTEND_BASE_URL`. Supply approved workload AWS access with `ses:SendEmail` scoped to the sender identity, not a developer's expiring local credentials. Configure bot secrets and one poller per bot as well. SES is still sandboxed: verify demo recipients in the same account/region. Do not enable development email logging in production.
-- User-side Admin search/role/status endpoints, Admin's bearer-header forwarding and User friendship operations are implemented; see the integration sections. The Admin frontend response mapping still needs reconciliation. Still outstanding: deployed-environment verification (including a controlled lockout-warning inbox check), live/frontend friendship acceptance testing and account escalation to Admin. The complete frontend/Order/Credit/Admin journey has not been demonstrated by local onboarding and service-level tests.
+- User-side Admin search/role/status endpoints, Admin's bearer-header forwarding, friendships, reports and suspension appeals are implemented; see the integration sections. Generic `/me/escalate` and Created-account verification help still need an agreed API. Deployed-environment verification, frontend integration, controlled lockout-warning inbox delivery and the complete frontend/Order/Credit/Admin journey remain unproven.
+
+Moderation handoff only; this PR is User Service only and does not change infrastructure, Admin or frontend source:
+
+- Gateway owner: add the exact public `POST /api/v1/user/appeals` route without the usual bearer-authorization prerequisite. Keep `POST /api/v1/user/reports` protected by the real user bearer session. Add ingress rate limiting to the public credential-checking appeal route.
+- Infrastructure owner: configure User's `ADMIN_SERVICE_BASE_URL=http://admin:8084` and allow private User-to-Admin access only to the two intake POST routes. The current Admin mesh callers allow gateway/order and deny User, so this policy needs an explicit update before deployment.
+- Gateway/mesh owners: block external `POST /api/v1/admin/reports` and `POST /api/v1/admin/appeals`, including trailing-slash requests that FastAPI can redirect to those routes. Preserve authenticated Admin GET queues/detail and review operations. Admin's current intake has no application authentication and trusts User's validation, so direct public intake must not bypass User.
+- Frontend owner: add report and appeal forms, handle login `403 ACCOUNT_SUSPENDED`, and implement friendship UI separately. Apply the shared-contract edits in section 14 of the edit guide. Deployment still needs the friendship migration; report/appeal intake adds no User migration.
 
 ## Account deletion (F5)
 

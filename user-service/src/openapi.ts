@@ -1,4 +1,5 @@
 import { friendshipPaths, friendshipSchemas } from "./friendships-openapi";
+import { accountSupportPaths, accountSupportSchemas } from "./account-support-openapi";
 
 export const openApiDocument = {
   openapi: "3.0.3",
@@ -19,6 +20,7 @@ export const openApiDocument = {
     { name: "Authentication", description: "Public signup, verification and login operations" },
     { name: "User", description: "Authenticated user operations" },
     { name: "Friendships", description: "Private friend requests and bidirectional friendships" },
+    { name: "Account support", description: "User reports and credential-authenticated suspension appeals" },
   ],
   components: {
     securitySchemes: {
@@ -31,6 +33,7 @@ export const openApiDocument = {
     },
     schemas: {
       ...friendshipSchemas,
+      ...accountSupportSchemas,
       Error: {
         type: "object",
         required: ["error", "code"],
@@ -189,6 +192,7 @@ export const openApiDocument = {
   },
   paths: {
     ...friendshipPaths,
+    ...accountSupportPaths,
     "/health": {
       get: {
         tags: ["Service"],
@@ -396,7 +400,7 @@ export const openApiDocument = {
       post: {
         tags: ["Authentication"],
         summary: "Log in and create a session",
-        description: "Public. Locks after five failed password attempts by default (configurable). Attempts one warning email when entering lockout, directing the owner to the frontend forgot-password page. Concurrent failures are counted under a row lock. Already-locked accounts are not notified repeatedly. Correct login before the threshold resets attempts; password reset unlocks login. All login failures keep the same generic 401, including delivery failures. Warnings use the configured email provider, are not queued for retry, and have no exactly-once delivery guarantee.",
+        description: "Public. Locks after five failed password attempts by default (configurable). Attempts one warning email when entering lockout, directing the owner to the frontend forgot-password page. Concurrent failures are counted under a row lock. Wrong/unknown credentials, active-account lockout and expired deletion keep the same generic 401, including email delivery failures. Exception: a correct password on a suspended account before its deletion deadline returns 403 ACCOUNT_SUSPENDED without a session, including when login is also locked. This does not clear lockout; password reset is still required before a locked account can appeal. Warnings are not durably queued or exactly-once. Responses are no-store.",
         requestBody: {
           required: true,
           content: {
@@ -419,6 +423,9 @@ export const openApiDocument = {
               },
             },
           },
+          "403": { description: "Correct password but ACCOUNT_SUSPENDED; no session created", content: {
+            "application/json": { schema: { $ref: "#/components/schemas/Error" } },
+          } },
         },
       },
     },
