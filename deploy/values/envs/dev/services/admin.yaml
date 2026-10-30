@@ -1,0 +1,13 @@
+image:
+  tag: "81b0acf09d897ad65cce54e0e00974350cbcc43c" # git SHA, set by deploy/push-dev.sh
+replicas: 1
+env:
+  # Same private bucket order writes. No keys: the node role is read from
+  # instance metadata (infra/nonprod/aws/node-permissions.tf).
+  ORDER_PHOTOS_BUCKET: foc-dev-order-photos-474265880628
+  ORDER_PHOTOS_REGION: ap-southeast-1
+  ORDER_PHOTOS_PATH_STYLE: "false"
+# Placeholder until there's a Gemini key: paste it into Secrets Manager
+# foc/dev/admin-ai (infra/nonprod/aws/secrets.tf), External Secrets syncs it.
+externalSecrets:
+  admin-ai: [AI_PROVIDER_API_KEY]

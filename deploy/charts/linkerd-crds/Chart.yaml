@@ -1,0 +1,11 @@
+apiVersion: v2
+name: linkerd-crds
+description: >-
+  Wrapper around Linkerd's CRD chart (edge release, vendored under charts/). One
+  per cluster, namespace linkerd, installed before charts/linkerd (ADR-0012).
+type: application
+version: 0.1.0
+dependencies:
+  - name: linkerd-crds
+    version: 2026.10.1 # Linkerd edge-26.10.1, the version spiked on 2026-10-18
+    repository: https://helm.linkerd.io/edge

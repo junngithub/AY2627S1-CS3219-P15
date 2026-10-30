@@ -1,0 +1,21 @@
+# The trust anchor's public certificate, as the ConfigMap Linkerd reads when
+# identity.externalCA is true: linkerd-identity-trust-roots, key ca-bundle.crt.
+# To rotate the anchor, add the new root as a second source, roll out, then
+# remove the old one (ADR-0012).
+apiVersion: trust.cert-manager.io/v1alpha1
+kind: Bundle
+metadata:
+  name: linkerd-identity-trust-roots
+  labels:
+    {{- include "linkerd-identity.labels" . | nindent 4 }}
+spec:
+  sources:
+    - secret:
+        name: linkerd-trust-anchor
+        key: tls.crt
+  target:
+    configMap:
+      key: ca-bundle.crt
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: {{ .Release.Namespace }}

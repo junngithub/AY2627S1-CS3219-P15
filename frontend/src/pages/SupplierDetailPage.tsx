@@ -150,6 +150,9 @@ export function SupplierDetailPage() {
       </dl>
 
       <div className={styles.actions}>
+        <Link to="/requests/new">
+          <Button>Post an errand from here</Button>
+        </Link>
         <Link to="/suppliers">
           <Button variant="secondary">Back to suppliers</Button>
         </Link>

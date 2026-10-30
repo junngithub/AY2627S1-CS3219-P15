@@ -47,8 +47,35 @@
   color: var(--color-text-muted);
 }
 
+/* The code form stretches like the buttons around it; text stays centered. */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: 100%;
+  text-align: left;
+}
+
+.fullWidth {
+  width: 100%;
+}
+
 .separator {
   color: var(--color-text-subtle);
+}
+
+/* An action that reads as a link, e.g. "Log out" on the Telegram step. */
+.linkButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.linkButton:hover {
+  text-decoration: underline;
 }
 
 /* Mobile: content sits in the upper half, actions pinned to the bottom. */

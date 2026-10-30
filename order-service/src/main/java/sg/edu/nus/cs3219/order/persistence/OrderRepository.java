@@ -11,6 +11,7 @@ import sg.edu.nus.cs3219.order.domain.OrderStatus;
 
 import jakarta.persistence.LockModeType;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -33,6 +34,7 @@ public interface OrderRepository extends JpaRepository<OrderEntity, UUID> {
             where o.id = :id
               and o.status = sg.edu.nus.cs3219.order.domain.OrderStatus.CREATED
               and o.courierId is null
+              and lower(o.requesterId) <> lower(:courierId)
             """)
     int acceptIfOpen(
             @Param("id") UUID id,
@@ -75,6 +77,18 @@ public interface OrderRepository extends JpaRepository<OrderEntity, UUID> {
     );
 
     Page<OrderEntity> findByRequesterIdOrderByRequestTimeDesc(String requesterId, Pageable pageable);
+
+    Page<OrderEntity> findByCourierIdAndStatusInOrderByRequestTimeDesc(
+            String courierId,
+            Collection<OrderStatus> statuses,
+            Pageable pageable
+    );
+
+    Page<OrderEntity> findByRequesterIdAndStatusInOrderByRequestTimeDesc(
+            String requesterId,
+            Collection<OrderStatus> statuses,
+            Pageable pageable
+    );
 
     @Query("select o.id from OrderEntity o where o.status = :status and o.collectionDeadline <= :now")
     List<UUID> findCollectionWindowExpired(@Param("status") OrderStatus status, @Param("now") Instant now);

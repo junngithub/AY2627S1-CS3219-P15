@@ -7,6 +7,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.multipart.MultipartFile;
 import sg.edu.nus.cs3219.order.client.AdminClient;
@@ -15,13 +16,18 @@ import sg.edu.nus.cs3219.order.client.Place;
 import sg.edu.nus.cs3219.order.client.RatingClient;
 import sg.edu.nus.cs3219.order.client.SupplierClient;
 import sg.edu.nus.cs3219.order.client.UserAccount;
+import sg.edu.nus.cs3219.order.client.UserClient;
 import sg.edu.nus.cs3219.order.config.OrderProperties;
+import sg.edu.nus.cs3219.order.domain.OrderAction;
 import sg.edu.nus.cs3219.order.domain.OrderStatus;
 import sg.edu.nus.cs3219.order.messaging.OrderMessageFactory;
 import sg.edu.nus.cs3219.order.messaging.OutboxWriter;
 import sg.edu.nus.cs3219.order.persistence.AlertEntity;
 import sg.edu.nus.cs3219.order.persistence.AlertRepository;
 import sg.edu.nus.cs3219.order.persistence.OrderEntity;
+import sg.edu.nus.cs3219.order.persistence.OrderLogEntity;
+import sg.edu.nus.cs3219.order.persistence.OrderLogRepository;
+import sg.edu.nus.cs3219.order.persistence.OrderLogWriter;
 import sg.edu.nus.cs3219.order.persistence.OrderRepository;
 import sg.edu.nus.cs3219.order.persistence.OutboxEntity;
 import sg.edu.nus.cs3219.order.persistence.OutboxRepository;
@@ -47,6 +53,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -56,34 +63,39 @@ class OrderCommandServiceTest {
 
     private final Instant now = Instant.parse("2026-10-02T04:00:00Z");
     private final UUID id = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
-    private final UserAccount requester = new UserAccount("11111111-1111-1111-1111-111111111111", "requester");
-    private final UserAccount courier = new UserAccount("22222222-2222-2222-2222-222222222222", "courier");
-    private final UserAccount other = new UserAccount("33333333-3333-3333-3333-333333333333", "other");
+    private final UserAccount requester = new UserAccount("11111111-1111-1111-1111-111111111111");
+    private final UserAccount courier = new UserAccount("22222222-2222-2222-2222-222222222222");
+    private final UserAccount other = new UserAccount("33333333-3333-3333-3333-333333333333");
 
     @Mock private OrderRepository orders;
     @Mock private AlertRepository alerts;
     @Mock private ProcessedEventRepository processedEvents;
     @Mock private CreditClient credits;
     @Mock private SupplierClient suppliers;
+    @Mock private UserClient users;
     @Mock private RatingClient ratings;
     @Mock private AdminClient admins;
     @Mock private OutboxRepository outboxRepository;
+    @Mock private OrderLogRepository orderLog;
     @Mock private PhotoStore photos;
 
     private OrderCommandService service;
 
     @BeforeEach
     void setUp() {
+        lenient().when(users.telegramHandle(any())).thenReturn("from-user-service");
         service = new OrderCommandService(
                 orders,
                 alerts,
                 processedEvents,
                 credits,
                 suppliers,
+                users,
                 ratings,
                 admins,
                 new OrderMessageFactory(new ObjectMapper()),
                 new OutboxWriter(outboxRepository),
+                new OrderLogWriter(orderLog),
                 photos,
                 new OrderProperties(),
                 Clock.fixed(now, ZoneOffset.UTC)
@@ -108,7 +120,7 @@ class OrderCommandServiceTest {
 
         assertEquals(OrderStatus.CREATED, created.getStatus());
         assertEquals("Print notes", created.getItemDescription());
-        assertEquals("requester", created.getRequesterTelegramHandle());
+        assertEquals("from-user-service", created.getRequesterTelegramHandle());
         assertEquals(4.5, created.getRequesterRating());
         assertEquals(now, created.getRequestTime());
         OrderResponse response = OrderResponse.from(created);
@@ -117,6 +129,32 @@ class OrderCommandServiceTest {
         verify(credits).reserve(created.getId(), "11111111-1111-1111-1111-111111111111", 8, requester);
         verify(alerts).save(any(AlertEntity.class));
         verify(outboxRepository).save(any(OutboxEntity.class));
+        ArgumentCaptor<OrderLogEntity> logged = ArgumentCaptor.forClass(OrderLogEntity.class);
+        verify(orderLog).save(logged.capture());
+        assertEquals(created.getId(), logged.getValue().getOrderId());
+        assertEquals(OrderAction.CREATED.name(), logged.getValue().getAction());
+        assertNull(logged.getValue().getFromStatus());
+        assertEquals(OrderStatus.CREATED.name(), logged.getValue().getToStatus());
+        assertEquals(requester.userId(), logged.getValue().getActorId());
+        assertEquals(now, logged.getValue().getOccurredAt());
+    }
+
+    @Test
+    void systemExpiryIsAppendedWithoutAnActor() {
+        OrderEntity expiring = openOrder();
+        expiring.setAcceptanceExpiry(now.minusSeconds(1));
+        when(orders.lockById(id)).thenReturn(Optional.of(expiring));
+
+        service.expire(id, now);
+
+        ArgumentCaptor<OrderLogEntity> logged = ArgumentCaptor.forClass(OrderLogEntity.class);
+        verify(orderLog).save(logged.capture());
+        assertEquals(id, logged.getValue().getOrderId());
+        assertEquals(OrderAction.ACCEPTANCE_EXPIRED.name(), logged.getValue().getAction());
+        assertEquals(OrderStatus.CREATED.name(), logged.getValue().getFromStatus());
+        assertEquals(OrderStatus.EXPIRED.name(), logged.getValue().getToStatus());
+        assertNull(logged.getValue().getActorId());
+        assertEquals(now, logged.getValue().getOccurredAt());
     }
 
     @Test
@@ -155,7 +193,7 @@ class OrderCommandServiceTest {
     @Test
     void acceptClaimsAnOpenOrder() {
         when(ratings.ratingFor(eq("22222222-2222-2222-2222-222222222222"), any())).thenReturn(4.0);
-        when(orders.acceptIfOpen(eq(id), eq("22222222-2222-2222-2222-222222222222"), eq("courier"), eq(4.0), any(), eq(now)))
+        when(orders.acceptIfOpen(eq(id), eq("22222222-2222-2222-2222-222222222222"), eq("from-user-service"), eq(4.0), any(), eq(now)))
                 .thenReturn(1);
         OrderEntity order = openOrder();
         order.setStatus(OrderStatus.ACCEPTED);
@@ -170,14 +208,27 @@ class OrderCommandServiceTest {
     }
 
     @Test
+    void acceptRejectsTheRequester() {
+        when(orders.findById(id)).thenReturn(Optional.of(openOrder()));
+
+        ApiException rejected = assertThrows(ApiException.class, () -> service.accept(requester, id));
+
+        assertEquals(HttpStatus.CONFLICT, rejected.getStatus());
+        assertEquals("You cannot accept your own order", rejected.getMessage());
+        verify(orders, never()).acceptIfOpen(any(), any(), any(), anyDouble(), any(), any());
+        verify(users, never()).telegramHandle(any());
+    }
+
+    @Test
     void acceptReportsAMissingOrderAndAClaimedOrder() {
         when(ratings.ratingFor(any(), any())).thenReturn(5.0);
         when(orders.acceptIfOpen(any(), any(), any(), anyDouble(), any(), any())).thenReturn(0);
-        when(orders.existsById(id)).thenReturn(false);
+        when(orders.findById(id)).thenReturn(Optional.empty());
         assertThrows(ApiException.class, () -> service.accept(courier, id));
 
-        when(orders.existsById(id)).thenReturn(true);
-        assertThrows(ApiException.class, () -> service.accept(courier, id));
+        when(orders.findById(id)).thenReturn(Optional.of(openOrder()));
+        ApiException claimed = assertThrows(ApiException.class, () -> service.accept(courier, id));
+        assertEquals("This task was already claimed", claimed.getMessage());
     }
 
     @Test
@@ -287,12 +338,7 @@ class OrderCommandServiceTest {
         when(photos.store(id, "dispute", photo)).thenReturn(id + "/dispute.png");
         OrderEntity escalated = service.escalate(requester, id, "wrong item", photo);
         assertEquals(id + "/dispute.png", escalated.getDisputePhotoRef());
-        verify(admins).escalate(org.mockito.ArgumentMatchers.argThat(context ->
-                context.orderId().equals(id)
-                        && "wrong item".equals(context.comment())
-                        && "DELIVERED".equals(context.status())
-                        && "22222222-2222-2222-2222-222222222222".equals(context.courierId())
-                        && (id + "/dispute.png").equals(context.disputePhotoRef())), eq(requester));
+        verify(admins).openConflict(id, requester.userId(), "wrong item", java.util.List.of(id + "/dispute.png"));
     }
 
     @Test
@@ -340,6 +386,11 @@ class OrderCommandServiceTest {
         when(orders.lockById(id)).thenReturn(Optional.of(missed));
         service.escalateMissedDelivery(id, now);
         assertEquals(OrderStatus.ESCALATED, missed.getStatus());
+        verify(admins).openConflict(
+                id,
+                "11111111-1111-1111-1111-111111111111",
+                "Delivery deadline missed",
+                java.util.List.of(id + "/collection.png", id + "/delivery.png"));
 
         OrderEntity onTime = openOrder();
         onTime.setStatus(OrderStatus.COLLECTED);

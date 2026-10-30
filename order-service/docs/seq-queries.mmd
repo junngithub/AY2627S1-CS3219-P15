@@ -1,0 +1,27 @@
+sequenceDiagram
+    actor Caller
+    participant Orders as Order service
+    participant Supplier as Supplier Service
+    participant DB as Postgres
+
+    Caller->>Orders: GET /api/v1/orders?latitude&longitude
+    Orders->>DB: open CREATED orders inside the radius box, excluding the caller
+    Orders-->>Caller: nearest pickup first, then higher reward
+
+    Caller->>Orders: GET /api/v1/orders/search
+    Orders->>Supplier: approved place for each given location id
+    Orders->>DB: open CREATED orders matching pickup or dropoff, excluding the caller
+    Orders-->>Caller: higher reward first
+
+    Caller->>Orders: GET /api/v1/orders/mine
+    Orders->>DB: rows where requester_id is the caller, newest request_time first
+    Caller->>Orders: GET /api/v1/orders/deliveries/past
+    Orders->>DB: caller's DELIVERED, ACKNOWLEDGED, UNACKNOWLEDGED, COMPLETED rows, newest request_time first
+    Caller->>Orders: GET /api/v1/orders/deliveries/active
+    Orders->>DB: caller's ACCEPTED, COLLECTED, ESCALATED, UNDER_REVIEW rows, newest request_time first
+    Caller->>Orders: GET /api/v1/orders/requests/active
+    Orders->>DB: requester CREATED, ACCEPTED, COLLECTED, DELIVERED, ESCALATED, UNDER_REVIEW rows, newest request_time first
+    Caller->>Orders: GET /api/v1/orders/requests/past
+    Orders->>DB: requester ACKNOWLEDGED, UNACKNOWLEDGED, COMPLETED, EXPIRED, CANCELLED rows, newest request_time first
+    Caller->>Orders: GET /api/v1/orders/alerts
+    Orders->>DB: caller alerts with notify_requester true, newest first

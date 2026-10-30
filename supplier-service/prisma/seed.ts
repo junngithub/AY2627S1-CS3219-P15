@@ -32,6 +32,7 @@ const rawData = [
 
 
 async function main() {
+  await prisma.supplierAction.deleteMany({});
   await prisma.supplier.deleteMany({});
   await prisma.category.deleteMany({});
 

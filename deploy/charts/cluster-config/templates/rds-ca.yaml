@@ -1,0 +1,11 @@
+{{- range .Values.envs }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $.Values.rdsCa.configMap }}
+  namespace: {{ .namespace }}
+data:
+  ca.crt: |
+    {{- $.Files.Get $.Values.rdsCa.file | nindent 4 }}
+---
+{{- end }}

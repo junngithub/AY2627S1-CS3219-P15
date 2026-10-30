@@ -92,6 +92,42 @@ public class OrderController {
         return queries.pool(caller, latitude, longitude, page, size).map(OrderResponse::from);
     }
 
+    @GetMapping("/deliveries/past")
+    public PageResponse<OrderResponse> pastDeliveries(
+            UserAccount caller,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        return queries.pastDeliveries(caller, page, size).map(OrderResponse::from);
+    }
+
+    @GetMapping("/deliveries/active")
+    public PageResponse<OrderResponse> activeDeliveries(
+            UserAccount caller,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        return queries.activeDeliveries(caller, page, size).map(OrderResponse::from);
+    }
+
+    @GetMapping("/requests/active")
+    public PageResponse<OrderResponse> activeRequests(
+            UserAccount caller,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        return queries.activeRequests(caller, page, size).map(OrderResponse::from);
+    }
+
+    @GetMapping("/requests/past")
+    public PageResponse<OrderResponse> pastRequests(
+            UserAccount caller,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        return queries.pastRequests(caller, page, size).map(OrderResponse::from);
+    }
+
     @GetMapping("/mine")
     public PageResponse<OrderResponse> mine(
             UserAccount caller,

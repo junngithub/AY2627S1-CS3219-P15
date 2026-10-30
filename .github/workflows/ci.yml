@@ -1,0 +1,173 @@
+# Checks on every pull request: each service's tests (only when it changed),
+# the frontend build, and the Terraform/Helm config the cloud deploy uses.
+name: ci
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      user: ${{ steps.filter.outputs.user }}
+      credit: ${{ steps.filter.outputs.credit }}
+      supplier: ${{ steps.filter.outputs.supplier }}
+      order: ${{ steps.filter.outputs.order }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      infra: ${{ steps.filter.outputs.infra }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            user: [user-service/**]
+            credit: [credit-service/**]
+            supplier: [supplier-service/**]
+            order: [order-service/**]
+            frontend: [frontend/**]
+            infra: [infra/**, deploy/**]
+
+  user:
+    needs: changes
+    if: needs.changes.outputs.user == 'true'
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: { POSTGRES_USER: user, POSTGRES_PASSWORD: user, POSTGRES_DB: user_test }
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://user:user@localhost:5432/user_test
+      OTP_SECRET: ci-only-otp-secret
+    defaults:
+      run:
+        working-directory: user-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20 # same as user-service/Dockerfile
+          cache: npm
+          cache-dependency-path: user-service/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+      - run: npm run build
+      - run: npm test
+
+  credit:
+    needs: changes
+    if: needs.changes.outputs.credit == 'true'
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: { POSTGRES_USER: credit, POSTGRES_PASSWORD: credit, POSTGRES_DB: postgres }
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: credit-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22 # engines.node
+          cache: npm
+          cache-dependency-path: credit-service/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      # test/constants.ts defaults to credit:credit@localhost, as above.
+      - run: npm run test:coverage
+
+  supplier:
+    needs: changes
+    if: needs.changes.outputs.supplier == 'true'
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: supplier-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20 # same as supplier-service/Dockerfile
+          cache: npm
+          cache-dependency-path: supplier-service/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run build
+      - run: npm test # Prisma calls are stubbed
+
+  order:
+    needs: changes
+    if: needs.changes.outputs.order == 'true'
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: order-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+      - run: mvn -B verify # includes the 90% JaCoCo gate
+
+  frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+  infra:
+    needs: changes
+    if: needs.changes.outputs.infra == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.4 # infra/.terraform-version
+      - name: Terraform fmt and validate
+        run: |
+          terraform fmt -check -recursive infra
+          for root in infra/state infra/global/ecr infra/global/github-oidc infra/nonprod/aws infra/nonprod/bootstrap; do
+            terraform -chdir="$root" init -backend=false -input=false >/dev/null
+            terraform -chdir="$root" validate
+          done
+      - uses: azure/setup-helm@v4
+      - name: Render dev the way Argo CD does
+        run: |
+          set -e
+          for f in deploy/values/envs/dev/services/*.yaml; do
+            svc="$(basename "$f" .yaml)"
+            helm template "$svc" deploy/charts/foc-service -n foc-dev \
+              -f "deploy/values/services/$svc.yaml" -f deploy/values/envs/dev/common.yaml -f "$f" \
+              --set image.tag=ci >/dev/null
+          done
+          helm template d deploy/charts/foc-database -f deploy/values/envs/dev/database.yaml >/dev/null
+          helm template g deploy/charts/foc-gateway -n foc-dev -f deploy/values/envs/dev/gateway.yaml >/dev/null
+          helm template c deploy/charts/cluster-config -f deploy/values/clusters/nonprod/cluster-config.yaml >/dev/null

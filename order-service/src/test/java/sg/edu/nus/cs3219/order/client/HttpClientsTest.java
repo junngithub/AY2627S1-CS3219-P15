@@ -27,7 +27,7 @@ class HttpClientsTest {
     private final AtomicReference<String> lastPath = new AtomicReference<>();
     private final AtomicReference<String> lastBody = new AtomicReference<>();
     private final AtomicReference<String> lastUser = new AtomicReference<>();
-    private final UserAccount ada = new UserAccount("ada-id", "ada");
+    private final UserAccount ada = new UserAccount("ada-id");
 
     @BeforeEach
     void setUp() throws Exception {
@@ -62,6 +62,34 @@ class HttpClientsTest {
                     status = 500;
                     yield "{\"error\":\"nope\"}".getBytes(StandardCharsets.UTF_8);
                 }
+                case "/api/v1/user/internal/users/11111111-1111-1111-1111-111111111111/telegram" ->
+                        "{\"userId\":\"11111111-1111-1111-1111-111111111111\",\"telegramHandle\":\"ada_tan\"}".getBytes(StandardCharsets.UTF_8);
+                case "/api/v1/user/internal/users/missing/telegram" -> {
+                    status = 404;
+                    yield "{\"error\":\"User not found\",\"code\":\"USER_NOT_FOUND\"}".getBytes(StandardCharsets.UTF_8);
+                }
+                case "/api/v1/user/internal/users/unverified/telegram" -> {
+                    status = 409;
+                    yield "{\"error\":\"User has not completed verification\",\"code\":\"USER_NOT_VERIFIED\"}".getBytes(StandardCharsets.UTF_8);
+                }
+                case "/api/v1/user/internal/users/blank/telegram" ->
+                        "{\"userId\":\"blank\",\"telegramHandle\":\"\"}".getBytes(StandardCharsets.UTF_8);
+                case "/api/v1/user/internal/users/down/telegram" -> {
+                    status = 500;
+                    yield "{\"error\":\"nope\",\"code\":\"INTERNAL_ERROR\"}".getBytes(StandardCharsets.UTF_8);
+                }
+                case "/api/v1/admin/conflicts" -> {
+                    if (requestBody.contains("\"comment\":\"\"")) {
+                        status = 422;
+                        yield "{\"detail\":\"rejected\"}".getBytes(StandardCharsets.UTF_8);
+                    }
+                    if (requestBody.contains("admin-down")) {
+                        status = 500;
+                        yield "{\"detail\":\"nope\"}".getBytes(StandardCharsets.UTF_8);
+                    }
+                    status = 201;
+                    yield "{\"id\":\"case-1\"}".getBytes(StandardCharsets.UTF_8);
+                }
                 default -> {
                     CreditProblem credit = creditProblem(requestBody);
                     if (credit == null) {
@@ -87,15 +115,19 @@ class HttpClientsTest {
     }
 
     @Test
-    void callsTheOtherServices() {
+    void callsCredit() {
         UUID orderId = UUID.randomUUID();
         clients.reserve(orderId, "ada-id", 8, ada);
+        assertEquals("/api/v1/credit/internal/reserve", lastPath.get());
         assertEquals("ada-id", lastUser.get());
         assertTrue(lastBody.get().contains(orderId.toString()));
         assertTrue(lastBody.get().contains("requesterId"));
         clients.returnReserved(orderId, ada);
-        assertEquals("/api/v1/credit/release", lastPath.get());
+        assertEquals("/api/v1/credit/internal/release", lastPath.get());
+    }
 
+    @Test
+    void callsSupplier() {
         Place place = clients.requirePlace("2", ada);
         assertEquals("2", place.id());
         assertEquals("NUS Co-op", place.name());
@@ -104,6 +136,30 @@ class HttpClientsTest {
         assertEquals(HttpStatus.BAD_REQUEST, assertThrows(ApiException.class, () -> clients.requirePlace("missing", ada)).getStatus());
         assertEquals(HttpStatus.BAD_REQUEST, assertThrows(ApiException.class, () -> clients.requirePlace("slug", ada)).getStatus());
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, assertThrows(ApiException.class, () -> clients.requirePlace("down", ada)).getStatus());
+    }
+
+    @Test
+    void callsUserService() {
+        assertEquals("ada_tan", clients.telegramHandle("11111111-1111-1111-1111-111111111111"));
+        assertEquals(HttpStatus.NOT_FOUND, assertThrows(ApiException.class, () -> clients.telegramHandle("missing")).getStatus());
+        assertEquals(HttpStatus.CONFLICT, assertThrows(ApiException.class, () -> clients.telegramHandle("unverified")).getStatus());
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, assertThrows(ApiException.class, () -> clients.telegramHandle("blank")).getStatus());
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, assertThrows(ApiException.class, () -> clients.telegramHandle("down")).getStatus());
+    }
+
+    @Test
+    void callsAdmin() {
+        UUID orderId = UUID.randomUUID();
+        clients.openConflict(orderId, "ada-id", "wrong item", java.util.List.of("a.png"));
+        assertEquals("/api/v1/admin/conflicts", lastPath.get());
+        assertTrue(lastBody.get().contains("\"orderId\":\"" + orderId + "\""));
+        assertTrue(lastBody.get().contains("\"reporterUserId\":\"ada-id\""));
+        assertTrue(lastBody.get().contains("\"comment\":\"wrong item\""));
+        assertTrue(lastBody.get().contains("a.png"));
+        assertEquals(HttpStatus.BAD_REQUEST, assertThrows(ApiException.class,
+                () -> clients.openConflict(orderId, "ada-id", "", java.util.List.of())).getStatus());
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, assertThrows(ApiException.class,
+                () -> clients.openConflict(orderId, "ada-id", "admin-down", java.util.List.of())).getStatus());
     }
 
     @Test
@@ -145,6 +201,8 @@ class HttpClientsTest {
         assertThrows(ApiException.class, () -> down.reserve(orderId, "ada-id", 1, ada));
         assertThrows(ApiException.class, () -> down.returnReserved(orderId, ada));
         assertThrows(ApiException.class, () -> down.requirePlace("2", ada));
+        assertThrows(ApiException.class, () -> down.telegramHandle("11111111-1111-1111-1111-111111111111"));
+        assertThrows(ApiException.class, () -> down.openConflict(orderId, "ada-id", "wrong item", java.util.List.of()));
     }
 
     private static CreditProblem creditProblem(String body) {
@@ -182,6 +240,7 @@ class HttpClientsTest {
         properties.getClients().setSupplierBaseUrl(baseUrl);
         properties.getClients().setRatingBaseUrl(baseUrl);
         properties.getClients().setAdminBaseUrl(baseUrl);
+        properties.getClients().setUserBaseUrl(baseUrl);
         return new HttpClients(properties);
     }
 }

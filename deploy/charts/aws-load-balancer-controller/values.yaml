@@ -1,0 +1,13 @@
+# Values passed to the vendored chart. clusterName, region and vpcId are per
+# cluster: values/clusters/<cluster>/aws-load-balancer-controller.yaml.
+aws-load-balancer-controller:
+  replicaCount: 1 # non-prod's single node; a restart only delays target changes
+  serviceAccount:
+    name: aws-load-balancer-controller
+  # AWS credentials: the node role (infra/nonprod/aws/node-permissions.tf, ADR-0013).
+  # Don't claim Services of type LoadBalancer: no FoC Service is one in the
+  # cloud, and the controller's role can't create load balancers anyway.
+  enableServiceMutatorWebhook: false
+  resources:
+    requests: { cpu: 20m, memory: 64Mi }
+    limits: { memory: 256Mi }

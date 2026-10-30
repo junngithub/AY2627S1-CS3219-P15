@@ -1,0 +1,19 @@
+sequenceDiagram
+    actor Caller
+    participant Orders as Order service
+    participant Credit as Credit Service
+    participant DB as Postgres
+
+    Caller->>Orders: POST /api/v1/orders/{orderId}/cancel
+    alt requester and status is CREATED
+        Orders->>Credit: POST /api/v1/credit/internal/release
+        Credit-->>Orders: released
+        Orders->>DB: CANCELLED, log, alert, status outbox
+        Orders-->>Caller: 200 CANCELLED
+    else assigned courier, ACCEPTED, collection window still open
+        Orders->>DB: clear courier and return to CREATED
+        Note over DB: credits stay reserved
+        Orders-->>Caller: 200 CREATED
+    else any other caller or status
+        Orders-->>Caller: 409 This order cannot be cancelled
+    end

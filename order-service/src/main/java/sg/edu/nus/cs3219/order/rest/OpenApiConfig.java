@@ -16,12 +16,14 @@ public class OpenApiConfig {
         return new OpenAPI()
                 .info(new Info()
                         .title("Order Service")
-                        .description("Friend on Campus errand orders. The API gateway sends the user id in X-User-Id. X-User-Telegram is optional until the order service loads the handle from User Service.")
+                        .description("Friend on Campus errand orders. The API gateway sends X-User-Id and X-Permitted-Action. Telegram handles are loaded from User Service when an order is created or accepted.")
                         .version("v1"))
-                .addSecurityItem(new SecurityRequirement().addList(CallerHeaders.USER_ID))
+                .addSecurityItem(new SecurityRequirement()
+                        .addList(CallerHeaders.USER_ID)
+                        .addList(CallerHeaders.PERMITTED))
                 .components(new Components()
                         .addSecuritySchemes(CallerHeaders.USER_ID, header(CallerHeaders.USER_ID, "User id from the gateway."))
-                        .addSecuritySchemes(CallerHeaders.TELEGRAM, header(CallerHeaders.TELEGRAM, "Telegram handle. Optional.")));
+                        .addSecuritySchemes(CallerHeaders.PERMITTED, header(CallerHeaders.PERMITTED, "true when the account may use orders.")));
     }
 
     private static SecurityScheme header(String name, String description) {

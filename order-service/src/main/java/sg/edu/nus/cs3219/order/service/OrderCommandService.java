@@ -5,12 +5,13 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import sg.edu.nus.cs3219.order.client.AdminClient;
 import sg.edu.nus.cs3219.order.client.CreditClient;
-import sg.edu.nus.cs3219.order.client.OrderContext;
 import sg.edu.nus.cs3219.order.client.Place;
 import sg.edu.nus.cs3219.order.client.RatingClient;
 import sg.edu.nus.cs3219.order.client.SupplierClient;
 import sg.edu.nus.cs3219.order.client.UserAccount;
+import sg.edu.nus.cs3219.order.client.UserClient;
 import sg.edu.nus.cs3219.order.config.OrderProperties;
+import sg.edu.nus.cs3219.order.domain.OrderAction;
 import sg.edu.nus.cs3219.order.domain.OrderStateMachine;
 import sg.edu.nus.cs3219.order.domain.OrderStatus;
 import sg.edu.nus.cs3219.order.messaging.KafkaTopics;
@@ -19,6 +20,7 @@ import sg.edu.nus.cs3219.order.messaging.OutboxWriter;
 import sg.edu.nus.cs3219.order.persistence.AlertEntity;
 import sg.edu.nus.cs3219.order.persistence.AlertRepository;
 import sg.edu.nus.cs3219.order.persistence.OrderEntity;
+import sg.edu.nus.cs3219.order.persistence.OrderLogWriter;
 import sg.edu.nus.cs3219.order.persistence.OrderRepository;
 import sg.edu.nus.cs3219.order.persistence.ProcessedEventEntity;
 import sg.edu.nus.cs3219.order.persistence.ProcessedEventRepository;
@@ -28,6 +30,8 @@ import sg.edu.nus.cs3219.order.rest.CreateOrderRequest;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -40,10 +44,12 @@ public class OrderCommandService {
     private final ProcessedEventRepository processedEvents;
     private final CreditClient credits;
     private final SupplierClient suppliers;
+    private final UserClient users;
     private final RatingClient ratings;
     private final AdminClient admins;
     private final OrderMessageFactory messages;
     private final OutboxWriter outbox;
+    private final OrderLogWriter orderLog;
     private final PhotoStore photos;
     private final OrderProperties properties;
     private final Clock clock;
@@ -54,10 +60,12 @@ public class OrderCommandService {
             ProcessedEventRepository processedEvents,
             CreditClient credits,
             SupplierClient suppliers,
+            UserClient users,
             RatingClient ratings,
             AdminClient admins,
             OrderMessageFactory messages,
             OutboxWriter outbox,
+            OrderLogWriter orderLog,
             PhotoStore photos,
             OrderProperties properties,
             Clock clock
@@ -67,10 +75,12 @@ public class OrderCommandService {
         this.processedEvents = processedEvents;
         this.credits = credits;
         this.suppliers = suppliers;
+        this.users = users;
         this.ratings = ratings;
         this.admins = admins;
         this.messages = messages;
         this.outbox = outbox;
+        this.orderLog = orderLog;
         this.photos = photos;
         this.properties = properties;
         this.clock = clock;
@@ -85,6 +95,7 @@ public class OrderCommandService {
         if (!request.deliveryTime().isAfter(now) || !request.deliveryTime().isAfter(request.expiryTime())) {
             throw ApiException.badRequest("Delivery deadline must be after the current time and after acceptance expiry");
         }
+        String requesterTelegram = users.telegramHandle(requester.userId());
         Place pickup = suppliers.requirePlace(request.fromLocation(), requester);
         Place dropoff = suppliers.requirePlace(request.toLocation(), requester);
         double requesterRating = ratings.ratingFor(requester.userId(), requester);
@@ -95,7 +106,7 @@ public class OrderCommandService {
             OrderEntity order = new OrderEntity();
             order.setId(id);
             order.setRequesterId(requester.userId());
-            order.setRequesterTelegramHandle(requester.telegramHandle());
+            order.setRequesterTelegramHandle(requesterTelegram);
             order.setRequesterRating(requesterRating);
             order.setItemDescription(request.itemDescription().trim());
             order.setAmount(request.credits());
@@ -114,7 +125,7 @@ public class OrderCommandService {
             order.setCreatedAt(now);
             order.setUpdatedAt(now);
             orders.save(order);
-            publishStatus(order, null, OrderStatus.CREATED, true, now);
+            publishStatus(order, null, OrderStatus.CREATED, true, now, OrderAction.CREATED, requester.userId());
             return order;
         } catch (RuntimeException exception) {
             try {
@@ -128,25 +139,32 @@ public class OrderCommandService {
 
     @Transactional
     public OrderEntity accept(UserAccount courier, UUID orderId) {
+        orders.findById(orderId).ifPresent(existing -> {
+            if (existing.getRequesterId().equalsIgnoreCase(courier.userId())) {
+                throw ApiException.conflict("You cannot accept your own order");
+            }
+        });
         double courierRating = ratings.ratingFor(courier.userId(), courier);
+        String courierTelegram = users.telegramHandle(courier.userId());
         Instant now = clock.instant();
         Instant collectionDeadline = now.plus(properties.getDeadlines().getCollectionWindow());
         int updated = orders.acceptIfOpen(
                 orderId,
                 courier.userId(),
-                courier.telegramHandle(),
+                courierTelegram,
                 courierRating,
                 collectionDeadline,
                 now
         );
         if (updated == 0) {
-            if (!orders.existsById(orderId)) {
-                throw ApiException.notFound(ORDER_NOT_FOUND);
+            OrderEntity existing = orders.findById(orderId).orElseThrow(() -> ApiException.notFound(ORDER_NOT_FOUND));
+            if (existing.getRequesterId().equalsIgnoreCase(courier.userId())) {
+                throw ApiException.conflict("You cannot accept your own order");
             }
             throw ApiException.conflict("This task was already claimed");
         }
         OrderEntity order = require(orderId);
-        publishStatus(order, OrderStatus.CREATED, OrderStatus.ACCEPTED, true, now);
+        publishStatus(order, OrderStatus.CREATED, OrderStatus.ACCEPTED, true, now, OrderAction.ACCEPTED, courier.userId());
         return order;
     }
 
@@ -156,13 +174,13 @@ public class OrderCommandService {
         OrderEntity order = lock(orderId);
         if (order.getRequesterId().equalsIgnoreCase(actor.userId()) && order.getStatus() == OrderStatus.CREATED) {
             credits.returnReserved(orderId, actor);
-            transition(order, OrderStatus.CANCELLED, true, now);
+            transition(order, OrderStatus.CANCELLED, true, now, OrderAction.CANCELLED, actor.userId());
             return order;
         }
         if (order.getStatus() == OrderStatus.ACCEPTED && actor.userId().equalsIgnoreCase(order.getCourierId())) {
             OrderStateMachine.requireBefore(order.getCollectionDeadline(), now, "The 5 minute collection window has closed");
             clearCourier(order);
-            transition(order, OrderStatus.CREATED, true, now);
+            transition(order, OrderStatus.CREATED, true, now, OrderAction.RELEASED, actor.userId());
             return order;
         }
         throw ApiException.conflict("This order cannot be cancelled");
@@ -177,7 +195,7 @@ public class OrderCommandService {
         OrderStateMachine.requireBefore(order.getCollectionDeadline(), now, "The 5 minute collection window has closed");
         order.setCollectionPhotoRef(photos.store(orderId, "collection", photo));
         order.setAcknowledgementDeadline(order.getDeliveryDeadline().plus(properties.getDeadlines().getAcknowledgementWindow()));
-        transition(order, OrderStatus.COLLECTED, true, now);
+        transition(order, OrderStatus.COLLECTED, true, now, OrderAction.COLLECTED, courier.userId());
         return order;
     }
 
@@ -189,7 +207,7 @@ public class OrderCommandService {
         OrderStateMachine.requireCourier(order.snapshot(), courier.userId());
         OrderStateMachine.requireBefore(order.getDeliveryDeadline(), now, "The delivery deadline has passed");
         order.setDeliveryPhotoRef(photos.store(orderId, "delivery", photo));
-        transition(order, OrderStatus.DELIVERED, true, now);
+        transition(order, OrderStatus.DELIVERED, true, now, OrderAction.DELIVERED, courier.userId());
         outbox.append(
                 order.getId(),
                 KafkaTopics.RATING,
@@ -206,7 +224,7 @@ public class OrderCommandService {
         OrderStateMachine.requireRequester(order.snapshot(), requester.userId());
         OrderStateMachine.requireCanAcknowledge(order.snapshot(), now);
         order.setSettledAt(now);
-        transition(order, OrderStatus.ACKNOWLEDGED, true, now);
+        transition(order, OrderStatus.ACKNOWLEDGED, true, now, OrderAction.ACKNOWLEDGED, requester.userId());
         releaseAndAllowRequesterRating(order, "ACKNOWLEDGED", now);
         return order;
     }
@@ -221,9 +239,9 @@ public class OrderCommandService {
         if (photo != null && !photo.isEmpty()) {
             order.setDisputePhotoRef(photos.store(orderId, "dispute", photo));
         }
-        admins.escalate(orderContext(order, comment), requester);
+        admins.openConflict(order.getId(), requester.userId(), comment, evidence(order));
         order.setDisputeText(comment);
-        transition(order, OrderStatus.ESCALATED, true, now);
+        transition(order, OrderStatus.ESCALATED, true, now, OrderAction.ESCALATED, requester.userId());
         return order;
     }
 
@@ -234,7 +252,7 @@ public class OrderCommandService {
             return;
         }
         clearCourier(order);
-        transition(order, OrderStatus.CREATED, true, now);
+        transition(order, OrderStatus.CREATED, true, now, OrderAction.COLLECTION_WINDOW_EXPIRED, null);
     }
 
     @Transactional
@@ -243,7 +261,7 @@ public class OrderCommandService {
         if (!OrderStateMachine.acceptanceExpired(order.snapshot(), now)) {
             return;
         }
-        transition(order, OrderStatus.EXPIRED, true, now);
+        transition(order, OrderStatus.EXPIRED, true, now, OrderAction.ACCEPTANCE_EXPIRED, null);
         outbox.append(order.getId(), KafkaTopics.CREDIT, messages.creditReturn(order, now), now);
     }
 
@@ -253,8 +271,8 @@ public class OrderCommandService {
         if (!OrderStateMachine.deliveryMissed(order.snapshot(), now)) {
             return;
         }
-        transition(order, OrderStatus.ESCALATED, true, now);
-        outbox.append(order.getId(), KafkaTopics.ADMIN_COMMANDS, messages.escalationOpened(order, now), now);
+        admins.openConflict(order.getId(), order.getRequesterId(), "Delivery deadline missed", evidence(order));
+        transition(order, OrderStatus.ESCALATED, true, now, OrderAction.DELIVERY_DEADLINE_MISSED, null);
     }
 
     @Transactional
@@ -264,7 +282,7 @@ public class OrderCommandService {
             return;
         }
         order.setSettledAt(now);
-        transition(order, OrderStatus.UNACKNOWLEDGED, true, now);
+        transition(order, OrderStatus.UNACKNOWLEDGED, true, now, OrderAction.ACKNOWLEDGEMENT_WINDOW_EXPIRED, null);
         releaseAndAllowRequesterRating(order, "UNACKNOWLEDGED", now);
     }
 
@@ -276,7 +294,7 @@ public class OrderCommandService {
             return;
         }
         deletePhotos(order);
-        transition(order, OrderStatus.COMPLETED, false, now);
+        transition(order, OrderStatus.COMPLETED, false, now, OrderAction.COMPLETION_WINDOW_ELAPSED, null);
     }
 
     @Transactional
@@ -299,12 +317,26 @@ public class OrderCommandService {
         Instant now = clock.instant();
         order.setCaseId(caseId);
         if ("admin.review.started".equals(eventType) && OrderStateMachine.canReview(order.snapshot())) {
-            transition(order, OrderStatus.UNDER_REVIEW, true, now);
+            transition(order, OrderStatus.UNDER_REVIEW, true, now, OrderAction.REVIEW_STARTED, null);
             return;
         }
         if ("admin.case.resolved".equals(eventType) && OrderStateMachine.canResolve(order.snapshot())) {
             deletePhotos(order);
-            transition(order, OrderStatus.COMPLETED, true, now);
+            transition(order, OrderStatus.COMPLETED, true, now, OrderAction.CASE_RESOLVED, null);
+        }
+    }
+
+    private static List<String> evidence(OrderEntity order) {
+        List<String> refs = new ArrayList<>();
+        addEvidence(refs, order.getCollectionPhotoRef());
+        addEvidence(refs, order.getDeliveryPhotoRef());
+        addEvidence(refs, order.getDisputePhotoRef());
+        return refs;
+    }
+
+    private static void addEvidence(List<String> refs, String ref) {
+        if (ref != null && !ref.isBlank()) {
+            refs.add(ref);
         }
     }
 
@@ -318,14 +350,30 @@ public class OrderCommandService {
         );
     }
 
-    private void transition(OrderEntity order, OrderStatus to, boolean notifyRequester, Instant now) {
+    private void transition(
+            OrderEntity order,
+            OrderStatus to,
+            boolean notifyRequester,
+            Instant now,
+            OrderAction action,
+            String actorId
+    ) {
         OrderStatus from = order.getStatus();
         order.setStatus(to);
         order.setUpdatedAt(now);
-        publishStatus(order, from, to, notifyRequester, now);
+        publishStatus(order, from, to, notifyRequester, now, action, actorId);
     }
 
-    private void publishStatus(OrderEntity order, OrderStatus from, OrderStatus to, boolean notifyRequester, Instant now) {
+    private void publishStatus(
+            OrderEntity order,
+            OrderStatus from,
+            OrderStatus to,
+            boolean notifyRequester,
+            Instant now,
+            OrderAction action,
+            String actorId
+    ) {
+        orderLog.append(order.getId(), action, from, to, actorId, now);
         AlertEntity alert = new AlertEntity();
         alert.setId(UUID.randomUUID());
         alert.setOrderId(order.getId());
@@ -340,38 +388,6 @@ public class OrderCommandService {
                 KafkaTopics.ORDER_STATUS,
                 messages.statusChanged(order, from, to, notifyRequester, now),
                 now
-        );
-    }
-
-    private static OrderContext orderContext(OrderEntity order, String comment) {
-        return new OrderContext(
-                order.getId(),
-                order.getStatus().name(),
-                order.getItemDescription(),
-                order.getAmount(),
-                order.getRequesterId(),
-                order.getRequesterTelegramHandle(),
-                order.getRequesterRating(),
-                order.getCourierId(),
-                order.getCourierTelegramHandle(),
-                order.getCourierRating(),
-                order.getRequestTime(),
-                order.getAcceptanceExpiry(),
-                order.getDeliveryDeadline(),
-                order.getCollectionDeadline(),
-                order.getAcknowledgementDeadline(),
-                order.getPickupLocationId(),
-                order.getPickupName(),
-                order.getPickupLat(),
-                order.getPickupLng(),
-                order.getDropoffLocationId(),
-                order.getDropoffName(),
-                order.getDropoffLat(),
-                order.getDropoffLng(),
-                order.getCollectionPhotoRef(),
-                order.getDeliveryPhotoRef(),
-                order.getDisputePhotoRef(),
-                comment
         );
     }
 

@@ -1,0 +1,22 @@
+meta {
+  name: requests active not permitted
+  type: http
+  seq: 20
+}
+
+get {
+  url: {{baseUrl}}/api/v1/orders/requests/active
+  body: none
+  auth: none
+}
+headers {
+  X-User-Id: 11111111-1111-1111-1111-111111111111
+  X-Permitted-Action: false
+}
+tests {
+  test("status matches", function() {
+    expect(res.getStatus()).to.equal(403);
+    expect(res.getBody().error).to.include("not permitted");
+  });
+}
+

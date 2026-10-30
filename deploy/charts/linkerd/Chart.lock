@@ -1,0 +1,6 @@
+dependencies:
+- name: linkerd-control-plane
+  repository: https://helm.linkerd.io/edge
+  version: 2026.10.1
+digest: sha256:a72d0b2988fae049c73cad679adc902dbbf67fe516739c979885fb60a8fe6b24
+generated: "2026-10-18T18:44:41.514903+08:00"

@@ -45,7 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class OrderApiTest {
 
     private final UUID id = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
-    private final UserAccount caller = new UserAccount("11111111-1111-1111-1111-111111111111", "requester");
+    private final UserAccount caller = new UserAccount("11111111-1111-1111-1111-111111111111");
 
     @Mock private OrderCommandService commands;
     @Mock private OrderQueryService queries;
@@ -95,6 +95,10 @@ class OrderApiTest {
         when(queries.get(any(), eq(id))).thenReturn(order);
         when(queries.pool(any(), eq(1.2), eq(103.8), eq(0), eq(20))).thenReturn(PageResponse.of(List.of(order), 0, 20, 1));
         when(queries.mine(any(), eq(0), eq(20))).thenReturn(PageResponse.empty(0, 20));
+        when(queries.pastDeliveries(any(), eq(0), eq(20))).thenReturn(PageResponse.empty(0, 20));
+        when(queries.activeDeliveries(any(), eq(0), eq(20))).thenReturn(PageResponse.empty(0, 20));
+        when(queries.activeRequests(any(), eq(0), eq(20))).thenReturn(PageResponse.empty(0, 20));
+        when(queries.pastRequests(any(), eq(0), eq(20))).thenReturn(PageResponse.empty(0, 20));
         when(queries.search(any(), eq("nus-coop"), isNull(), eq(0), eq(20))).thenReturn(PageResponse.empty(0, 20, 0));
         AlertEntity alert = new AlertEntity();
         alert.setId(UUID.randomUUID());
@@ -127,6 +131,10 @@ class OrderApiTest {
                 .andExpect(status().isOk());
         mvc.perform(signed(get("/api/v1/orders").param("latitude", "1.2").param("longitude", "103.8"))).andExpect(status().isOk());
         mvc.perform(signed(get("/api/v1/orders/mine"))).andExpect(status().isOk());
+        mvc.perform(signed(get("/api/v1/orders/deliveries/past"))).andExpect(status().isOk());
+        mvc.perform(signed(get("/api/v1/orders/deliveries/active"))).andExpect(status().isOk());
+        mvc.perform(signed(get("/api/v1/orders/requests/active"))).andExpect(status().isOk());
+        mvc.perform(signed(get("/api/v1/orders/requests/past"))).andExpect(status().isOk());
         mvc.perform(signed(get("/api/v1/orders/search").param("pickupLocationId", "nus-coop"))).andExpect(status().isOk());
         mvc.perform(signed(get("/api/v1/orders/alerts"))).andExpect(jsonPath("$.content[0].toStatus").value("CREATED"));
     }
@@ -139,6 +147,14 @@ class OrderApiTest {
                 .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
         mvc.perform(post("/api/v1/orders").header("X-User-Id", "not-a-uuid").contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/v1/orders")
+                        .header(CallerHeaders.USER_ID, caller.userId())
+                        .header(CallerHeaders.PERMITTED, "false")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("This account is not permitted to use orders"))
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
         mvc.perform(signed(post("/api/v1/orders")).contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").exists())
@@ -156,6 +172,8 @@ class OrderApiTest {
         org.junit.jupiter.api.Assertions.assertEquals(400, handler.handleMissingParam(new org.springframework.web.bind.MissingServletRequestParameterException("photo", "MultipartFile")).getStatusCode().value());
         org.junit.jupiter.api.Assertions.assertEquals(409, handler.handle(ApiException.conflict("taken")).getStatusCode().value());
         org.junit.jupiter.api.Assertions.assertEquals("CONFLICT", handler.handle(ApiException.conflict("taken")).getBody().code());
+        org.junit.jupiter.api.Assertions.assertEquals(403, handler.handle(ApiException.forbidden("not permitted")).getStatusCode().value());
+        org.junit.jupiter.api.Assertions.assertEquals("FORBIDDEN", handler.handle(ApiException.forbidden("not permitted")).getBody().code());
         org.junit.jupiter.api.Assertions.assertEquals(401, handler.handle(ApiException.unauthorized("sign in")).getStatusCode().value());
         org.junit.jupiter.api.Assertions.assertEquals("UNAUTHORIZED", handler.handle(ApiException.unauthorized("sign in")).getBody().code());
         org.junit.jupiter.api.Assertions.assertEquals(404, handler.handle(ApiException.notFound("missing")).getStatusCode().value());
@@ -167,6 +185,6 @@ class OrderApiTest {
     private <B extends AbstractMockHttpServletRequestBuilder<B>> B signed(B request) {
         return request
                 .header(CallerHeaders.USER_ID, caller.userId())
-                .header(CallerHeaders.TELEGRAM, caller.telegramHandle());
+                .header(CallerHeaders.PERMITTED, "true");
     }
 }

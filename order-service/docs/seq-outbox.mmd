@@ -1,0 +1,16 @@
+sequenceDiagram
+    participant Orders as Order service
+    participant DB as Postgres
+    participant Kafka as Kafka
+
+    Note over Orders,DB: The order row, order_log, alert, and outbox commit in one transaction
+    Orders->>DB: insert outbox row with published_at null
+    loop each sweep
+        Orders->>DB: oldest 50 unpublished rows
+        Orders->>Kafka: send topic, key is the order id
+        alt broker accepts the record
+            Orders->>DB: set published_at
+        else send fails or is interrupted
+            Note over Orders,Kafka: leave the row unpublished and retry on the next sweep
+        end
+    end

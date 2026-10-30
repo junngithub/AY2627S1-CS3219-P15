@@ -1,0 +1,6 @@
+# TF:<output> values are filled by deploy/cloud-values.sh. Set explicitly so the
+# controller doesn't need the node's instance metadata to find them.
+aws-load-balancer-controller:
+  clusterName: foc-nonprod # cluster_name
+  region: ap-southeast-1 # region
+  vpcId: vpc-087180cb905974be8

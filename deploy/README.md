@@ -16,7 +16,7 @@ Design: [ADR-0008](../infra/docs/adr/0008-gitops-repo-layout.md),
 ```text
 deploy/
   local.sh                         # local cluster: helm install/upgrade everything (up | status | down)
-  push-local.sh                    # local cluster: build + push an image to Floci ECR, restart what runs it
+  push-local.sh                    # local cluster: build + push images to Floci ECR, restart what runs them
   charts/                          # LEVEL 1: plain Helm charts (work without Argo CD)
     foc-namespace/                 #   ResourceQuota, LimitRange, NetworkPolicy for one env
     strimzi/                       #   wrapper: vendored strimzi-kafka-operator 1.2.0 (charts/*.tgz)
@@ -68,8 +68,8 @@ exist (`retry`, `SkipDryRunOnMissingResource`). A service pod waits in
 client ─▶ Envoy (envoy-<namespace> Service, type LoadBalancer)
            │  1. strip client-sent x-user-id / x-is-admin
            │  2. public exact path?  → forward to the service, no auth
-           │     /api/v1/user/authorize → 404 at the gateway
-           │  3. protected prefix?    → ask user:8080/api/v1/user/authorize
+           │     /api/v1/user/internal/* → 404 at the gateway (legacy /authorize also blocked)
+           │  3. protected prefix?    → ask user:8080/api/v1/user/internal/authorize
            │        401 → back to the client
            │        200 → add x-user-id / x-is-admin from the answer, forward
            ▼
@@ -111,7 +111,7 @@ hard-coding hosts or ports:
 | Service | Gets |
 |---|---|
 | order | `CREDIT_SERVICE_URL`, `SUPPLIER_SERVICE_URL`, `RATING_SERVICE_URL`, `ADMIN_SERVICE_URL`, `USER_SERVICE_URL` |
-| admin | `USER_SERVICE_URL` |
+| admin | `USER_SERVICE_BASE_URL`, `ORDER_SERVICE_BASE_URL` (its own names, `app/config.py`) |
 | credit | `USER_SERVICE_URL` |
 | badges | `USER_SERVICE_URL`, `ORDER_SERVICE_URL` |
 | user, supplier, rating | none (rating only uses Kafka) |
@@ -160,6 +160,7 @@ deploy/local.sh status    # releases, Kafka objects, pods
 deploy/local.sh check     # helm test: database logins, Kafka logins + every ACL, HTTP to every service, requests through the gateway
 deploy/local.sh gateway   # port-forward the gateway to http://localhost:8080 (prints example curls)
 deploy/push-local.sh credit   # rebuild credit-service, push to local ECR, restart deploy/credit
+deploy/push-local.sh          # rebuild and push every image the local cluster runs
 deploy/local.sh down      # uninstall everything, delete namespaces foc + strimzi (and Kafka data)
 ```
 
@@ -210,41 +211,66 @@ UPDATE "User" SET "emailVerifiedAt" = now(), "telegramVerifiedAt" = now()
 UPDATE "User" SET role = 'ADMIN' WHERE email = 'admin@u.nus.edu';
 ```
 
-### Seed Supplier's database (local)
+### Seed Supplier's database
 
-Supplier's seed (`supplier-service/prisma/seed.ts`, data inline) ships in its
-`migrate` image, which has `ts-node`. Run it once as a Job. It **deletes all
-suppliers and categories first**, so only run it on a local database.
+Supplier's seed (`supplier-service/prisma/seed.ts`, 21 campus suppliers
+inline) ships in its `migrate` image, which has `ts-node`. It **deletes all
+suppliers, categories and supplier actions first**. Run it as a one-off Job:
 
 ```bash
-export KUBECONFIG=$PWD/infra/local/kubeconfig
-kubectl -n foc delete job supplier-seed --ignore-not-found
-kubectl -n foc apply -f - <<'EOF'
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: supplier-seed
-spec:
-  backoffLimit: 0
-  ttlSecondsAfterFinished: 600
-  template:
-    spec:
-      restartPolicy: Never
-      containers:
-        - name: seed
-          image: 000000000000.dkr.ecr.ap-southeast-1.localhost:4566/foc/supplier-service:dev-migrate
-          imagePullPolicy: Always
-          command: ["node_modules/.bin/ts-node", "prisma/seed.ts"]
-          env:
-            - name: DATABASE_URL
-              valueFrom: { secretKeyRef: { name: supplier-db, key: DATABASE_URL } }
-          resources:
-            requests: { cpu: 100m, memory: 256Mi }
-            limits: { cpu: "1", memory: 512Mi }
-EOF
-kubectl -n foc wait --for=condition=complete job/supplier-seed --timeout=5m
-kubectl -n foc logs job/supplier-seed     # "Seeded 21 suppliers with categories."
+deploy/seed-supplier.sh local    # Floci
+deploy/seed-supplier.sh dev      # AWS dev (AWS_PROFILE=cs3219-dev, KUBECONFIG unset)
 ```
+
+It asks you to type the env's name before wiping (`--yes` skips that), uses
+the image tag from that env's values, and prints `Seeded 21 suppliers ...`.
+
+## Service mesh (Linkerd, ADR-0012)
+
+Every service pod and the Envoy proxies run a Linkerd proxy, so traffic
+between them is mTLS and each caller has an identity: its ServiceAccount
+(`<svc>` per service, `envoy-<namespace>` for the gateway). Kafka, the database
+setup Job, migration Jobs and test pods are not meshed.
+
+```text
+cert-manager ── self-signed root (trust anchor, 10 y)       charts/linkerd-identity
+     └── linkerd-identity-issuer (48 h, renewed at 25 h)
+           └── per-pod certificates (24 h)                   Linkerd identity
+trust-manager ── linkerd-identity-trust-roots ConfigMap      the anchor, for Linkerd
+```
+
+**Who may call whom** is set per service in `values/services/<svc>.yaml`:
+
+```yaml
+mesh:
+  callers: [gateway, order]          # every path not listed below
+  internal:                          # narrower lists per path prefix
+    - { path: /api/v1/credit/internal, callers: [order] }
+```
+
+`gateway` means the Envoy proxies; anything else is a service name. The chart
+turns this into a Linkerd `Server`, one `HTTPRoute` per entry (named
+`<svc>-mesh-*`, parented to the Server, never to the Envoy Gateway) and its
+`AuthorizationPolicy`. The health paths get their own route, open to the
+kubelet's probes. Callers not listed get **403** from the proxy; pods outside
+the mesh are refused everywhere except the health paths.
+
+**Adding a call between services:** add the caller to the target's `mesh`
+block in the same change. A new call that fails with 403 is a missing entry.
+
+**Charts and order:** `cert-manager` → `trust-manager` → `linkerd-crds`
+(without Gateway API CRDs, which Envoy Gateway owns) → `linkerd-identity` →
+`linkerd` (control plane, external CA, proxy resources 10m/200m CPU,
+32/64 Mi). `deploy/local.sh` installs them before Kafka and the services;
+Argo CD apps retry until the previous step is ready. The injector fails open:
+pods created while Linkerd is down start **unmeshed**. After the first cloud
+bootstrap, restart the services once:
+`kubectl -n foc-<env> rollout restart deploy`.
+
+**Upgrading Linkerd** (edge releases, pinned in `charts/linkerd*/Chart.yaml`):
+bump both charts together, `helm dependency update`, run `deploy/local.sh` and
+`deploy/local.sh check` locally first. Gateway API v1.6.1 is outside Linkerd's
+documented range, so the mesh checks must pass on every upgrade.
 
 ## Connectivity tests (`helm test`)
 
@@ -256,7 +282,9 @@ ignores them.
 | `foc-kafka` | `kafka-test-acls` (Kafka CLI, same image as the brokers) | built from the `users` table: every allowed write and read works (consumer group `<user>-conntest`); per user, one forbidden write and one wrong-prefix group are denied; a wrong password is rejected |
 | `foc-database` | `foc-database-test-access` (psql) | each service's login creates and reads a table in its own database, and is refused (`permission denied`) by every other service's database |
 | `foc-service` | `<svc>-test-http` (curl) | `GET http://<svc>:<port><healthPath>` from another pod, plus `database.healthPath` if set (credit: `/health/db`), plus `/health` on each `*_SERVICE_URL` in its `env`, retrying for ~20 s |
-| `foc-gateway` | `foc-gateway-test` (curl) | 18 requests through Envoy, without logging in: every protected prefix gives 401 without a token, and with a bad token or spoofed `x-user-id` / `x-is-admin`; public routes reach their service without a token; `/api/v1/user/authorize` and unknown paths give 404. It can't check which identity headers reach a backend (real services don't echo them) |
+| `foc-service` | `<svc>-test-mesh-meshed`, `<svc>-test-mesh-unmeshed` (curl) | as `default`, which no policy lists: the health path answers 200, any other path gets 403 from the service's Linkerd proxy, both from inside and outside the mesh |
+| (script) | `deploy/local.sh check` → `check_mesh` | every running service pod has a `linkerd-proxy`, and every `*-mesh-*` HTTPRoute shows `Accepted=True` from `linkerd.io/policy-controller` (Linkerd's log warns about Envoy's routes, so a clean log proves nothing) |
+| `foc-gateway` | `foc-gateway-test` (curl) | Requests through Envoy, without logging in: every protected prefix gives 401 without a token, and with a bad token or spoofed `x-user-id` / `x-is-admin`; public routes reach their service without a token; internal authorization/lookup paths, the legacy `/api/v1/user/authorize` alias and unknown paths give 404. It can't check which identity headers reach a backend (real services don't echo them) |
 
 Test pods are kept until the next run, so `kubectl -n foc logs kafka-test-acls`
 still shows the last result.
@@ -271,21 +299,24 @@ still shows the last result.
 
 ## Not yet in place
 
-- user, supplier, credit and order have real images. Locally rating, badges
-  and admin run [`tools/connectivity-stub`](../tools/connectivity-stub/README.md)
+- user, supplier, credit, order and admin have real images. Locally rating
+  and badges run [`tools/connectivity-stub`](../tools/connectivity-stub/README.md)
   under their own names (overridden in `values/envs/local/services/<svc>.yaml`).
-  Ports for rating, badges and admin (3000) are placeholders until
-  those services exist; user is 8080 (its `PORT` default), order 8083 (its
-  `server.port`), supplier its branch's 8081.
-- Databases in the cloud: `rds.tf`, Secrets Manager + External Secrets
-  (`foc-database` with `createSecrets: false`), the RDS CA bundle in images,
-  and CI building each image's `migrate` stage (ADR-0010, ADR-0011).
+  Ports for rating and badges (3000) are placeholders until those services
+  exist; user is 8080 (its `PORT` default), order 8083 (its `server.port`),
+  supplier its branch's 8081, admin 8084 (its Dockerfile).
+- Cloud (dev): written but not yet applied to AWS. See
+  [`infra/docs/cloud-dev.md`](../infra/docs/cloud-dev.md) and ADR-0013. That
+  covers RDS, Secrets Manager + External Secrets (`foc-database` with
+  `createSecrets: false`, `foc-service` `externalSecrets`), the RDS CA bundle
+  (`databaseCa`), and CI building each image's `migrate` stage. admin still
+  runs the stub in dev, since its database settings aren't wired up.
 - Kafka clients: user publishes `UserVerified` (credit onboards the user);
   order publishes its four topics and consumes `foc.admin.events`; credit
   settles `foc.credit.commands`. Until rating and admin exist,
   `foc.rating.commands` and `foc.admin.commands` have no consumer and
   `foc.admin.events` no producer; nothing reads `foc.order.status` yet.
-- `dev`, `stg` and `prod` have no `common.yaml` (image registry) until the AWS
-  account ID and `global/ecr` exist. Until then no services deploy there.
-- The EKS `gp3` StorageClass for prod Kafka storage, and the API gateway's
-  namespace in `networkPolicy.allowFromNamespaces`.
+- `stg` and `prod` have no `common.yaml` or service values yet. dev's are
+  filled from Terraform by `deploy/cloud-values.sh`.
+- prod's cluster (`infra/prod`), with its `gp3` StorageClass and the API
+  gateway's namespace in `networkPolicy.allowFromNamespaces`.

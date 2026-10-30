@@ -1,0 +1,24 @@
+meta {
+  name: List active requests
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/api/v1/orders/requests/active
+  body: none
+  auth: none
+}
+headers {
+  X-User-Id: c0e8ac0d-6089-31b0-a013-fa4f0061ad3f
+  X-Permitted-Action: true
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+    const match = res.getBody().content.find(order => order.id === bru.getVar("orderId"));
+    expect(match.status).to.equal("ACCEPTED");
+    expect(match.requesterId).to.equal("c0e8ac0d-6089-31b0-a013-fa4f0061ad3f");
+  });
+}

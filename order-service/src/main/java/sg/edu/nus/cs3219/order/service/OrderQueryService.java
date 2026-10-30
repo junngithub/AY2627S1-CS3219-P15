@@ -23,6 +23,37 @@ import java.util.UUID;
 @Service
 public class OrderQueryService {
 
+    private static final List<OrderStatus> COMPLETED_DELIVERIES = List.of(
+            OrderStatus.DELIVERED,
+            OrderStatus.ACKNOWLEDGED,
+            OrderStatus.UNACKNOWLEDGED,
+            OrderStatus.COMPLETED
+    );
+
+    private static final List<OrderStatus> ACTIVE_DELIVERIES = List.of(
+            OrderStatus.ACCEPTED,
+            OrderStatus.COLLECTED,
+            OrderStatus.ESCALATED,
+            OrderStatus.UNDER_REVIEW
+    );
+
+    private static final List<OrderStatus> ACTIVE_REQUESTS = List.of(
+            OrderStatus.CREATED,
+            OrderStatus.ACCEPTED,
+            OrderStatus.COLLECTED,
+            OrderStatus.DELIVERED,
+            OrderStatus.ESCALATED,
+            OrderStatus.UNDER_REVIEW
+    );
+
+    private static final List<OrderStatus> PAST_REQUESTS = List.of(
+            OrderStatus.ACKNOWLEDGED,
+            OrderStatus.UNACKNOWLEDGED,
+            OrderStatus.COMPLETED,
+            OrderStatus.EXPIRED,
+            OrderStatus.CANCELLED
+    );
+
     private final OrderRepository orders;
     private final AlertRepository alerts;
     private final SupplierClient suppliers;
@@ -101,6 +132,26 @@ public class OrderQueryService {
     }
 
     @Transactional(readOnly = true)
+    public PageResponse<OrderEntity> pastDeliveries(UserAccount actor, int page, int size) {
+        return byCourier(actor, page, size, COMPLETED_DELIVERIES);
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<OrderEntity> activeDeliveries(UserAccount actor, int page, int size) {
+        return byCourier(actor, page, size, ACTIVE_DELIVERIES);
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<OrderEntity> activeRequests(UserAccount actor, int page, int size) {
+        return byRequester(actor, page, size, ACTIVE_REQUESTS);
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<OrderEntity> pastRequests(UserAccount actor, int page, int size) {
+        return byRequester(actor, page, size, PAST_REQUESTS);
+    }
+
+    @Transactional(readOnly = true)
     public PageResponse<OrderEntity> search(UserAccount actor, String pickupLocationId, String dropoffLocationId, int page, int size) {
         requirePage(page, size);
         if ((pickupLocationId == null || pickupLocationId.isBlank()) && (dropoffLocationId == null || dropoffLocationId.isBlank())) {
@@ -133,6 +184,32 @@ public class OrderQueryService {
         }
         Page<AlertEntity> result = alerts.findByRequesterIdAndNotifyRequesterTrueOrderByCreatedAtDesc(
                 actor.userId(),
+                PageRequest.of(page, size)
+        );
+        return PageResponse.of(result.getContent(), page, size, result.getTotalElements());
+    }
+
+    private PageResponse<OrderEntity> byCourier(UserAccount actor, int page, int size, List<OrderStatus> statuses) {
+        requirePage(page, size);
+        if (size == 0) {
+            return PageResponse.empty(page, size);
+        }
+        Page<OrderEntity> result = orders.findByCourierIdAndStatusInOrderByRequestTimeDesc(
+                actor.userId(),
+                statuses,
+                PageRequest.of(page, size)
+        );
+        return PageResponse.of(result.getContent(), page, size, result.getTotalElements());
+    }
+
+    private PageResponse<OrderEntity> byRequester(UserAccount actor, int page, int size, List<OrderStatus> statuses) {
+        requirePage(page, size);
+        if (size == 0) {
+            return PageResponse.empty(page, size);
+        }
+        Page<OrderEntity> result = orders.findByRequesterIdAndStatusInOrderByRequestTimeDesc(
+                actor.userId(),
+                statuses,
                 PageRequest.of(page, size)
         );
         return PageResponse.of(result.getContent(), page, size, result.getTotalElements());

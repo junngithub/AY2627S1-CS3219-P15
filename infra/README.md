@@ -12,11 +12,18 @@ How Friend on Campus is provisioned and deployed across **local**, **dev**,
 > User, ADR-0007), and Postgres on Floci's RDS.
 > `deploy/local.sh check` passes: 16 database checks, 23 Kafka ACL checks,
 > 7 HTTP checks plus every peer URL (credit also reaches its database),
-> 18 gateway checks. The cloud envs are not built; see [Build order](#build-order).
+> 18 gateway checks. Dev on AWS is written but not yet applied; see
+> [`docs/cloud-dev.md`](docs/cloud-dev.md) and [Build order](#build-order).
 
 - New to Terraform / Kubernetes / Strimzi / Argo CD? Read
   [`docs/concepts.md`](docs/concepts.md) first.
 - Running things on your laptop: [`docs/local-floci.md`](docs/local-floci.md).
+- Bringing up dev on AWS (requirements and first-run steps):
+  [`docs/cloud-dev.md`](docs/cloud-dev.md). Day-to-day commands and lessons
+  learned: [`docs/dev-deployment-guide.md`](docs/dev-deployment-guide.md).
+- Hosting the frontend on S3 + CloudFront, and what's missing:
+  [`docs/frontend-s3-cloudfront.md`](docs/frontend-s3-cloudfront.md).
+- What the dev env would cost on AWS: [`docs/dev-cost-estimate.md`](docs/dev-cost-estimate.md).
 - Why things are the way they are: [`docs/adr/`](docs/adr/).
 - Architecture diagram: [`../docs/architecture/foc-architecture.drawio`](../docs/architecture/foc-architecture.drawio).
 
@@ -64,11 +71,13 @@ infra/                              # Terraform: AWS only
     argocd/                         # ✅ GitOps bootstrap: Argo CD + optional root app (cloud envs)
     network/                        #    VPC, subnets, NAT
     eks/                            #    cluster, node group, node role with ECR read-only
-  global/ecr/                       #    shared registry for all cloud envs: ecr.tf
+  state/                            # ✍️ S3 bucket for every cloud root's state (local state)
+  global/ecr/                       # ✍️ shared registry for all cloud envs: ecr.tf
+  global/github-oidc/               # ✍️ CI role for GitHub Actions (OIDC, no keys)
   local/                            # ✅ Floci
     compose.yaml                    #    Floci itself
     aws/                            #    (own state): ecr.tf · network.tf · eks.tf · kubeconfig.tf · rds.tf
-  nonprod/{aws,bootstrap}/          #    EKS hosting foc-dev + foc-stg
+  nonprod/{aws,bootstrap}/          # ✍️ EKS hosting foc-dev (+ foc-stg later), CloudFront, RDS
   prod/{aws,bootstrap}/             #    EKS hosting foc
   docs/
 deploy/                             # Kubernetes YAML (ADR-0008, ADR-0009)
@@ -170,6 +179,10 @@ See [ADR-0005](docs/adr/0005-argocd-gitops-helm.md).
    credit all verified
    ([results](docs/local-floci.md#local-run-results-2026-10-01)).
 4. **Real AWS:** `global/ecr`, then `nonprod` (dev + stg), then `prod`.
+   ✍️ Written 2026-10-21, not yet applied: `state/`, `global/ecr`,
+   `global/github-oidc`, `nonprod/{aws,bootstrap}` (dev only so far), and the
+   GitHub Actions workflows ([`docs/cloud-dev.md`](docs/cloud-dev.md),
+   [ADR-0013](docs/adr/0013-cloudfront-vpc-origin-and-external-secrets.md)).
 
 ## Open decisions
 

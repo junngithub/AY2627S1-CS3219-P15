@@ -1,0 +1,10 @@
+# Applied to every service in the dev environment.
+image:
+  registry: 474265880628.dkr.ecr.ap-southeast-1.amazonaws.com # infra/global/ecr
+  pullPolicy: IfNotPresent # tags are git SHAs and never change
+# Lets node-postgres verify RDS's certificate (ConfigMap from charts/cluster-config).
+databaseCa:
+  configMap: rds-ca
+secretStore:
+  name: aws-secrets-dev # charts/cluster-config
+  prefix: foc/dev/ # infra/nonprod/aws/secrets.tf
