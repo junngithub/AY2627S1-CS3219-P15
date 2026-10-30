@@ -1,9 +1,10 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.models.moderation import AppealStatus, ReportStatus
+from app.schemas.camel import CamelModel
 
 
 def _stripped(value: str) -> str:
@@ -44,9 +45,7 @@ class CreateAppealRequest(BaseModel):
         return _stripped(value)
 
 
-class ReportDetail(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class ReportDetail(CamelModel):
     id: uuid.UUID
     reporter_user_id: str
     reported_user_id: str
@@ -57,9 +56,7 @@ class ReportDetail(BaseModel):
     closed_by_admin_id: str | None
 
 
-class AppealDetail(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class AppealDetail(CamelModel):
     id: uuid.UUID
     user_id: str
     message: str
