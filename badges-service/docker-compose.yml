@@ -1,0 +1,57 @@
+# Service-local dev dependencies for badges-service.
+# Runs Postgres and the app. The app container uses the build stage of the
+# Dockerfile (tsx watch, live reload through the bind mounts) and applies
+# migrations on start. Don't also run `npm run dev` on the host: both want
+# port 8086. To run only Postgres, use `docker compose up -d postgres`.
+#
+#   docker compose up --build   # Postgres + app (port 8086)
+#   docker compose down         # stop (keep data)
+#   docker compose down -v      # stop and wipe the volume
+#
+# Kafka is not started here. With KAFKA_BROKERS unset the app serves HTTP only;
+# set it (e.g. host.docker.internal:9092) to consume order and rating events from a local broker.
+# Postgres is on host port 5434 so it can run beside credit-service's 5432 and rating-service's 5433.
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: badges-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-badges}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-badges}
+      POSTGRES_DB: ${POSTGRES_DB:-badges_db}
+    ports:
+      - "${BADGES_DB_PORT:-5434}:5432"
+    volumes:
+      - badges-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-badges} -d ${POSTGRES_DB:-badges_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  badges-service:
+    build:
+      context: .
+      target: build # dev tooling (tsx, drizzle-kit); the default image is the slim runtime
+    ports:
+      - "${BADGES_SERVICE_PORT:-8086}:8086"
+    environment:
+      NODE_ENV: development
+      PORT: 8086
+      DATABASE_URL: postgres://${POSTGRES_USER:-badges}:${POSTGRES_PASSWORD:-badges}@postgres:5432/${POSTGRES_DB:-badges_db}
+      # This Postgres has no TLS, and its host is "postgres", not localhost.
+      DB_SSL: "false"
+      KAFKA_BROKERS: ${KAFKA_BROKERS:-}
+    volumes:
+      - ./src:/app/src
+      - ./drizzle:/app/drizzle
+      - ./drizzle.config.ts:/app/drizzle.config.ts
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: sh -c "npm run db:migrate && npm run dev"
+
+volumes:
+  badges-postgres-data:

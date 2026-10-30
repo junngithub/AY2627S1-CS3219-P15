@@ -19,6 +19,7 @@ jobs:
     outputs:
       user: ${{ steps.filter.outputs.user }}
       credit: ${{ steps.filter.outputs.credit }}
+      badges: ${{ steps.filter.outputs.badges }}
       supplier: ${{ steps.filter.outputs.supplier }}
       order: ${{ steps.filter.outputs.order }}
       frontend: ${{ steps.filter.outputs.frontend }}
@@ -31,6 +32,7 @@ jobs:
           filters: |
             user: [user-service/**]
             credit: [credit-service/**]
+            badges: [badges-service/**]
             supplier: [supplier-service/**]
             order: [order-service/**]
             frontend: [frontend/**]
@@ -88,6 +90,31 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       # test/constants.ts defaults to credit:credit@localhost, as above.
+      - run: npm run test:coverage
+
+  badges:
+    needs: changes
+    if: needs.changes.outputs.badges == 'true'
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: { POSTGRES_USER: badges, POSTGRES_PASSWORD: badges, POSTGRES_DB: postgres }
+        ports: ["5434:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: badges-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22 # engines.node
+          cache: npm
+          cache-dependency-path: badges-service/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      # test/constants.ts defaults to badges:badges@localhost:5434, as above.
       - run: npm run test:coverage
 
   supplier:

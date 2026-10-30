@@ -54,3 +54,6 @@ users:
   admin:
     write: [foc.admin.events]
     read: [foc.admin.commands]
+  badges:
+    write: []
+    read: [foc.order.status, foc.user.rating]

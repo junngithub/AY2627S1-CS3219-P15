@@ -1,0 +1,71 @@
+[
+  {
+    "badgeId": "first_delivery",
+    "title": "First run",
+    "description": "Complete your first delivery as a courier.",
+    "targetRole": "courier",
+    "displayOrder": 1,
+    "iconEarnedUrl": "/badges/first-run.svg",
+    "iconUnearnedUrl": "/badges/first-run-locked.svg",
+    "conditions": [{ "metric": "completedDeliveries", "op": "gte", "value": 1 }],
+    "progressMetric": "completedDeliveries"
+  },
+  {
+    "badgeId": "ten_deliveries",
+    "title": "Ten runs",
+    "description": "Complete 10 deliveries as a courier.",
+    "targetRole": "courier",
+    "displayOrder": 2,
+    "iconEarnedUrl": "/badges/ten-runs.svg",
+    "iconUnearnedUrl": "/badges/ten-runs-locked.svg",
+    "conditions": [{ "metric": "completedDeliveries", "op": "gte", "value": 10 }],
+    "progressMetric": "completedDeliveries"
+  },
+  {
+    "badgeId": "century_courier",
+    "title": "Century courier",
+    "description": "Complete 100 deliveries as a courier.",
+    "targetRole": "courier",
+    "displayOrder": 3,
+    "iconEarnedUrl": "/badges/century.svg",
+    "iconUnearnedUrl": "/badges/century-locked.svg",
+    "conditions": [{ "metric": "completedDeliveries", "op": "gte", "value": 100 }],
+    "progressMetric": "completedDeliveries"
+  },
+  {
+    "badgeId": "first_order",
+    "title": "First request",
+    "description": "Have your first errand request completed.",
+    "targetRole": "requester",
+    "displayOrder": 4,
+    "iconEarnedUrl": "/badges/first-request.svg",
+    "iconUnearnedUrl": "/badges/first-request-locked.svg",
+    "conditions": [{ "metric": "completedOrders", "op": "gte", "value": 1 }],
+    "progressMetric": "completedOrders"
+  },
+  {
+    "badgeId": "twenty_orders",
+    "title": "Regular",
+    "description": "Have 20 errand requests completed.",
+    "targetRole": "requester",
+    "displayOrder": 5,
+    "iconEarnedUrl": "/badges/regular.svg",
+    "iconUnearnedUrl": "/badges/regular-locked.svg",
+    "conditions": [{ "metric": "completedOrders", "op": "gte", "value": 20 }],
+    "progressMetric": "completedOrders"
+  },
+  {
+    "badgeId": "trusted_user",
+    "title": "Well rated",
+    "description": "Hold an average rating of 4.5 or higher across at least 10 ratings.",
+    "targetRole": "any",
+    "displayOrder": 6,
+    "iconEarnedUrl": "/badges/well-rated.svg",
+    "iconUnearnedUrl": "/badges/well-rated-locked.svg",
+    "conditions": [
+      { "metric": "averageRating", "op": "gte", "value": 4.5 },
+      { "metric": "ratingCount", "op": "gte", "value": 10 }
+    ],
+    "progressMetric": "ratingCount"
+  }
+]
