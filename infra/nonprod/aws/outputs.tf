@@ -1,14 +1,14 @@
 output "cluster_name" {
-  value = aws_eks_cluster.this.name
+  value = one(aws_eks_cluster.this[*].name) # null while var.eks_enabled = false
 }
 
 output "cluster_endpoint" {
-  value = aws_eks_cluster.this.endpoint
+  value = one(aws_eks_cluster.this[*].endpoint)
 }
 
 output "cluster_ca_data" {
   description = "Base64-encoded cluster CA certificate."
-  value       = aws_eks_cluster.this.certificate_authority[0].data
+  value       = one(aws_eks_cluster.this[*].certificate_authority[0].data)
 }
 
 output "region" {

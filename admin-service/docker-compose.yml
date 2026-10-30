@@ -43,6 +43,13 @@ services:
       DATABASE_URL: postgresql+asyncpg://admin:admin@db:5432/admin_service
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       USER_SERVICE_BASE_URL: http://mock-user-service:8000
+      # MinIO on the shared order-service_default network. Same bucket Order writes.
+      ORDER_PHOTOS_ENDPOINT: http://minio:9000
+      ORDER_PHOTOS_BUCKET: ${ORDER_PHOTOS_BUCKET:-order-photos}
+      ORDER_PHOTOS_REGION: ${ORDER_PHOTOS_REGION:-us-east-1}
+      ORDER_PHOTOS_ACCESS_KEY: ${ORDER_PHOTOS_ACCESS_KEY:-order}
+      ORDER_PHOTOS_SECRET_KEY: ${ORDER_PHOTOS_SECRET_KEY:-orderorder}
+      ORDER_PHOTOS_PATH_STYLE: ${ORDER_PHOTOS_PATH_STYLE:-true}
       # From admin-service/.env (or the shell). Empty key → cases stay ai_failed.
       AI_PROVIDER_BASE_URL: ${AI_PROVIDER_BASE_URL:-https://generativelanguage.googleapis.com}
       AI_MODEL: ${AI_MODEL:-gemini-3.8-flash}

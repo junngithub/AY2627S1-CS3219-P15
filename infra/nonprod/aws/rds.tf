@@ -12,11 +12,14 @@ resource "aws_security_group" "rds" {
   vpc_id = aws_vpc.this.id
 
   ingress {
-    description     = "Postgres from pods (the cluster security group is on every node and pod ENI)"
-    from_port       = 5432
-    to_port         = 5432
-    protocol        = "tcp"
-    security_groups = [aws_eks_cluster.this.vpc_config[0].cluster_security_group_id]
+    # By subnet, not by the cluster's security group, so the cluster can be
+    # removed (var.eks_enabled) without taking RDS with it. Only nodes, pods
+    # and the internal NLB live in the private subnets.
+    description = "Postgres from the private subnets (nodes and pods)"
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = [for s in aws_subnet.private : s.cidr_block]
   }
 }
 

@@ -78,6 +78,9 @@ resource "aws_secretsmanager_secret_version" "app" {
 locals {
   external_secrets = {
     admin-ai = { AI_PROVIDER_API_KEY = "" } # Gemini; empty = cases end as ai_failed
+    # From @BotFather, token and username together (user-service needs the
+    # username whenever a token is set). Empty = Telegram verification off.
+    user-telegram = { TELEGRAM_BOT_TOKEN = "", TELEGRAM_BOT_USERNAME = "" }
   }
   env_external_secrets = { for pair in setproduct(var.envs, keys(local.external_secrets)) : "${pair[0]}/${pair[1]}" => { env = pair[0], name = pair[1] } }
 }

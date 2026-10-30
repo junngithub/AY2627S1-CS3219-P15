@@ -211,41 +211,19 @@ UPDATE "User" SET "emailVerifiedAt" = now(), "telegramVerifiedAt" = now()
 UPDATE "User" SET role = 'ADMIN' WHERE email = 'admin@u.nus.edu';
 ```
 
-### Seed Supplier's database (local)
+### Seed Supplier's database
 
-Supplier's seed (`supplier-service/prisma/seed.ts`, data inline) ships in its
-`migrate` image, which has `ts-node`. Run it once as a Job. It **deletes all
-suppliers and categories first**, so only run it on a local database.
+Supplier's seed (`supplier-service/prisma/seed.ts`, 21 campus suppliers
+inline) ships in its `migrate` image, which has `ts-node`. It **deletes all
+suppliers, categories and supplier actions first**. Run it as a one-off Job:
 
 ```bash
-export KUBECONFIG=$PWD/infra/local/kubeconfig
-kubectl -n foc delete job supplier-seed --ignore-not-found
-kubectl -n foc apply -f - <<'EOF'
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: supplier-seed
-spec:
-  backoffLimit: 0
-  ttlSecondsAfterFinished: 600
-  template:
-    spec:
-      restartPolicy: Never
-      containers:
-        - name: seed
-          image: 000000000000.dkr.ecr.ap-southeast-1.localhost:4566/foc/supplier-service:dev-migrate
-          imagePullPolicy: Always
-          command: ["node_modules/.bin/ts-node", "prisma/seed.ts"]
-          env:
-            - name: DATABASE_URL
-              valueFrom: { secretKeyRef: { name: supplier-db, key: DATABASE_URL } }
-          resources:
-            requests: { cpu: 100m, memory: 256Mi }
-            limits: { cpu: "1", memory: 512Mi }
-EOF
-kubectl -n foc wait --for=condition=complete job/supplier-seed --timeout=5m
-kubectl -n foc logs job/supplier-seed     # "Seeded 21 suppliers with categories."
+deploy/seed-supplier.sh local    # Floci
+deploy/seed-supplier.sh dev      # AWS dev (AWS_PROFILE=cs3219-dev, KUBECONFIG unset)
 ```
+
+It asks you to type the env's name before wiping (`--yes` skips that), uses
+the image tag from that env's values, and prints `Seeded 21 suppliers ...`.
 
 ## Service mesh (Linkerd, ADR-0012)
 

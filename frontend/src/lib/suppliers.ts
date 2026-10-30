@@ -132,3 +132,20 @@ export async function setSupplierStatus(
 ): Promise<Supplier> {
   return api.patch<Supplier>(`/supplier/${id}/status`, { status });
 }
+
+/**
+ * Admin only: PATCH /api/v1/supplier/{id}. Send only the fields that changed;
+ * the rest stay as they are. Status is not editable here (that is
+ * setSupplierStatus). The service logs the edit with the admin's id.
+ */
+export async function updateSupplier(id: number, changes: Partial<NewSupplier>): Promise<Supplier> {
+  return api.patch<Supplier>(`/supplier/${id}`, changes);
+}
+
+/**
+ * Admin only: DELETE /api/v1/supplier/{id}. A real delete, logged with the
+ * admin's id. Orders already placed keep their own copy of the location.
+ */
+export async function deleteSupplier(id: number): Promise<Supplier> {
+  return api.delete<Supplier>(`/supplier/${id}`);
+}
