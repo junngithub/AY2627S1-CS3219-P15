@@ -6,15 +6,15 @@ const deliveryErrors = {
   "503": { description: "Admin is unconfigured, unavailable or timed out; retry later", content: errorContent },
 };
 const timestamp = { type: "string", format: "date-time" };
-const closedFields = { created_at: timestamp, closed_at: { ...timestamp, nullable: true },
-  closed_by_admin_id: { type: "string", nullable: true } };
+const closedFields = { createdAt: timestamp, closedAt: { ...timestamp, nullable: true },
+  closedByAdminId: { type: "string", nullable: true } };
 export const accountSupportSchemas = {
-  UserReportRecord: { type: "object", required: ["id", "reporter_user_id", "reported_user_id", "comment", "status", "created_at", "closed_at", "closed_by_admin_id"],
-    properties: { id: { type: "string", format: "uuid" }, reporter_user_id: { type: "string", format: "uuid" },
-      reported_user_id: { type: "string", format: "uuid" }, comment: { type: "string", maxLength: 4000 },
+  UserReportRecord: { type: "object", required: ["id", "reporterUserId", "reportedUserId", "comment", "status", "createdAt", "closedAt", "closedByAdminId"],
+    properties: { id: { type: "string", format: "uuid" }, reporterUserId: { type: "string", format: "uuid" },
+      reportedUserId: { type: "string", format: "uuid" }, comment: { type: "string", maxLength: 4000 },
       status: { type: "string", enum: ["open", "dismissed", "actioned"] }, ...closedFields } },
-  SuspensionAppealRecord: { type: "object", required: ["id", "user_id", "message", "status", "created_at", "closed_at", "closed_by_admin_id"],
-    properties: { id: { type: "string", format: "uuid" }, user_id: { type: "string", format: "uuid" },
+  SuspensionAppealRecord: { type: "object", required: ["id", "userId", "message", "status", "createdAt", "closedAt", "closedByAdminId"],
+    properties: { id: { type: "string", format: "uuid" }, userId: { type: "string", format: "uuid" },
       message: { type: "string", maxLength: 4000 }, status: { type: "string", enum: ["open", "rejected", "reinstated"] }, ...closedFields } },
 };
 export const accountSupportPaths = {

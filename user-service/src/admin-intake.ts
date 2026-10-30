@@ -3,10 +3,10 @@ import { isUuid } from "./integration-access";
 
 export type ReportInput = { reporterUserId: string; reportedUserId: string; comment: string };
 export type AppealInput = { userId: string; message: string };
-export type ReportRecord = { id: string; reporter_user_id: string; reported_user_id: string; comment: string;
-  status: "open" | "dismissed" | "actioned"; created_at: string; closed_at: string | null; closed_by_admin_id: string | null };
-export type AppealRecord = { id: string; user_id: string; message: string; status: "open" | "rejected" | "reinstated";
-  created_at: string; closed_at: string | null; closed_by_admin_id: string | null };
+export type ReportRecord = { id: string; reporterUserId: string; reportedUserId: string; comment: string;
+  status: "open" | "dismissed" | "actioned"; createdAt: string; closedAt: string | null; closedByAdminId: string | null };
+export type AppealRecord = { id: string; userId: string; message: string; status: "open" | "rejected" | "reinstated";
+  createdAt: string; closedAt: string | null; closedByAdminId: string | null };
 export interface AdminIntake {
   report(input: ReportInput): Promise<ReportRecord>;
   appeal(input: AppealInput): Promise<AppealRecord>;
@@ -62,8 +62,8 @@ export class HttpAdminIntake implements AdminIntake {
       try { value = JSON.parse(Buffer.concat(chunks).toString("utf8")); } catch { throw invalidResponse(); }
       if (!value || typeof value !== "object" || Array.isArray(value)) throw invalidResponse();
       const row = value as Record<string, unknown>;
-      if (!isUuid(row.id) || !isDate(row.created_at) || (row.closed_at !== null && !isDate(row.closed_at))
-        || (row.closed_by_admin_id !== null && !isText(row.closed_by_admin_id, 200))) throw invalidResponse();
+      if (!isUuid(row.id) || !isDate(row.createdAt) || (row.closedAt !== null && !isDate(row.closedAt))
+        || (row.closedByAdminId !== null && !isText(row.closedByAdminId, 200))) throw invalidResponse();
       return row;
     } catch (error) {
       if (error instanceof AppError) throw error;
@@ -74,19 +74,19 @@ export class HttpAdminIntake implements AdminIntake {
 
   async report(input: ReportInput): Promise<ReportRecord> {
     const row = await this.post("/api/v1/admin/reports", input);
-    if (row.reporter_user_id !== input.reporterUserId || row.reported_user_id !== input.reportedUserId
+    if (row.reporterUserId !== input.reporterUserId || row.reportedUserId !== input.reportedUserId
       || !isText(row.comment, 4000) || typeof row.status !== "string" || !["open", "dismissed", "actioned"].includes(row.status)) throw invalidResponse();
     // Keep Admin's stored text on idempotent retries, but don't forward unknown fields.
-    return { id: row.id, reporter_user_id: row.reporter_user_id, reported_user_id: row.reported_user_id,
-      comment: row.comment, status: row.status, created_at: row.created_at, closed_at: row.closed_at,
-      closed_by_admin_id: row.closed_by_admin_id } as ReportRecord;
+    return { id: row.id, reporterUserId: row.reporterUserId, reportedUserId: row.reportedUserId,
+      comment: row.comment, status: row.status, createdAt: row.createdAt, closedAt: row.closedAt,
+      closedByAdminId: row.closedByAdminId } as ReportRecord;
   }
 
   async appeal(input: AppealInput): Promise<AppealRecord> {
     const row = await this.post("/api/v1/admin/appeals", input);
-    if (row.user_id !== input.userId || !isText(row.message, 4000)
+    if (row.userId !== input.userId || !isText(row.message, 4000)
       || typeof row.status !== "string" || !["open", "rejected", "reinstated"].includes(row.status)) throw invalidResponse();
-    return { id: row.id, user_id: row.user_id, message: row.message, status: row.status, created_at: row.created_at,
-      closed_at: row.closed_at, closed_by_admin_id: row.closed_by_admin_id } as AppealRecord;
+    return { id: row.id, userId: row.userId, message: row.message, status: row.status, createdAt: row.createdAt,
+      closedAt: row.closedAt, closedByAdminId: row.closedByAdminId } as AppealRecord;
   }
 }
