@@ -4,6 +4,9 @@
  * Scope: Generated the hook both order pages use to load an order and keep it
  *        current while the other party acts on it.
  * Reviewed by Ngooi Jun Sen.
+ *
+ * Refresh on returning to the tab, and the 5-second interval, added with
+ * Claude Code (Claude Opus 5.5) on 2026-10-22.
  */
 
 import { useEffect, useState } from 'react';
@@ -17,7 +20,7 @@ import { fetchOrder, isActiveStatus, type Order } from './orders';
  * (an order acknowledged from Collected still offering "mark delivered").
  * Order F2.13 promises status alerts within a minute; this is well inside it.
  */
-const REFRESH_MS = 10_000;
+const REFRESH_MS = 5_000;
 
 interface LiveOrder {
   order: Order | null;
@@ -54,17 +57,31 @@ export function useLiveOrder(orderId: string): LiveOrder {
   const active = order !== null && isActiveStatus(order.status);
   useEffect(() => {
     if (!active) return undefined;
-    const timer = window.setInterval(() => {
-      // Skip hidden tabs; the next visible tick catches up.
-      if (document.visibilityState !== 'visible') return;
+    const refresh = () => {
       fetchOrder(orderId)
         .then(setOrder)
         .catch(() => {
           // Keep showing the last good copy; a real failure surfaces on the
           // next action the user takes.
         });
+    };
+    const timer = window.setInterval(() => {
+      // Skip hidden tabs; they catch up the moment they are shown again.
+      if (document.visibilityState === 'visible') refresh();
     }, REFRESH_MS);
-    return () => window.clearInterval(timer);
+    // Coming back to the tab (e.g. after acting as the other party in another
+    // tab) refreshes at once instead of showing a stale timeline until the
+    // next tick.
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
   }, [orderId, active]);
 
   return { order, loadError, setOrder };

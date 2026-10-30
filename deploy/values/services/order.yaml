@@ -17,7 +17,7 @@ env:
   # Peers this service calls over HTTP (short names resolve within the env's namespace).
   CREDIT_SERVICE_URL: http://credit:3000 # reserve / release credits
   SUPPLIER_SERVICE_URL: http://supplier:8081 # validate pickup/dropoff locations
-  RATING_SERVICE_URL: http://rating:3000 # requester / courier rating
+  RATING_SERVICE_URL: http://rating:8085 # requester / courier rating
   ADMIN_SERVICE_URL: http://admin:8084 # open an escalation
   USER_SERVICE_URL: http://user:8080 # profile (email, Telegram)
 secretEnv:

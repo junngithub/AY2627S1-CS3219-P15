@@ -38,7 +38,7 @@ routes:
   - { prefix: /api/v1/supplier, service: supplier, port: 8081 }
   - { prefix: /api/v1/credit, service: credit, port: 3000 }
   - { prefix: /api/v1/orders, service: order, port: 8083 }
-  - { prefix: /api/v1/rating, service: rating, port: 3000 }
+  - { prefix: /api/v1/rating, service: rating, port: 8085 }
   - { prefix: /api/v1/badges, service: badges, port: 3000 }
   - { prefix: /api/v1/admin, service: admin, port: 8084 }
 

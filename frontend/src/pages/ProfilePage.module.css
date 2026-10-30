@@ -146,6 +146,13 @@
   color: var(--color-text-muted);
 }
 
+.ratingStar {
+  display: inline-flex;
+  margin-left: var(--space-2);
+  color: var(--color-warning);
+  vertical-align: -0.1em;
+}
+
 .breakdown {
   margin: 0;
   font-size: var(--font-size-sm);

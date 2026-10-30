@@ -14,7 +14,8 @@
 
 import { Button } from '../ui/Button';
 import { Icon } from '../ui/Icon';
-import { formatDistance, formatElapsed, formatRating } from '../../lib/format';
+// formatRating returns with the requester's rating (see the TODO below).
+import { formatDistance, formatElapsed } from '../../lib/format';
 import { formatDeadline, useCountdown } from '../../lib/useCountdown';
 import type { Order } from '../../lib/orders';
 import styles from './RequestCard.module.css';
@@ -65,6 +66,11 @@ export function RequestCard({ request, distanceMetres, accepting, onAccept }: Re
         <span className={styles.requester}>
           {/* TODO(order-service): the requester's name - orders carry ids only.
           {request.requesterName} &middot;{' '} */}
+          {/*
+            TODO(order-service): the requester's rating, hidden for now. Order
+            Service has no Rating client yet: its stub stores 5.0 on every
+            order, so the figure would be wrong. Restore once Order reads
+            GET /api/v1/rating/{userId}, along with the " · " before elapsed.
           {request.requesterRating !== null ? (
             <span className={styles.rating}>
               <Icon name="star" size={13} filled />
@@ -72,8 +78,8 @@ export function RequestCard({ request, distanceMetres, accepting, onAccept }: Re
             </span>
           ) : (
             'New requester'
-          )}
-          <span className={styles.footerElapsed}> &middot; {elapsed}</span>
+          )} */}
+          <span className={styles.footerElapsed}>{elapsed}</span>
         </span>
 
         {/*

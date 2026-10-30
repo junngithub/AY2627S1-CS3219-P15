@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthProvider';
 import { Icon } from '../ui/Icon';
+import { RatingPrompt } from '../rating/RatingPrompt';
 import { useCreditBalance } from '../../lib/credit';
 import { orderReference } from '../../lib/orders';
 import styles from './AppShell.module.css';
@@ -180,6 +181,10 @@ export function AppShell() {
       <main className={styles.main}>
         <Outlet />
       </main>
+
+      {/* UI FR14.1.1: opens by itself when a rating is owed, on any page. */}
+      <RatingPrompt />
+
     </div>
   );
 }
