@@ -92,6 +92,8 @@ A missing user id, a non-admin, and an admin who is not permitted all get the sa
 
 ## HTTP API
 
+JSON responses use camelCase (`reporterUserId`, `createdAt`, `userId`). Request bodies already do. Database columns stay snake_case.
+
 Health (no auth): `GET /health` → `{ "status": "ok" }`.
 
 ### Users — `/api/v1/admin/users` (admin)
