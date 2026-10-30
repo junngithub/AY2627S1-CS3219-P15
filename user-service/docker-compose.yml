@@ -37,6 +37,9 @@ services:
       APP_ENV: ${APP_ENV:-local}
       ENABLE_TEST_VERIFICATION: ${ENABLE_TEST_VERIFICATION:-false}
       USER_DELETION_SWEEP_INTERVAL_SECONDS: ${USER_DELETION_SWEEP_INTERVAL_SECONDS:-3600}
+      # Admin's separate Compose stack publishes 8084 on the host.
+      ADMIN_SERVICE_BASE_URL: ${ADMIN_SERVICE_BASE_URL:-http://host.docker.internal:8084}
+      ADMIN_REQUEST_TIMEOUT_MS: ${ADMIN_REQUEST_TIMEOUT_MS:-5000}
       EMAIL_PROVIDER: ${EMAIL_PROVIDER:-development}
       SES_FROM_EMAIL: ${SES_FROM_EMAIL:-}
       AWS_REGION: ${AWS_REGION:-ap-southeast-1}

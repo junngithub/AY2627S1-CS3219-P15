@@ -106,7 +106,10 @@ test("real admin user endpoints and mesh-protected lookup contract in isolated P
     await prisma.telegramVerificationChallenge.create({ data: { userId: target.id, linkHash: "fixture-link", expiresAt: new Date(Date.now() + 60000) } });
     assert.equal((await request(`/${target.id}/status`, "POST", { status: "suspended" }, tokenA)).body.status, "Suspended");
     assert.equal((await request("/internal/authorize", "POST", undefined, newToken)).status, 401);
-    assert.equal((await request("/login", "POST", { email: target.email, password })).status, 401);
+    const suspendedLogin = await request("/login", "POST", { email: target.email, password });
+    assert.equal(suspendedLogin.status, 403);
+    assert.equal(suspendedLogin.body.code, "ACCOUNT_SUSPENDED");
+    assert.equal((await request("/login", "POST", { email: target.email, password: "WrongPassword1" })).status, 401);
     assert.equal(await prisma.emailVerificationOtp.count({ where: { userId: target.id, revokedAt: null } }), 0);
     assert.equal(await prisma.telegramVerificationChallenge.count({ where: { userId: target.id, revokedAt: null } }), 0);
     assert.equal((await request(`/${target.id}/status`, "POST", { status: "suspended" }, tokenA)).body.changed, false);

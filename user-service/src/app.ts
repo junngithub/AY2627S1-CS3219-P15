@@ -7,8 +7,13 @@ import { createUsersRouter } from "./routes/users";
 import { createUserIntegrationRouter } from "./routes/user-integration";
 import type { EmailSender } from "./email";
 import { createAdminUsersRouter } from "./routes/admin-users";
+import { createFriendshipsRouter } from "./routes/friendships";
+import { createAccountSupportRouter } from "./routes/account-support";
+import { HttpAdminIntake, type AdminIntake } from "./admin-intake";
+import { config } from "./config";
 
-export function createApp(eventPublisher?: UserEventPublisher, emailSender?: EmailSender) {
+export function createApp(eventPublisher?: UserEventPublisher, emailSender?: EmailSender,
+  adminIntake: AdminIntake = new HttpAdminIntake(config.admin.baseUrl, config.admin.timeoutMs)) {
   const app = express();
 
   app.disable("x-powered-by");
@@ -33,6 +38,8 @@ export function createApp(eventPublisher?: UserEventPublisher, emailSender?: Ema
   app.use("/api/v1/user", createUsersRouter(emailSender, eventPublisher));
   app.use("/api/v1/user", createUserIntegrationRouter());
   app.use("/api/v1/user", createAdminUsersRouter());
+  app.use("/api/v1/user/friends", createFriendshipsRouter());
+  app.use("/api/v1/user", createAccountSupportRouter(adminIntake));
 
   app.use((_request, response) => {
     response.status(404).json({ error: "Endpoint not found", code: "NOT_FOUND" });
