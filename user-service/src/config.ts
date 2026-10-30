@@ -47,6 +47,10 @@ export const config = {
   sessionTtlHours: positiveInteger("SESSION_TTL_HOURS", 24),
   loginMaxAttempts: positiveInteger("LOGIN_MAX_ATTEMPTS", 5),
   passwordScryptCost: positiveInteger("PASSWORD_SCRYPT_COST", 16384),
+  admin: {
+    baseUrl: process.env.ADMIN_SERVICE_BASE_URL ?? "",
+    timeoutMs: Math.min(30_000, positiveInteger("ADMIN_REQUEST_TIMEOUT_MS", 5000)),
+  },
   telegram: {
     botToken: telegramBotToken,
     botUsername: telegramBotUsername,

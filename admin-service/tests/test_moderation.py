@@ -163,6 +163,9 @@ def test_open_report_is_reused_and_dismiss_does_not_block_another(api):
     body = {"reporterUserId": "u-1", "reportedUserId": "u-2", "comment": "first"}
     opened = client.post("/api/v1/admin/reports", json=body)
     assert opened.status_code == 201
+    assert opened.json()["reporterUserId"] == "u-1"
+    assert opened.json()["reportedUserId"] == "u-2"
+    assert "reporter_user_id" not in opened.json()
     report_id = opened.json()["id"]
 
     again = client.post("/api/v1/admin/reports", json={**body, "comment": "second"})
@@ -180,7 +183,7 @@ def test_open_report_is_reused_and_dismiss_does_not_block_another(api):
     dismissed = client.post(f"/api/v1/admin/reports/{report_id}/dismiss", headers=ADMIN)
     assert dismissed.status_code == 200
     assert dismissed.json()["status"] == "dismissed"
-    assert dismissed.json()["closed_by_admin_id"] == ADMIN["x-user-id"]
+    assert dismissed.json()["closedByAdminId"] == ADMIN["x-user-id"]
     assert [row.action for row in session.audits] == ["dismiss_report"]
 
     blocked = client.post(f"/api/v1/admin/reports/{report_id}/dismiss", headers=ADMIN)
@@ -267,6 +270,8 @@ def test_appeal_reject_leaves_it_closed_and_reinstate_closes_the_open_one(api, m
     client, session = api
     opened = client.post("/api/v1/admin/appeals", json={"userId": "u-2", "message": "first"})
     assert opened.status_code == 201
+    assert opened.json()["userId"] == "u-2"
+    assert "user_id" not in opened.json()
     appeal_id = opened.json()["id"]
 
     again = client.post("/api/v1/admin/appeals", json={"userId": "u-2", "message": "second"})

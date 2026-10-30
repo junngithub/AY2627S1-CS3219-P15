@@ -1,5 +1,7 @@
 from pydantic import BaseModel
 
+from app.schemas.camel import CamelModel
+
 
 class UserSummary(BaseModel):
     id: str
@@ -15,7 +17,7 @@ class UserListResponse(BaseModel):
     total: int
 
 
-class ActionResult(BaseModel):
+class ActionResult(CamelModel):
     user_id: str
     action: str
     propagated: bool  # confirms User Service ack'd the change (F1.2.1/F1.3.1: 60s bound)

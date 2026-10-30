@@ -231,7 +231,7 @@ def test_intake_does_not_require_a_service_token(api, headers):
     }
     resp = api.post("/api/v1/admin/conflicts", json=body, headers=headers)
     assert resp.status_code == 201, resp.text
-    assert resp.json()["order_id"] == order_id
+    assert resp.json()["orderId"] == order_id
     matched = events_for("admin.conflict-case-created", orderId=order_id)
     assert len(matched) == 1
     assert_envelope(matched[0], "ConflictCaseCreated", orderId=order_id, caseId=resp.json()["id"])
@@ -254,7 +254,7 @@ def test_intake_rejects_incomplete_body(api, missing):
 def test_create_without_photos(api):
     created = create_case(api)
     assert created["status"] == "created"
-    assert created["evidence_photo_urls"] == []
+    assert created["evidencePhotoUrls"] == []
 
 
 def test_conflict_lifecycle_publishes_events(api):
@@ -269,10 +269,10 @@ def test_conflict_lifecycle_publishes_events(api):
     assert created.status_code == 201, created.text
     case = created.json()
     case_id = case["id"]
-    assert case["order_id"] == order_id
+    assert case["orderId"] == order_id
     assert case["status"] == "created"
     assert case["comment"] == body["comment"]
-    assert case["reporter_user_id"] == "u-1"
+    assert case["reporterUserId"] == "u-1"
 
     again = api.post("/api/v1/admin/conflicts", json=body)
     assert again.status_code == 201
@@ -299,13 +299,13 @@ def test_conflict_lifecycle_publishes_events(api):
     claimed = api.post(f"/api/v1/admin/conflicts/{case_id}/review", headers=ADMIN_HEADERS)
     assert claimed.status_code == 200, claimed.text
     assert claimed.json()["status"] == "under_review"
-    assert claimed.json()["order_id"] == order_id
-    assert claimed.json()["review_started_by_admin_id"] == "admin-sahana"
-    assert claimed.json()["review_started_at"]
+    assert claimed.json()["orderId"] == order_id
+    assert claimed.json()["reviewStartedByAdminId"] == "admin-sahana"
+    assert claimed.json()["reviewStartedAt"]
 
     reclaim = api.post(f"/api/v1/admin/conflicts/{case_id}/review", headers=ADMIN_HEADERS)
     assert reclaim.status_code == 200
-    assert reclaim.json()["review_started_by_admin_id"] == "admin-sahana"
+    assert reclaim.json()["reviewStartedByAdminId"] == "admin-sahana"
     stolen = api.post(f"/api/v1/admin/conflicts/{case_id}/review", headers=OTHER_ADMIN_HEADERS)
     assert stolen.status_code == 409
     assert audit_rows(case_id, "review_conflict") == ["admin-sahana\t"]
@@ -317,17 +317,17 @@ def test_conflict_lifecycle_publishes_events(api):
     assert timer_ids(case_id) == [f"deadline-{case_id}", f"reminder-{case_id}"]
     resolved = api.post(f"/api/v1/admin/conflicts/{case_id}/resolve", headers=ADMIN_HEADERS, json=RESOLVE_BODY)
     assert resolved.status_code == 200, resolved.text
-    assert resolved.json()["resolved_fault_party"] == "courier"
-    assert resolved.json()["resolved_automatically"] is False
+    assert resolved.json()["resolvedFaultParty"] == "courier"
+    assert resolved.json()["resolvedAutomatically"] is False
 
     detail = api.get(f"/api/v1/admin/conflicts/{case_id}", headers=ADMIN_HEADERS)
     assert detail.status_code == 200
     body_detail = detail.json()
     assert body_detail["status"] == "resolved"
-    assert body_detail["resolved_by_admin_id"] == "admin-sahana"
-    assert body_detail["resolved_fault_party"] == "courier"
-    assert body_detail["resolved_at"]
-    assert body_detail["evidence_photo_urls"] == body["photos"]
+    assert body_detail["resolvedByAdminId"] == "admin-sahana"
+    assert body_detail["resolvedFaultParty"] == "courier"
+    assert body_detail["resolvedAt"]
+    assert body_detail["evidencePhotoUrls"] == body["photos"]
     assert audit_rows(case_id, "resolve_conflict") == ["admin-sahana\tdecision=accept, fault_party=courier"]
     assert timer_ids(case_id) == []
 
@@ -370,12 +370,12 @@ def test_list_filters_and_deadline_order(api):
     earlier = create_case(api)
     time.sleep(0.05)
     later = create_case(api)
-    assert datetime.fromisoformat(earlier["resolution_deadline"]) < datetime.fromisoformat(later["resolution_deadline"])
+    assert datetime.fromisoformat(earlier["resolutionDeadline"]) < datetime.fromisoformat(later["resolutionDeadline"])
 
     listed = api.get("/api/v1/admin/conflicts", headers=ADMIN_HEADERS)
     assert listed.status_code == 200, listed.text
     rows = listed.json()
-    deadlines = [datetime.fromisoformat(row["resolution_deadline"]) for row in rows]
+    deadlines = [datetime.fromisoformat(row["resolutionDeadline"]) for row in rows]
     assert deadlines == sorted(deadlines)
     positions = {row["id"]: index for index, row in enumerate(rows)}
     assert positions[earlier["id"]] < positions[later["id"]]
@@ -409,13 +409,13 @@ def test_detail_returns_the_report(api):
     assert detail.status_code == 200, detail.text
     body = detail.json()
     assert body["comment"] == "Item arrived damaged"
-    assert body["evidence_photo_urls"] == photos
-    assert body["reporter_user_id"] == "u-1"
-    assert body["order_id"] == created["order_id"]
-    assert body["created_at"]
-    assert body["resolution_deadline"]
-    assert body["resolved_at"] is None
-    assert body["resolved_automatically"] is False
+    assert body["evidencePhotoUrls"] == photos
+    assert body["reporterUserId"] == "u-1"
+    assert body["orderId"] == created["orderId"]
+    assert body["createdAt"]
+    assert body["resolutionDeadline"]
+    assert body["resolvedAt"] is None
+    assert body["resolvedAutomatically"] is False
 
 
 @pytest.mark.parametrize("status", ["created", "resolved"])
@@ -435,13 +435,13 @@ def test_claim_from_ai_failed_publishes_order_under_review(api):
     claimed = api.post(f"/api/v1/admin/conflicts/{case_id}/review", headers=ADMIN_HEADERS)
     assert claimed.status_code == 200, claimed.text
     assert claimed.json()["status"] == "under_review"
-    assert claimed.json()["review_started_by_admin_id"] == "admin-sahana"
+    assert claimed.json()["reviewStartedByAdminId"] == "admin-sahana"
     listed = api.get("/api/v1/admin/conflicts", params={"status": "under_review"}, headers=ADMIN_HEADERS)
     assert listed.status_code == 200
     assert any(row["id"] == case_id for row in listed.json())
     matched = events_for("foc.admin.events", caseId=case_id)
     assert len(matched) == 1
-    assert_order_event(matched[0], "admin.review.started", orderId=created["order_id"], caseId=case_id)
+    assert_order_event(matched[0], "admin.review.started", orderId=created["orderId"], caseId=case_id)
 
 
 def test_simultaneous_claim_publishes_one_event(api):
@@ -460,7 +460,7 @@ def test_simultaneous_claim_publishes_one_event(api):
     assert audit_rows(case_id, "review_conflict") in (["admin-sahana\t"], ["admin-other\t"])
     matched = events_for("foc.admin.events", caseId=case_id)
     assert len(matched) == 1
-    assert_order_event(matched[0], "admin.review.started", orderId=created["order_id"], caseId=case_id)
+    assert_order_event(matched[0], "admin.review.started", orderId=created["orderId"], caseId=case_id)
 
 
 @pytest.mark.parametrize(
@@ -516,12 +516,12 @@ def test_resolve_publishes_the_fault_party_from_the_body(api, fault, decision):
         json={"faultParty": fault, "decision": decision},
     )
     assert resolved.status_code == 200, resolved.text
-    assert resolved.json()["resolved_fault_party"] == fault
-    assert resolved.json()["resolved_automatically"] is False
+    assert resolved.json()["resolvedFaultParty"] == fault
+    assert resolved.json()["resolvedAutomatically"] is False
     detail = api.get(f"/api/v1/admin/conflicts/{case_id}", headers=ADMIN_HEADERS)
     assert detail.status_code == 200
-    assert detail.json()["resolved_fault_party"] == fault
-    assert detail.json()["resolved_by_admin_id"] == "admin-sahana"
+    assert detail.json()["resolvedFaultParty"] == fault
+    assert detail.json()["resolvedByAdminId"] == "admin-sahana"
     assert audit_rows(case_id, "resolve_conflict") == [f"admin-sahana\tdecision={decision}, fault_party={fault}"]
 
     again = api.post(
@@ -535,6 +535,6 @@ def test_resolve_publishes_the_fault_party_from_the_body(api, fault, decision):
     assert_order_event(
         matched[0],
         "admin.case.resolved",
-        orderId=created["order_id"],
+        orderId=created["orderId"],
         caseId=case_id,
     )
