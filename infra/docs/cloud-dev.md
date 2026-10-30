@@ -18,6 +18,9 @@ month if dev is torn down when idle.
 > below), so pods now use the node role, and images and the frontend are
 > pushed from a laptop.
 
+> Already running? Day-to-day commands and troubleshooting are in
+> [`dev-deployment-guide.md`](dev-deployment-guide.md).
+
 ## 1. Requirements
 
 ### Access and accounts
@@ -219,8 +222,12 @@ kubectl -n envoy-gateway-system get targetgroupbindings # gateway-dev present
 
 ## 6. Not built yet
 
-- **Telegram bot.** Users are verified by the admin endpoint until it exists.
-  Order calls need a verified user.
+- **Telegram bot.** Secrets Manager `foc/dev/user-telegram` is an empty
+  placeholder (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`), so Telegram
+  verification answers 503 and users are verified by the admin endpoint or
+  `deploy/dev-verify-telegram.sh`. Create a bot with @BotFather, paste both
+  values, wait for External Secrets (≤1 h) and restart user. Order calls need a
+  verified user.
 - **Gemini key for admin.** Secrets Manager `foc/dev/admin-ai` is an empty
   placeholder, so conflict cases end as `ai_failed` and wait for an admin.
   Paste the key there; External Secrets syncs it within the hour, then restart

@@ -150,6 +150,9 @@
 
 .rowActions {
   display: flex;
+  /* Up to four buttons (approve or reject, edit, delete); wrap rather than
+     widen the table. */
+  flex-wrap: wrap;
   gap: var(--touch-gap);
 }
 

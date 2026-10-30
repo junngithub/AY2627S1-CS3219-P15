@@ -9,14 +9,21 @@ Owns user registration, verification, authentication, profile status, account li
 - Six-digit email OTPs (only hashes are stored)
 - Password hashing with Node.js `scrypt` and a unique salt per password
 - Opaque bearer sessions (only token hashes are stored)
-- Generic login failures and lockout after a configurable number of failed attempts
+- Generic login failures, lockout after a configurable number of failed attempts, and a lockout notification through the configured email provider
 - Account status and profile retrieval
 - Interactive Swagger/OpenAPI documentation
 - Docker Compose configuration for the service and its own PostgreSQL database
 
-Email and Telegram verification, password recovery/change, account deletion, and admin user search/role/status updates are implemented. Order can look up Telegram handles through a service-authenticated endpoint. An audited admin verification override is available for non-production load tests. Email delivery supports AWS SES when configured, with a development logger for local work. Telegram uses a real verification bot when configured, or a development logger locally without a bot. Account escalation, friendship management, and login-lockout notification emails remain to be implemented. Cross-service integration still needs acceptance testing.
+Email and Telegram verification, password recovery/change, account deletion, admin user search/role/status updates, and login-lockout notifications are implemented. Order can look up Telegram handles through a service-authenticated endpoint. An audited admin verification override is available for non-production load tests. Email delivery supports AWS SES when configured, with a development logger for local work. Telegram uses a real verification bot when configured, or a development logger locally without a bot. Account escalation and friendship management remain to be implemented. Cross-service integration still needs acceptance testing.
 
 A deployment-only first-admin bootstrap command is available. It promotes an explicitly selected verified account; it is not an HTTP endpoint and never runs automatically.
+
+## Architecture and database guides
+
+- [Architecture and verification flow](docs/architecture.md): service boundaries, external integrations, design decisions and deployment assumptions.
+- [Database schema](docs/schema.md): table relationship diagram, field explanations, constraints and account-state rules.
+
+These guides describe the implementation in this checkout, not proof of what is currently deployed. The executable database definition is [prisma/schema.prisma](prisma/schema.prisma); Swagger remains the reference for implemented HTTP operations.
 
 ## Swagger API documentation
 
@@ -143,8 +150,7 @@ For deployed containers, the infrastructure owner should supply `EMAIL_PROVIDER`
 
 - The SDK makes at most three attempts per call, with a 3-second connection timeout and a 10-second request timeout per attempt. A network timeout may mean SES accepted a message even though the response was lost, so duplicate emails are possible; codes/links remain subject to existing expiry/single-use checks.
 - Signup delivery failures return sanitized `503`; the saved account stays unverified. Resend and password recovery keep their generic `202` even on delivery failures to avoid account enumeration. After resolving the issue, request a new code/link. Neither sending nor receiving an email automatically verifies a user.
-- Email sending is synchronous and is **not** the durable Kafka verification outbox. A failed send is not queued across restarts; the user must request another message. Durable email jobs, application-level resend throttling and bounce/complaint automation remain production-hardening work. SES quotas apply, including the sandbox limit of one email per second; do not use real email for load-test users.
-- Login-lockout notification emails are not implemented by this patch.
+- Email sending is synchronous and is **not** the durable Kafka verification outbox. A failed send is not queued across restarts. Users can request another verification/reset message; lockout warnings are attempted only on the transition into lockout and are not automatically resent. A process failure after saving lockout but before sending can also lose the warning. Durable email jobs, application-level resend throttling and bounce/complaint automation remain production-hardening work. SES quotas apply, including the sandbox limit of one email per second; do not use real email for load-test users.
 - Troubleshooting: `CredentialsProviderError` usually means missing AWS access; `AccessDeniedException` means permission/policy failure; `MessageRejected` may indicate identity/sandbox issues; `TooManyRequestsException` means throttling. Raw errors are deliberately not logged. Inspect AWS configuration with the infrastructure owner without exposing secrets.
 
 References: [SES SendEmail](https://docs.aws.amazon.com/ses/latest/APIReference-V2/API_SendEmail.html), [AWS SDK credentials](https://docs.aws.amazon.com/sdk-for-javascript/v3/developer-guide/setting-credentials-node.html), [SES sandbox](https://docs.aws.amazon.com/ses/latest/dg/request-production-access.html), [DMARC alignment](https://docs.aws.amazon.com/ses/latest/dg/send-email-authentication-dmarc.html).
@@ -169,6 +175,14 @@ Content-Type: application/json
 A successful reset consumes the link, unlocks the account and revokes existing sessions. The user must log in again. Run the new Prisma migration before deploying this version of the service.
 
 ### Login
+
+The fifth failed password attempt locks the account by default (`LOGIN_MAX_ATTEMPTS` is configurable). Attempts are counted under a database row lock, so concurrent failures cannot lose increments or each trigger a warning for the same lockout. A stale password check from before a password change is ignored. Correct-password login before the threshold resets the counter.
+
+On the transition into lockout, the service attempts an account-locked warning through the existing email provider. It directs the owner to `FRONTEND_BASE_URL/forgot-password`, not a pre-created reset token. Resetting the password unlocks login and revokes old sessions. Already-locked accounts are not notified repeatedly; suspended and deletion-expired accounts do not trigger these warnings. Previously locked accounts are not backfilled on deployment.
+
+All failed logins still return the same `401 INVALID_CREDENTIALS`, including when notification delivery fails. The response does not say whether the account exists, is locked, or received email. SES uses the existing sender/region/permissions; development mode logs a generic notification marker without the recipient address or recovery link, and disabled email sends nothing. Delivery errors are sanitized. See the email limitations above: one application send attempt per transition does not guarantee exactly one delivered email or durable delivery.
+
+There is no new endpoint, dependency, database migration, frontend change or AWS permission required by this feature. A deployment still needs the existing SES configuration and a reachable `FRONTEND_BASE_URL`.
 
 ```http
 POST /api/v1/user/login
@@ -323,6 +337,8 @@ The database is exposed locally on port `5554`; the API is bound to `127.0.0.1:8
 
 ## Verification commands
 
+`npm test` discovers `.test.ts` files recursively under `src` and passes explicit paths to Node with the `tsx` loader. This works on Windows and Linux/Node 20 without relying on shell wildcard expansion. It fails rather than silently succeeding if no tests are found.
+
 ```powershell
 npm test
 npm run build
@@ -337,11 +353,12 @@ npm.cmd run test:integration:admin-users
 npm.cmd run test:integration:lifecycle
 npm.cmd run test:integration:admin-bootstrap
 npm.cmd run test:integration:email
+npm.cmd run test:integration:lockout
 ```
 
-These four suites create and drop their own disposable databases, not the normal `user_db`. They do not send real messages or change normal accounts. Never point these fixtures at a shared or production database.
+These five suites create and drop their own disposable databases, not the normal `user_db`. They do not send real messages or change normal accounts. Never point these fixtures at a shared or production database. The lockout suite uses fake SES and exercises the five-attempt threshold, concurrent attempts, one notification per lockout, generic failure responses during delivery failure, password-reset recovery, stale password checks, and unavailable-account handling.
 
-Validation on 22 October 2026: 68 unit tests, TypeScript build, all four isolated suites, and the production Docker build passed. Local frontend signup, real SES email/Telegram verification, login and emailed password reset were manually tested on 20 October. These results do not prove live Linkerd enforcement, the real Admin relay, or the complete Kafka/Credit/Order flow.
+Validation on 23 October 2026: 68 unit tests, TypeScript build, all five isolated suites, and the production Docker build passed. Local frontend signup, real SES email/Telegram verification, login and emailed password reset were manually tested on 20 October. Lockout-warning inbox delivery has not been manually exercised. These results do not prove live Linkerd enforcement, the real Admin relay, or the complete Kafka/Credit/Order flow.
 
 To test password recovery against the real local service and PostgreSQL, run these from `user-service` with Docker Desktop running:
 
@@ -370,7 +387,7 @@ See [API_CONTRACT_UPDATES.txt](API_CONTRACT_UPDATES.txt) for exact edits to the 
 - Keep `POST /api/v1/user/verify-telegram` authenticated with `{ otp }`, response `{ status, nextSteps }`. Keep the existing password recovery and profile password endpoints.
 - Infrastructure and Credit Service owners: run the normal migration Job with the new image, then test that Credit grants 20 credits only after both verification steps. The event format is unchanged; delivery now retries from the database.
 - Infrastructure owner: rebuild the User image and configure `EMAIL_PROVIDER=ses`, `SES_FROM_EMAIL`, `AWS_REGION=ap-southeast-1` and the deployed `FRONTEND_BASE_URL`. Supply approved workload AWS access with `ses:SendEmail` scoped to the sender identity, not a developer's expiring local credentials. Configure bot secrets and one poller per bot as well. SES is still sandboxed: verify demo recipients in the same account/region. Do not enable development email logging in production.
-- User-side Admin search/role/status endpoints are now implemented; see the integration section below. Admin must forward real bearer credentials, and the Admin frontend response mapping still needs reconciliation. Still outstanding: deployed-environment verification, login-lockout notification email, account escalation to Admin and friendships. The complete frontend/Order/Credit/Admin journey has not been demonstrated by local onboarding and service-level tests.
+- User-side Admin search/role/status endpoints are now implemented; see the integration section below. Admin must forward real bearer credentials, and the Admin frontend response mapping still needs reconciliation. Still outstanding: deployed-environment verification (including a controlled lockout-warning inbox check), account escalation to Admin and friendships. The complete frontend/Order/Credit/Admin journey has not been demonstrated by local onboarding and service-level tests.
 
 ## Account deletion (F5)
 

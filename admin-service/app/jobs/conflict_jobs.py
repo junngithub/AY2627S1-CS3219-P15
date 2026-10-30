@@ -6,7 +6,7 @@ from sqlalchemy import update
 
 from app.database import SessionLocal
 from app.models.conflict_case import ConflictCase, ConflictStatus, FaultParty
-from app.services import ai_client, conflict_resolution
+from app.services import ai_client, conflict_resolution, order_photos
 
 logger = logging.getLogger(__name__)
 
@@ -21,14 +21,13 @@ async def run_ai_evaluation(case_id: str) -> None:
         case = await db.get(ConflictCase, cid)
         if not case or case.status != ConflictStatus.created:
             return  # idempotent: already evaluated (or gone)
-        photos = case.evidence_photo_urls or []
+        order_id = case.order_id
+        refs = list(case.evidence_photo_urls or [])
         comment = case.comment
 
-    rec = await ai_client.get_fault_recommendation(
-        before_photo_url=photos[0] if photos else "",
-        after_photo_url=photos[-1] if photos else "",
-        comment=comment,
-    )
+    # Order still has the objects: resolve is what deletes them.
+    loaded = await order_photos.fetch_evidence(order_id, refs)
+    rec = None if loaded is None else await ai_client.get_fault_recommendation(loaded, comment)
 
     now = datetime.now(timezone.utc)
     if rec:

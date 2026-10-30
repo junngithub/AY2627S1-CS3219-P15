@@ -8,6 +8,11 @@ database:
   enabled: true # DATABASE_URL from Secret user-db (charts/foc-database, ADR-0010)
 kafka:
   user: user # writes foc.user.status (ADR-0004)
+env:
+  # Telegram verification (user-service/src/telegram.ts). Only one process may
+  # poll a bot, so user stays on one replica; set false on any extra ones.
+  TELEGRAM_POLLING_ENABLED: "true"
+  TELEGRAM_RESEND_COOLDOWN_SECONDS: "60"
 migrate:
   enabled: true # runs before each deploy (ADR-0011); image: the Dockerfile's `migrate` stage
   command: ["node_modules/.bin/prisma", "migrate", "deploy"]
@@ -16,6 +21,14 @@ secretEnv:
   OTP_SECRET: { secret: user-otp, key: OTP_SECRET }
   ORDER_USER_LOOKUP_TOKEN:
     { secret: order-user-lookup, key: ORDER_USER_LOOKUP_TOKEN }
+  # The bot, from @BotFather. Optional: without it Telegram verification
+  # answers 503 TELEGRAM_NOT_CONFIGURED. One bot per environment (two pollers on
+  # one bot fight over updates). Locally: kubectl -n foc create secret generic
+  # user-telegram --from-literal=TELEGRAM_BOT_TOKEN=<token>
+  # --from-literal=TELEGRAM_BOT_USERNAME=<bot_username>, then restart user.
+  # Cloud: Secrets Manager foc/<env>/user-telegram (a placeholder until set).
+  TELEGRAM_BOT_TOKEN: { secret: user-telegram, key: TELEGRAM_BOT_TOKEN, optional: true }
+  TELEGRAM_BOT_USERNAME: { secret: user-telegram, key: TELEGRAM_BOT_USERNAME, optional: true }
 mesh: # who may call user (ADR-0012)
   callers: [gateway, admin] # admin: list / promote / suspend / reinstate users
   internal:

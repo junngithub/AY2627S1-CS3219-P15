@@ -19,7 +19,8 @@ How Friend on Campus is provisioned and deployed across **local**, **dev**,
   [`docs/concepts.md`](docs/concepts.md) first.
 - Running things on your laptop: [`docs/local-floci.md`](docs/local-floci.md).
 - Bringing up dev on AWS (requirements and first-run steps):
-  [`docs/cloud-dev.md`](docs/cloud-dev.md).
+  [`docs/cloud-dev.md`](docs/cloud-dev.md). Day-to-day commands and lessons
+  learned: [`docs/dev-deployment-guide.md`](docs/dev-deployment-guide.md).
 - Hosting the frontend on S3 + CloudFront, and what's missing:
   [`docs/frontend-s3-cloudfront.md`](docs/frontend-s3-cloudfront.md).
 - What the dev env would cost on AWS: [`docs/dev-cost-estimate.md`](docs/dev-cost-estimate.md).
