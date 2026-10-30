@@ -17,6 +17,13 @@ enum AccessStatus {
   SUSPENDED
 }
 
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  REMOVED
+}
+
 model User {
   id                  String                 @id @default(uuid()) @db.Uuid
   email               String                 @unique
@@ -43,9 +50,27 @@ model User {
   passwordResetTokens PasswordResetToken[]
   telegramChallenges  TelegramVerificationChallenge[]
   verifiedEvent       UserVerifiedOutbox?
+  sentFriendships     Friendship[]           @relation("FriendshipSender")
+  receivedFriendships Friendship[]           @relation("FriendshipRecipient")
 
   @@index([accessStatus])
   @@index([scheduledDeletionAt])
+}
+
+// The migration also enforces no self-requests and an unordered-pair partial
+// unique index for PENDING/ACCEPTED rows. Prisma 5 cannot express that index.
+model Friendship {
+  id          String           @id @default(uuid()) @db.Uuid
+  senderId    String           @db.Uuid
+  recipientId String           @db.Uuid
+  status      FriendshipStatus @default(PENDING)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  sender      User             @relation("FriendshipSender", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient   User             @relation("FriendshipRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([senderId, status, createdAt, id])
+  @@index([recipientId, status, createdAt, id])
 }
 
 model EmailVerificationOtp {

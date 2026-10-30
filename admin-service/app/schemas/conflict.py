@@ -2,14 +2,13 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
 from app.models.conflict_case import ConflictStatus, FaultParty
+from app.schemas.camel import CamelModel
 
 
-class ConflictSummary(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class ConflictSummary(CamelModel):
     id: uuid.UUID  # was `str`; pydantic v2 won't coerce a UUID object to str
     order_id: str
     status: ConflictStatus
@@ -43,7 +42,7 @@ class CreateConflictRequest(BaseModel):
     photos: list[str] = []
 
 
-class ClaimConflictResponse(BaseModel):
+class ClaimConflictResponse(CamelModel):
     case_id: str
     order_id: str
     status: ConflictStatus
@@ -57,7 +56,7 @@ class ResolveConflictRequest(BaseModel):
     decision: Literal["accept", "reject"]  # accepted / rejected the AI's call
 
 
-class ResolveConflictResponse(BaseModel):
+class ResolveConflictResponse(CamelModel):
     case_id: str
     order_id: str
     resolved_fault_party: FaultParty

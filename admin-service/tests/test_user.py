@@ -138,7 +138,7 @@ def test_user_lifecycle_publishes_events(api):
     for action, topic, event_type, actor_field in actions:
         resp = api.post(f"/api/v1/admin/users/{user_id}/{action}", headers=ADMIN_HEADERS)
         assert resp.status_code == 200, resp.text
-        assert resp.json() == {"user_id": user_id, "action": action, "propagated": True}
+        assert resp.json() == {"userId": user_id, "action": action, "propagated": True}
         matched = events_for(topic, userId=user_id)
         assert len(matched) == 1
         assert_envelope(matched[0], event_type, userId=user_id, **{actor_field: "admin-sahana"})
