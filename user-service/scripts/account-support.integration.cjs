@@ -37,16 +37,16 @@ test("suspended login, reports and appeals with isolated User PostgreSQL and an 
       if (mode === "hang") return;
       if (mode === "error") { res.writeHead(500); res.end("private upstream failure"); return; }
       if (mode === "malformed") { res.writeHead(201); res.end("{}"); return; }
-      const common = { id: randomUUID(), status: "open", created_at: new Date().toISOString(), closed_at: null, closed_by_admin_id: null };
+      const common = { id: randomUUID(), status: "open", createdAt: new Date().toISOString(), closedAt: null, closedByAdminId: null };
       let record;
       if (req.url === "/api/v1/admin/reports") {
         const key = body.reporterUserId + ":" + body.reportedUserId;
-        if (!reports.has(key)) reports.set(key, { ...common, reporter_user_id: body.reporterUserId,
-          reported_user_id: body.reportedUserId, comment: body.comment });
+        if (!reports.has(key)) reports.set(key, { ...common, reporterUserId: body.reporterUserId,
+          reportedUserId: body.reportedUserId, comment: body.comment });
         record = reports.get(key);
       } else {
         assert.equal(req.url, "/api/v1/admin/appeals");
-        if (!appeals.has(body.userId)) appeals.set(body.userId, { ...common, user_id: body.userId, message: body.message });
+        if (!appeals.has(body.userId)) appeals.set(body.userId, { ...common, userId: body.userId, message: body.message });
         record = appeals.get(body.userId);
       }
       res.writeHead(201, { "content-type": "application/json" }); res.end(JSON.stringify(record));
@@ -97,7 +97,8 @@ test("suspended login, reports and appeals with isolated User PostgreSQL and an 
     assert.equal(reported.status, 201); assert.equal(reported.cache, "no-store");
     assert.deepEqual(calls.at(-1).body, { reporterUserId: a.id, reportedUserId: b.id, comment: "A report" });
     assert.equal(calls.at(-1).headers.authorization, undefined);
-    assert.equal(reported.body.reporter_user_id, a.id);
+    assert.equal(reported.body.reporterUserId, a.id);
+    assert.deepEqual(Object.keys(reported.body).sort(), ["id", "reporterUserId", "reportedUserId", "comment", "status", "createdAt", "closedAt", "closedByAdminId"].sort());
     const repeatReport = await post("/reports", { ...reportBody, comment: "replacement" }, a.token);
     assert.deepEqual(repeatReport.body, reported.body);
     assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: b.id } })).accessStatus, "ACTIVE");
@@ -122,6 +123,8 @@ test("suspended login, reports and appeals with isolated User PostgreSQL and an 
     const beforeAppealSessions = await prisma.authSession.count();
     const appeal = await post("/appeals", { email: suspended.email.toUpperCase(), password, message: " Review my suspension ", userId: b.id });
     assert.equal(appeal.status, 201); assert.equal(appeal.cache, "no-store");
+    assert.equal(appeal.body.userId, suspended.id);
+    assert.deepEqual(Object.keys(appeal.body).sort(), ["id", "userId", "message", "status", "createdAt", "closedAt", "closedByAdminId"].sort());
     assert.deepEqual(calls.at(-1).body, { userId: suspended.id, message: "Review my suspension" });
     assert.equal(calls.at(-1).headers.authorization, undefined);
     const simultaneous = await Promise.all(Array.from({ length: 4 }, () => post("/appeals", {

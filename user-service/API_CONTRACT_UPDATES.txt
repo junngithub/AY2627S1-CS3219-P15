@@ -466,10 +466,10 @@ trimmed to 1-4000 characters (400 INVALID_SUPPORT_TEXT). Invalid/unusable report
 session/account: 401 UNAUTHORIZED. Submission does not suspend anyone.
 Forwards only { reporterUserId, reportedUserId, comment } to private Admin
 POST /api/v1/admin/reports. Returns 201 with a validated, identity-matched,
-allowlisted Admin record, preserving its snake_case fields:
-{ id, reporter_user_id, reported_user_id, comment, status, created_at,
-closed_at, closed_by_admin_id }.
-status: open | dismissed | actioned. closed_at/closed_by_admin_id may be null.
+allowlisted Admin record, preserving its camelCase fields:
+{ id, reporterUserId, reportedUserId, comment, status, createdAt,
+closedAt, closedByAdminId }.
+status: open | dismissed | actioned. closedAt/closedByAdminId are required but may be null.
 
 Method: POST
 Endpoint: /api/v1/user/appeals
@@ -484,9 +484,12 @@ valid credentials forwards only { userId, message } to private Admin
 POST /api/v1/admin/appeals; no password or bearer token is forwarded by either
 intake call. No session is created, no deletion cancelled, and no reinstatement
 performed. Returns 201 with the validated, identity-matched, allowlisted record:
-{ id, user_id, message, status, created_at, closed_at, closed_by_admin_id }.
-status: open | rejected | reinstated. closed_at/closed_by_admin_id may be null.
+{ id, userId, message, status, createdAt, closedAt, closedByAdminId }.
+status: open | rejected | reinstated. closedAt/closedByAdminId are required but may be null.
 
+Both responses are strictly validated against camelCase fields and matched to
+the submitted user UUIDs; only allowlisted fields are returned. There is no
+legacy snake_case fallback. Request payloads are unchanged.
 Both routes set Cache-Control: no-store. Admin owns persistence and review.
 Admin keeps one OPEN appeal per user and one OPEN report per ordered
 reporter/target pair; a retry returns the original record and original text.
@@ -535,4 +538,4 @@ over the 32 KiB parser limit returns 413 REQUEST_TOO_LARGE. The global handler
 sets Cache-Control: no-store and never logs raw parser/database errors; an
 unexpected 500 INTERNAL_ERROR logs only a constant message, not credentials/body.
 
-Final reported checks on 30 October 2026 passed: TypeScript build, Prisma generation/validation, 83/83 unit tests, all seven isolated integration suites (email, lifecycle, admin-bootstrap, admin-users, lockout, friendships and account-support), strict new-unit-test type checking and integration-script syntax checks. All temporary databases were cleaned up. Support integration used real User HTTP/PostgreSQL with an HTTP Admin stub, not the actual Admin application or database. The Node 20 production Docker build and network-isolated smoke test passed (Node 20.20.2, non-root, 256 MiB, no `.env`, health/OpenAPI checks; no database or real Admin exercised). The 183-package install audit and Docker `npm ci` reported zero vulnerabilities. No normal database was migrated, no real email/bot messages were sent and no cloud deployment occurred. Actual Admin, cloud/frontend, gateway/mesh, load and full cross-service acceptance remain unproven; infrastructure changes are handoff only.
+Historical checks before the camelCase response fix, reported on 30 October 2026, passed: TypeScript build, Prisma generation/validation, 83/83 unit tests, all seven isolated integration suites (email, lifecycle, admin-bootstrap, admin-users, lockout, friendships and account-support), strict new-unit-test type checking and integration-script syntax checks. All temporary databases were cleaned up. Support integration used real User HTTP/PostgreSQL with an HTTP Admin stub, not the actual Admin application or database. The Node 20 production Docker build and network-isolated smoke test passed (Node 20.20.2, non-root, 256 MiB, no `.env`, health/OpenAPI checks; no database or real Admin exercised). The 183-package install audit and Docker `npm ci` reported zero vulnerabilities. No normal database was migrated, no real email/bot messages were sent and no cloud deployment occurred. Actual Admin, cloud/frontend, gateway/mesh, load and full cross-service acceptance remain unproven; infrastructure changes are handoff only.
