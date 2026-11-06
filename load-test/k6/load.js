@@ -1,8 +1,10 @@
-// Backend load. Hits Order directly with the gateway identity headers.
-// Order then calls User, Supplier, Credit, and, on escalate, Admin.
+// Backend load through the API gateway.
+// Each VU logs in once (POST /api/v1/user/login), then calls Order with
+// Authorization: Bearer <session>. The gateway authorizes and injects identity.
 //
+//   node load-test/setup/seed-users.mjs --apply
 //   k6 run load-test/k6/load.js
-//   k6 run -e VUS=30 -e DURATION=30s load-test/k6/load.js
+//   k6 run -e VUS=30 -e DURATION=30s -e BASE_URL=http://localhost:8080 load-test/k6/load.js
 //
 // VUS and REQUESTER_SHARE must match setup/seed-users.mjs.
 //
@@ -20,7 +22,8 @@ const total = intEnv("VUS", 9600);
 const share = Number(__ENV.REQUESTER_SHARE || 0.3);
 const requesterVus = Math.round(total * share);
 const courierVus = total - requesterVus;
-const orderUrl = __ENV.ORDER_URL || "http://localhost:8083";
+// Gateway by default (local deploy/local.sh gateway → :8080). ORDER_URL still works.
+const baseUrl = (__ENV.BASE_URL || __ENV.GATEWAY_URL || __ENV.ORDER_URL || "http://localhost:8080").replace(/\/$/, "");
 const pickupId = __ENV.PICKUP_ID || "2";
 const dropoffId = Number(__ENV.DROPOFF_ID || 1);
 const escalateEvery = intEnv("ESCALATE_EVERY", 20);
@@ -28,7 +31,11 @@ const think = Number(__ENV.THINK_SECONDS || 1);
 
 const seeded = new SharedArray("users", () => {
   const data = JSON.parse(open("../data/users.json"));
-  return [{ requesters: data.requesters, couriers: data.couriers }];
+  return [{
+    password: data.password || __ENV.LOAD_PASSWORD || "LoadTestPass1",
+    requesters: data.requesters,
+    couriers: data.couriers,
+  }];
 });
 
 const photo = encoding.b64decode(
@@ -40,6 +47,9 @@ if (seeded[0].requesters.length < requesterVus || seeded[0].couriers.length < co
 }
 
 const openOrders = [];
+// Per-VU copy of init state: one login session for this VU's user.
+let sessionToken = null;
+let sessionEmail = null;
 
 export const options = {
   // systemTags only lists built-in tags. Custom `op` still comes from request tags.
@@ -54,6 +64,7 @@ export const options = {
     },
   },
   thresholds: {
+    "http_req_failed{op:login}": ["rate<0.05"],
     "http_req_failed{op:create}": ["rate<0.05"],
     "http_req_failed{op:read}": ["rate<0.05"],
     "http_req_failed{op:fulfill}": ["rate<0.05"],
@@ -63,71 +74,105 @@ export const options = {
 
 export function traffic() {
   if (__VU <= requesterVus) {
-    requester(seeded[0].requesters[(__VU - 1) % seeded[0].requesters.length].id);
+    const user = seeded[0].requesters[(__VU - 1) % seeded[0].requesters.length];
+    if (!ensureSession(user)) {
+      sleep(think);
+      return;
+    }
+    requester();
   } else {
     const index = __VU - requesterVus - 1;
-    courier(seeded[0].couriers[index % seeded[0].couriers.length].id);
+    const user = seeded[0].couriers[index % seeded[0].couriers.length];
+    if (!ensureSession(user)) {
+      sleep(think);
+      return;
+    }
+    courier();
   }
   sleep(think);
 }
 
-function requester(userId) {
+function ensureSession(user) {
+  if (sessionToken && sessionEmail === user.email) {
+    return true;
+  }
+  const response = http.post(
+    `${baseUrl}/api/v1/user/login`,
+    JSON.stringify({ email: user.email, password: seeded[0].password }),
+    {
+      headers: { "Content-Type": "application/json" },
+      tags: { op: "login", name: "login" },
+      timeout: "30s",
+      responseCallback: http.expectedStatuses(200),
+    },
+  );
+  const ok = check(response, { "logged in": (body) => body.status === 200 && !!body.json("token") });
+  if (!ok) {
+    sessionToken = null;
+    sessionEmail = null;
+    return false;
+  }
+  sessionToken = response.json("token");
+  sessionEmail = user.email;
+  return true;
+}
+
+function requester() {
   if (openOrders.length < 3) {
-    const created = createOrder(userId);
+    const created = createOrder();
     if (created) {
       openOrders.push(created);
     }
   }
   for (let index = openOrders.length - 1; index >= 0; index -= 1) {
-    const status = orderStatus(userId, openOrders[index]);
+    const status = orderStatus(openOrders[index]);
     if (status === "DELIVERED") {
-      closeOrder(userId, openOrders[index]);
+      closeOrder(openOrders[index]);
       openOrders.splice(index, 1);
     } else if (status === "ACKNOWLEDGED" || status === "ESCALATED" || status === "UNDER_REVIEW" || status === "COMPLETED" || status === "CANCELLED" || status === "EXPIRED") {
       openOrders.splice(index, 1);
     }
   }
   if (__ITER % 5 === 0) {
-    readJson(userId, `${orderUrl}/api/v1/orders/requests/active?page=0&size=20`, "requests_active");
-    readJson(userId, `${orderUrl}/api/v1/orders/alerts?page=0&size=20`, "alerts");
+    readJson(`${baseUrl}/api/v1/orders/requests/active?page=0&size=20`, "requests_active");
+    readJson(`${baseUrl}/api/v1/orders/alerts?page=0&size=20`, "alerts");
   }
   if (__ITER % 10 === 0) {
-    readJson(userId, `${orderUrl}/api/v1/orders/mine?page=0&size=20`, "mine");
-    readJson(userId, `${orderUrl}/api/v1/orders/requests/past?page=0&size=20`, "requests_past");
+    readJson(`${baseUrl}/api/v1/orders/mine?page=0&size=20`, "mine");
+    readJson(`${baseUrl}/api/v1/orders/requests/past?page=0&size=20`, "requests_past");
   }
 }
 
-function courier(userId) {
-  const pool = readJson(userId, `${orderUrl}/api/v1/orders?page=0&size=20`, "pool");
+function courier() {
+  const pool = readJson(`${baseUrl}/api/v1/orders?page=0&size=20`, "pool");
   const content = pool && pool.content ? pool.content : [];
   if (content.length > 0) {
     const order = content[Math.floor(Math.random() * content.length)];
     const accepted = http.post(
-      `${orderUrl}/api/v1/orders/${order.id}/accept`,
+      `${baseUrl}/api/v1/orders/${order.id}/accept`,
       null,
-      params(userId, "fulfill", "accept", [200, 409]),
+      params("fulfill", "accept", [200, 409]),
     );
     check(accepted, { "accept claimed or already taken": (response) => response.status === 200 || response.status === 409 });
     if (accepted.status === 200) {
-      upload(userId, order.id, "collect");
-      upload(userId, order.id, "deliver");
+      upload(order.id, "collect");
+      upload(order.id, "deliver");
     }
   }
   if (__ITER % 5 === 0) {
-    readJson(userId, `${orderUrl}/api/v1/orders/deliveries/active?page=0&size=20`, "deliveries_active");
-    readJson(userId, `${orderUrl}/api/v1/orders/deliveries/past?page=0&size=20`, "deliveries_past");
+    readJson(`${baseUrl}/api/v1/orders/deliveries/active?page=0&size=20`, "deliveries_active");
+    readJson(`${baseUrl}/api/v1/orders/deliveries/past?page=0&size=20`, "deliveries_past");
     readJson(
-      userId,
-      `${orderUrl}/api/v1/orders/search?pickupLocationId=${pickupId}&page=0&size=20`,
+      `${baseUrl}/api/v1/orders/search?pickupLocationId=${pickupId}&page=0&size=20`,
       "search",
     );
   }
 }
 
-function createOrder(userId) {
+function createOrder() {
   const now = Date.now();
   const response = http.post(
-    `${orderUrl}/api/v1/orders`,
+    `${baseUrl}/api/v1/orders`,
     JSON.stringify({
       itemDescription: "Load test drop",
       credits: 1,
@@ -136,7 +181,7 @@ function createOrder(userId) {
       fromLocation: pickupId,
       deliveryPointId: dropoffId,
     }),
-    params(userId, "create", "create", [201]),
+    params("create", "create", [201]),
   );
   const ok = check(response, { "order created": (body) => body.status === 201 });
   if (!ok) {
@@ -145,30 +190,30 @@ function createOrder(userId) {
   return response.json("id");
 }
 
-function closeOrder(userId, orderId) {
+function closeOrder(orderId) {
   if (__ITER % escalateEvery === 0) {
     const response = http.post(
-      `${orderUrl}/api/v1/orders/${orderId}/escalate`,
+      `${baseUrl}/api/v1/orders/${orderId}/escalate`,
       JSON.stringify({ disputeText: "Load test dispute" }),
-      params(userId, "close", "escalate", [200, 409]),
+      params("close", "escalate", [200, 409]),
     );
     check(response, { "escalated or already closed": (body) => body.status === 200 || body.status === 409 });
     return;
   }
   const response = http.post(
-    `${orderUrl}/api/v1/orders/${orderId}/acknowledge`,
+    `${baseUrl}/api/v1/orders/${orderId}/acknowledge`,
     null,
-    params(userId, "close", "acknowledge", [200, 409]),
+    params("close", "acknowledge", [200, 409]),
   );
   check(response, { "acknowledged or already closed": (body) => body.status === 200 || body.status === 409 });
 }
 
-function upload(userId, orderId, action) {
+function upload(orderId, action) {
   const response = http.post(
-    `${orderUrl}/api/v1/orders/${orderId}/${action}`,
+    `${baseUrl}/api/v1/orders/${orderId}/${action}`,
     { photo: http.file(photo, `${action}.png`, "image/png") },
     {
-      headers: { "X-User-Id": userId, "X-Permitted-Action": "true" },
+      headers: { Authorization: `Bearer ${sessionToken}` },
       tags: { op: "fulfill", name: action },
       timeout: "30s",
       responseCallback: http.expectedStatuses(200),
@@ -177,13 +222,13 @@ function upload(userId, orderId, action) {
   check(response, { [`${action} stored a photo`]: (body) => body.status === 200 });
 }
 
-function orderStatus(userId, orderId) {
-  const body = readJson(userId, `${orderUrl}/api/v1/orders/${orderId}`, "get_order");
+function orderStatus(orderId) {
+  const body = readJson(`${baseUrl}/api/v1/orders/${orderId}`, "get_order");
   return body && body.status ? body.status : "";
 }
 
-function readJson(userId, url, name) {
-  const response = http.get(url, params(userId, "read", name, [200]));
+function readJson(url, name) {
+  const response = http.get(url, params("read", name, [200]));
   check(response, { "read ok": (body) => body.status === 200 });
   if (response.status !== 200) {
     return null;
@@ -191,11 +236,10 @@ function readJson(userId, url, name) {
   return response.json();
 }
 
-function params(userId, op, name, statuses) {
+function params(op, name, statuses) {
   return {
     headers: {
-      "X-User-Id": userId,
-      "X-Permitted-Action": "true",
+      Authorization: `Bearer ${sessionToken}`,
       "Content-Type": "application/json",
     },
     tags: { op, name },
