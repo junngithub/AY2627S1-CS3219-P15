@@ -1,3 +1,8 @@
+# AI Assistance Disclosure
+# Tool: Cursor (Auto), date: 2026-11-09
+# Scope: Implementation assistance for Admin Service application services under author-fixed requirements and architecture.
+# Author review: Sahana Avantika generated ideas, designed implementation, validated correctness, edited where needed, and verified behavior/tests.
+
 """User reports and suspension appeals.
 
 User Service opens a row. An admin dismisses or rejects it here, or closes it

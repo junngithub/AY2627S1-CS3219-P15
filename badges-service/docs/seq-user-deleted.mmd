@@ -1,0 +1,20 @@
+sequenceDiagram
+    participant User as User Service
+    participant Kafka as foc.user.status
+    participant Badges as Badges service
+    participant DB as Postgres
+    participant DLQ as foc.badges.dlq
+
+    Note over User: six-month deletion period ends
+    User->>Kafka: type UserDeleted, data.userId
+    Kafka->>Badges: UserDeleted
+    alt another type, e.g. UserVerified
+        Badges-->>Kafka: ignored
+    else not JSON or fails the schema
+        Badges->>DLQ: dead letter, reason invalid
+    else UserDeleted
+        Note over Badges,DB: one transaction
+        Badges->>DB: insert deleted_user, conflict does nothing
+        Badges->>DB: delete the user's user_badge, counted_order and user_metrics rows
+        Note over Badges,DB: disputed_order keeps the id, only to mark them as a party
+    end

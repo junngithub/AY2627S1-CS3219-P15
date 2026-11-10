@@ -52,7 +52,10 @@ admin-service/
 │       ├── appeal_jobs.py       # advisory appeal assessment (own DB session)
 │       ├── report_jobs.py       # advisory report assessment (own DB session)
 │       └── conflict_jobs.py      # AI eval, reminder, auto-resolve (own DB session)
+├── scripts/
+│   └── resolve_open_escalations.py  # one-off ops: clear open cases as no-fault
 ├── alembic/                      # migrations through 0007_report_ai
+│   └── versions/AI_ASSISTANCE.md # folder-level AI disclosure (no in-file headers)
 ├── tests/
 ├── mock_user_service.py          # local stub for User Service
 ├── docker-compose.yml            # Postgres, mock User Service, app (Kafka is Order's)
@@ -326,6 +329,25 @@ You still need Postgres, and Order's Kafka if you want publishes to succeed.
 Easiest path: start Order's Kafka, then `docker compose up db mock-user-service`,
 then run uvicorn on the host with `KAFKA_BOOTSTRAP_SERVERS=localhost:9092`.
 
+## Ops: clear open escalations (load-test cleanup)
+
+Not a migration. Resolves every open conflict case as `no-fault`, deletes leftover
+APScheduler jobs, and publishes `admin.case.resolved` so Order / Credit / Badges
+catch up. Dry-run by default.
+
+```bash
+cp .env.example .env   # DB + Kafka must point at the target environment
+pip install -r requirements.txt
+python scripts/resolve_open_escalations.py              # list only
+python scripts/resolve_open_escalations.py --apply      # write + publish
+python scripts/resolve_open_escalations.py --apply --limit 100
+python scripts/resolve_open_escalations.py --republish --apply   # retry Kafka after a broker blip
+```
+
+Order's Kafka must be reachable (`KAFKA_BOOTSTRAP_SERVERS`). If publish fails after
+the DB commit, use `--republish --apply` (Order only settles while still
+`ESCALATED` / `UNDER_REVIEW`, so a second event is safe once already `COMPLETED`).
+
 ## Tests
 
 ```bash
@@ -371,3 +393,24 @@ calls send `x-user-id`, `x-is-admin`, and `x-permitted-action`.
   `.env` and set `AI_PROVIDER_API_KEY` to a Google AI Studio key. Compose
   reads that file. An empty key, a timeout, a missing object, or an unusable
   reply records `ai_failed`.
+
+## AI Use Summary
+
+**Owner:** Sahana Avantika
+
+**Tools:** Cursor (Auto)
+
+Sahana Avantika defined Admin Service requirements and architecture (conflict
+state machine, HTTP/Kafka contracts, schema, AI evaluation and auto-resolve,
+claim/review, moderation reports/appeals, append-only audit, gateway auth,
+durable timers, evidence photo fetch). Cursor (Auto) assisted with
+implementation code, tests, config/Docker, and documentation under that
+design. Per-file `AI Assistance Disclosure` headers are on Python sources,
+application config, Docker/compose, scripts, and design docs.
+
+Alembic revision files are **not** edited with in-file headers (checksum /
+deploy safety). Collection disclosure:
+[`alembic/versions/AI_ASSISTANCE.md`](alembic/versions/AI_ASSISTANCE.md).
+
+Plan: [`../ai/plans/admin_service_plan.md`](../ai/plans/admin_service_plan.md).
+Usage log: [`../ai/usage-log.md`](../ai/usage-log.md).

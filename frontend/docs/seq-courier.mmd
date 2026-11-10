@@ -1,0 +1,30 @@
+sequenceDiagram
+    actor C as Courier
+    participant App as Browser app
+    participant GW as Gateway
+    participant Order as Order Service
+
+    C->>App: /browse
+    Note over App: location sent only when granted and on campus, otherwise ranked by reward
+    App->>GW: GET /api/v1/orders?latitude&longitude&size=100
+    GW->>Order: authorize, forward
+    Order-->>App: open requests, nearest pickup first
+    C->>App: Accept
+    App->>GW: POST /api/v1/orders/{id}/accept
+    alt someone else accepted first
+        Order-->>App: 409
+        App-->>C: "already accepted", list refreshed
+    else accepted
+        Order-->>App: Accepted
+        App-->>C: /deliveries/{id}
+    end
+    loop every 5 seconds while visible
+        App->>GW: GET /api/v1/orders/{id}
+    end
+    C->>App: photo at pickup
+    App->>GW: POST /api/v1/orders/{id}/collect, multipart photo
+    Order-->>App: Collected
+    C->>App: photo at dropoff
+    App->>GW: POST /api/v1/orders/{id}/deliver, multipart photo
+    Order-->>App: Delivered
+    Note over App: re-checks pending ratings after 1.5, 4 and 10 seconds

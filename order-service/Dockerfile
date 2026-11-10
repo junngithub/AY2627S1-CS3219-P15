@@ -1,3 +1,8 @@
+# AI Assistance Disclosure
+# Tool: Cursor (Auto), date: 2026-10-15
+# Scope: Boilerplate/config assistance for Order Service under author-fixed requirements and architecture.
+# Author review: Varun Sivakumar generated ideas, designed implementation, validated correctness, edited where needed, and verified behavior/tests.
+
 # Deployable Order Service image.
 # Local-only tools (SonarQube) live in Dockerfile.local and are not part of this image.
 FROM maven:3.9.11-eclipse-temurin-21 AS build

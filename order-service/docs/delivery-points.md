@@ -1,3 +1,10 @@
+<!--
+AI Assistance Disclosure
+Tool: Cursor (Auto), date: 2026-10-15
+Scope: Documentation wording for Order Service under author-fixed design.
+Author review: Varun Sivakumar generated ideas, designed implementation, validated correctness, edited where needed, and verified behavior/tests.
+-->
+
 # Delivery points (design)
 
 Status: **implemented** (see Flyway `V6`/`V7`, `DeliveryPointService`, create/list/PATCH/DELETE + nickname + `UserDeleted` association cleanup). Scope is Order Service unless noted.

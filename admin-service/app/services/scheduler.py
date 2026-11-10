@@ -1,3 +1,8 @@
+# AI Assistance Disclosure
+# Tool: Cursor (Auto), date: 2026-11-09
+# Scope: Implementation assistance for Admin Service application services under author-fixed requirements and architecture.
+# Author review: Sahana Avantika generated ideas, designed implementation, validated correctness, edited where needed, and verified behavior/tests.
+
 from datetime import datetime, timedelta, timezone
 
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
@@ -115,6 +120,16 @@ def schedule_conflict_timers(case_id: str, deadline: datetime) -> None:
         "app.jobs.conflict_jobs:auto_resolve_case",
         "date", run_date=deadline, args=[case_id],
         id=f"deadline-{case_id}", replace_existing=True, misfire_grace_time=3600,
+    )
+
+
+def conflict_job_ids(case_id: str) -> tuple[str, ...]:
+    """Durable APScheduler ids tied to one conflict case."""
+    return (
+        f"reminder-{case_id}",
+        f"deadline-{case_id}",
+        f"ai-{case_id}",
+        f"ai-rerun-{case_id}",
     )
 
 

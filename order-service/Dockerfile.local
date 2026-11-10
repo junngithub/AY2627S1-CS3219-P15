@@ -1,3 +1,8 @@
+# AI Assistance Disclosure
+# Tool: Cursor (Auto), date: 2026-10-15
+# Scope: Boilerplate/config assistance for Order Service under author-fixed requirements and architecture.
+# Author review: Varun Sivakumar generated ideas, designed implementation, validated correctness, edited where needed, and verified behavior/tests.
+
 # Local-only SonarQube server. Not deployed.
 # The application image is Dockerfile. This image does not contain the app.
 # JDBC settings are supplied by compose.local.yaml.

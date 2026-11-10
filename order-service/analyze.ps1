@@ -1,3 +1,8 @@
+# AI Assistance Disclosure
+# Tool: Cursor (Auto), date: 2026-10-15
+# Scope: Boilerplate/config assistance for Order Service under author-fixed requirements and architecture.
+# Author review: Varun Sivakumar generated ideas, designed implementation, validated correctness, edited where needed, and verified behavior/tests.
+
 # Retrigger SonarQube analysis for order-service.
 # SonarQube is started with Docker. This script only runs the scan.
 $ErrorActionPreference = "Stop"

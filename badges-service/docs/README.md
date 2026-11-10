@@ -32,6 +32,8 @@ An order escalated from `COLLECTED` was never counted, so escalation removes not
 
 ## Account deletion
 
+![Account deletion](seq-user-deleted.png)
+
 User publishes `UserDeleted` on foc.user.status once an account's six-month deletion period ends (User F5), in its own envelope (`type`, `data.userId`). Badges removes the user's metrics, badges and counted orders in one transaction and records the ID in `deleted_user`. Every later event checks that table: an order counts only for the party who still has an account, a rating for a deleted user is ignored, and a verdict counts the order only for the other party. A repeated `UserDeleted` is a no-op, and a replay can't bring the user's badges back.
 
 ## Rating updates
@@ -50,13 +52,13 @@ Every event re-checks the affected users against the whole catalog. A badge is h
 
 ![Read endpoint](seq-read.png)
 
-The profile reads stored state only, so a profile view never waits on Order or Rating. Badges are private: anyone other than the owner gets the same 404 as a route that does not exist, so the response does not reveal whether the user exists.
+The profile reads stored state only, so a profile view never waits on Order or Rating. The catalog is read from the database once and cached in memory until the next seed, so neither profile reads nor events query it each time. Badges are private: anyone other than the owner gets the same 404 as a route that does not exist, so the response does not reveal whether the user exists.
 
 ## Startup and catalog changes
 
 ![Startup](seq-startup.png)
 
-`src/catalog/badges.json` is upserted into `badge_catalog` before the server listens. Rows that did not change are not written. If any badge was added or changed, every user in `user_metrics` is re-checked against the new catalog, 1,000 at a time in user id order, in the background so the health probes keep answering. A new consumer group starts from the earliest offset Kafka still retains, so activity from before Badges was first deployed is read if the topics still hold it.
+`src/catalog/badges.json` is upserted into `badge_catalog` before the server listens. Rows that did not change are not written, and seeding clears the in-memory catalog cache. If any badge was added or changed, every user in `user_metrics` is re-checked against the new catalog, 1,000 at a time in user id order, in the background so the health probes keep answering. A new consumer group starts from the earliest offset Kafka still retains, so activity from before Badges was first deployed is read if the topics still hold it.
 
 ## Failure handling
 
@@ -66,5 +68,11 @@ The profile reads stored state only, so a profile view never waits on Order or R
 | Message has another `eventType` | Ignored, not logged as an error |
 | Handler throws, e.g. the database is down | Retried up to 4 attempts, waiting 200 ms × attempt between them, then logged, sent to `foc.badges.dlq`, and skipped so the partition keeps moving. If Kafka refuses the dead letter, the message is retried instead of lost |
 | No `KAFKA_BROKERS` | HTTP only. Badges never change |
+
+## Dead letters and replay
+
+![Dead-letter replay](seq-dlq.png)
+
+A message the consumer gives up on goes to `foc.badges.dlq` with its origin, reason, replay count and first failure time in headers (field list in [interfaces.md](interfaces.md#kafka)). The topic keeps it 30 days. `npm run replay:dlq`, run inside the badges pod, sends each dead letter written before the run started back through the handler for its original topic. A message that still fails is re-queued at the end of the topic; after its 5th failed replay or 30 days it is expired instead, so a message that can never succeed does not circle forever. Expired and dropped messages are written in full to the replay's error output so they can be applied by hand. The script exits non-zero when anything was re-queued.
 
 Every handler ignores what it has already applied, so events can be run through again safely. `npm run replay:dlq` replays the dead-letter topic, and a new `KAFKA_GROUP_ID` replays everything Kafka still holds; both are described in the [service README](../README.md#recovering-from-missed-or-failed-events). What a replay cannot recover (activity older than Kafka's retention, a verdict Admin failed to publish, a verdict for an escalation Badges never saw) is listed under [known limitations](../README.md#known-limitations).

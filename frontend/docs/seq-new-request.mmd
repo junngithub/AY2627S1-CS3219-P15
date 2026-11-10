@@ -1,0 +1,27 @@
+sequenceDiagram
+    actor R as Requester
+    participant App as Browser app
+    participant GW as Gateway
+    participant Order as Order Service
+    participant Others as Supplier, Rating, Credit
+
+    R->>App: /requests/new
+    par form data
+        App->>GW: GET /api/v1/supplier?pageSize=100
+        App->>GW: GET /api/v1/orders/delivery-points
+        App->>GW: GET /api/v1/orders/delivery-points/my-locations
+        App->>GW: GET /api/v1/credit/me/balance
+    end
+    R->>App: item, reward, pickup, dropoff, times
+    Note over App: checks the reward against the shown balance before sending
+    App->>GW: POST /api/v1/orders
+    GW->>Order: authorize, set X-User-Id, forward
+    Order->>Others: supplier lookup, rating snapshot, reserve credits
+    alt reserved and stored
+        Order-->>App: 201 order, status Created
+        App->>GW: GET /api/v1/credit/me/balance
+        App-->>R: /orders/{id}
+    else not enough credits, or a service is down
+        Order-->>App: 400 or 503 with { error, code }
+        App-->>R: error shown on the form, nothing posted
+    end

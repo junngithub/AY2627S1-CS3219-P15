@@ -9,6 +9,9 @@
  *   GET  /api/v1/rating/{userId}          one unified average + count
  *   GET  /api/v1/rating/me/pending        ratings this user may still give
  *   POST /api/v1/rating/orders/{orderId}  { score 1-5, comment? }
+ *   POST /api/v1/rating/orders/{orderId}/skip  hide it from /me/pending
+ *
+ * 2026-11-09: Skip is saved by the Rating Service, so it holds on every device.
  */
 
 import { useSyncExternalStore } from 'react';
@@ -155,9 +158,10 @@ export function usePendingRatings(): PendingRating[] {
 }
 
 /*
- * "Skip" (UI FR14.1.3) means "don't ask me about this order again". Kept in
- * this browser only: the Rating Service has no notion of a skipped rating, and
- * the grant stays usable.
+ * "Skip" (UI FR14.1.3) means "don't ask me about this order again". The Rating
+ * Service records it, so the order leaves /me/pending on every device; the
+ * grant stays usable. If that call fails (e.g. a Rating Service without the
+ * skip endpoint), the skip is kept in this browser instead, as before.
  */
 const SKIPPED_KEY = 'foc.rating.skipped';
 
@@ -202,7 +206,14 @@ export function markPrompted(userId: string, at: number): void {
   }
 }
 
-export function skipRating(userId: string, orderId: string): void {
+export async function skipRating(userId: string, orderId: string): Promise<void> {
+  try {
+    await api.post(`/rating/orders/${encodeURIComponent(orderId)}/skip`);
+    removePending(orderId);
+    return;
+  } catch {
+    // Fall back to this browser below.
+  }
   try {
     const all = JSON.parse(window.localStorage.getItem(SKIPPED_KEY) ?? '{}') as Record<string, string[]>;
     all[userId] = [...readSkipped(userId), orderId].slice(-200);

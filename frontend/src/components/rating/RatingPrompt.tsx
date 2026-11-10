@@ -31,7 +31,7 @@ interface OrderContext {
 export function RatingPrompt() {
   const { user } = useAuth();
   const pending = usePendingRatings();
-  // Skips made in this tab, so the next prompt shows without waiting for storage.
+  // Skips made in this tab, so the next prompt shows without waiting for the Rating Service.
   const [skippedHere, setSkippedHere] = useState<string[]>([]);
   const [context, setContext] = useState<OrderContext | null>(null);
 
@@ -97,7 +97,8 @@ export function RatingPrompt() {
         closed();
       }}
       onSkip={() => {
-        skipRating(userId, next.orderId);
+        // Saved by the Rating Service in the background; hidden here at once.
+        void skipRating(userId, next.orderId);
         setSkippedHere((current) => [...current, next.orderId]);
         closed();
       }}

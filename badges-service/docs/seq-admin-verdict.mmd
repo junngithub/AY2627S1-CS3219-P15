@@ -3,17 +3,20 @@ sequenceDiagram
     participant Kafka as foc.admin.events
     participant Badges as Badges service
     participant DB as Postgres
+    participant DLQ as foc.badges.dlq
 
     Admin->>Kafka: admin.case.resolved with faultParty
     Kafka->>Badges: orderId, caseId, faultParty
-    alt other eventType or fails the schema
-        Badges-->>Kafka: skip, and log when invalid
+    alt another eventType
+        Badges-->>Kafka: ignored
+    else not JSON or fails the schema
+        Badges->>DLQ: dead letter, reason invalid
     else disputed_order already has a verdict
         Badges-->>Kafka: duplicate, the first verdict is kept
     else first verdict
         Badges->>DB: upsert disputed_order with faultParty and resolved_at
         alt escalation already seen, parties known
-            Badges->>DB: count the order for whoever was not at fault
+            Badges->>DB: count the order for whoever was not at fault and is not in deleted_user
             Badges->>DB: adjust user_metrics and re-check those users
         else escalation not seen yet
             Note over Badges,DB: stored only, applied when ESCALATED arrives

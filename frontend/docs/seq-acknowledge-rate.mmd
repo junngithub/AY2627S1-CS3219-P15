@@ -1,0 +1,29 @@
+sequenceDiagram
+    actor R as Requester
+    participant App as Browser app
+    participant GW as Gateway
+    participant Order as Order Service
+    participant Kafka as Kafka
+    participant Rating as Rating Service
+
+    R->>App: Acknowledge receipt on /orders/{id}
+    App->>GW: POST /api/v1/orders/{id}/acknowledge
+    GW->>Order: authorize, forward
+    Order-->>App: Acknowledged
+    App->>GW: GET /api/v1/credit/me/balance
+    Order-)Kafka: rating.permission.granted, from Order's outbox
+    Kafka-)Rating: grant stored
+    loop after 1.5, 4 and 10 seconds, then every 30 seconds
+        App->>GW: GET /api/v1/rating/me/pending
+        GW->>Rating: authorize, forward
+        Rating-->>App: pending grants
+    end
+    Note over App: prompt opens by itself at most once per tab session
+    alt Submit
+        App->>GW: POST /api/v1/rating/orders/{id}, score and comment
+        Rating-->>App: 201
+    else Skip
+        App->>GW: POST /api/v1/rating/orders/{id}/skip
+        Rating-->>App: 204, gone from pending on every device
+        Note over App: if that call fails, the skip is kept in localStorage
+    end

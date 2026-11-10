@@ -1,0 +1,33 @@
+sequenceDiagram
+    actor U as User
+    participant App as Browser app
+    participant GW as Gateway
+    participant User as User Service
+
+    U->>App: /signup
+    App->>GW: POST /api/v1/user/signup
+    GW->>User: public route, no token check
+    User-->>App: 201, OTP emailed
+    U->>App: /verify-email, six-digit code
+    App->>GW: POST /api/v1/user/verify-email
+    GW->>User: public route
+    User-->>App: 200
+    U->>App: /login
+    App->>GW: POST /api/v1/user/login
+    GW->>User: public route
+    User-->>App: token
+    Note over App: token kept in memory and sessionStorage foc.token
+    App->>GW: GET /api/v1/user/me, Authorization Bearer token
+    GW->>User: authorize, then forward
+    User-->>App: id, name, status, isAdmin
+    alt status Created
+        App->>App: RequireVerified sends to /verify-telegram
+        App->>GW: POST /api/v1/user/request-telegram-verification
+        U->>App: code sent by the Telegram bot
+        App->>GW: POST /api/v1/user/verify-telegram
+        GW->>User: authorize, then forward
+        User-->>App: status Verified
+        App->>GW: GET /api/v1/user/me again
+    end
+    App-->>U: /browse
+    Note over App,GW: any later 401 clears the token and returns to /login

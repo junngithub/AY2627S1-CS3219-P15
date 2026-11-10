@@ -1,5 +1,5 @@
 image:
-  tag: "1d29a55a70bc0c6dcf2ae3c1a0ba2478f5f84d06" # git SHA, set by deploy/push-dev.sh
+  tag: "bc3188425d395d90cf6e3239c295428a76d66322" # git SHA, set by deploy/push-dev.sh
 replicas: 1
 env:
   # Same private bucket order writes. No keys: the node role is read from

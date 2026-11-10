@@ -1,0 +1,26 @@
+sequenceDiagram
+    actor Op as Operator
+    participant Replay as npm run replay:dlq
+    participant DLQ as foc.badges.dlq
+    participant Handler as Event handler
+    participant DB as Postgres
+
+    Op->>Replay: kubectl exec deploy/badges
+    Replay->>DLQ: read as group badges-service-dlq-replay, from the last commit
+    loop each dead letter written before this run started
+        alt headers unreadable, or topic Badges does not handle
+            Replay-->>Op: dropped, logged in full
+        else readable
+            Replay->>Handler: original message, by x-original-topic
+            Handler->>DB: apply, already applied changes nothing
+            alt applied
+                Note over Replay: replayed
+            else still throws or invalid, under 5 replays and 30 days
+                Replay->>DLQ: re-queue at the end, replay count + 1
+            else 5th failed replay, or 30 days since the first failure
+                Replay-->>Op: expired, logged in full
+            end
+        end
+        Replay->>DLQ: commit offset
+    end
+    Replay-->>Op: replayed, requeued, expired, dropped

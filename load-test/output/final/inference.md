@@ -1,3 +1,8 @@
+# AI Assistance Disclosure
+# Tool: Cursor (Auto), date: 2026-11-01
+# Scope: Documentation wording for load-test evidence notes under author-fixed analysis.
+# Author review: Varun Sivakumar generated ideas, designed implementation, validated correctness, edited where needed, and verified behavior/tests.
+
 # Grafana interpretation — `full-1520`
 
 Snapshot: k6 Prometheus (Native Histograms), test id **`full-1520`**.  

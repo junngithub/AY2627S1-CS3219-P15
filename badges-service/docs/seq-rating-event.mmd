@@ -3,11 +3,16 @@ sequenceDiagram
     participant Kafka as foc.user.rating
     participant Badges as Badges service
     participant DB as Postgres
+    participant DLQ as foc.badges.dlq
 
     Rating->>Kafka: user.rating.updated, key is the user id
     Kafka->>Badges: userId, newAverage, totalRatings
-    alt other eventType or fails the schema
-        Badges-->>Kafka: skip, and log when invalid
+    alt another eventType
+        Badges-->>Kafka: ignored
+    else not JSON or fails the schema
+        Badges->>DLQ: dead letter, reason invalid
+    else user is in deleted_user
+        Badges-->>Kafka: deleted, nothing stored
     else stored rating_count is already at least totalRatings
         Badges-->>Kafka: stale, nothing changes
     else newer

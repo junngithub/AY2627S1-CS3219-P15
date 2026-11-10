@@ -2,7 +2,7 @@
 
 Drizzle owns the schema. `src/database/schema.ts` is the source; `npm run db:generate` writes migrations to `drizzle/`, and the migrate Job runs them before each deploy (ADR-0011). Migrations `0000` through `0003` produce the tables below. `user_badge.badge_id` is the only foreign key; order and user ids are plain UUIDs from other services.
 
-`0001` added the parties and verdict to `disputed_order`. `0002` dropped the `job_run` table and `user_metrics.reconciled_at` when the scheduled poll was removed.
+`0001` added the parties and verdict to `disputed_order`. `0002` dropped the `job_run` table and `user_metrics.reconciled_at` when the scheduled poll was removed. `0003` added `deleted_user`.
 
 ## badge_catalog
 

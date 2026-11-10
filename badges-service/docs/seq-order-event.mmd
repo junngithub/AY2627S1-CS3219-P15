@@ -2,10 +2,13 @@ sequenceDiagram
     participant Kafka as foc.order.status
     participant Badges as Badges service
     participant DB as Postgres
+    participant DLQ as foc.badges.dlq
 
     Kafka->>Badges: order.status.changed
-    alt not JSON, other eventType, or fails the schema
-        Badges-->>Kafka: skip, and log when invalid
+    alt another eventType
+        Badges-->>Kafka: ignored
+    else not JSON or fails the schema
+        Badges->>DLQ: dead letter, reason invalid
     else toStatus is ESCALATED
         Badges->>DB: upsert disputed_order with requester and courier
         Badges->>DB: make counted_order match the verdict, none until resolved
@@ -15,8 +18,14 @@ sequenceDiagram
     else order is in disputed_order
         Badges-->>Kafka: disputed, only the verdict counts it
     else counted status
-        Badges->>DB: insert counted_order per role, conflict does nothing
-        Note over Badges,DB: new rows only: +1 to completed_deliveries or completed_orders
-        Badges->>DB: re-check badges for each user with a new row
+        Badges->>DB: which parties are in deleted_user
+        alt both parties deleted
+            Badges-->>Kafka: deleted, nothing counted
+        else at least one party still has an account
+            Badges->>DB: insert counted_order per remaining role, conflict does nothing
+            Note over Badges,DB: new rows only: +1 to completed_deliveries or completed_orders
+            Badges->>DB: re-check badges for each user with a new row
+        end
     end
     Note over Badges,DB: each branch is one transaction
+    Note over Badges,DLQ: a handler that throws 4 times is dead-lettered with reason failed

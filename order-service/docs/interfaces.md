@@ -1,3 +1,10 @@
+<!--
+AI Assistance Disclosure
+Tool: Cursor (Auto), date: 2026-10-15
+Scope: Documentation wording for Order Service under author-fixed design.
+Author review: Varun Sivakumar generated ideas, designed implementation, validated correctness, edited where needed, and verified behavior/tests.
+-->
+
 # Interfaces
 
 Every order and alert route sits under `order.api.base-path`, which is `/api/v1/orders`. Swagger is at `/swagger-ui.html`. Health is at `/actuator/health`.

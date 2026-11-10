@@ -1,3 +1,9 @@
+<!--
+AI Assistance Disclosure
+Tool: Cursor (Auto), date: 2026-11-09
+Scope: Documentation wording for Admin Service under author-fixed design.
+Author review: Sahana Avantika generated ideas, designed implementation, validated correctness, edited where needed, and verified behavior/tests.
+-->
 # Admin Service — Database Schema
 
 **Datastore:** PostgreSQL · **Model:** one conflict case per order, one open user report per pair, one open suspension appeal per user, plus an append-only audit log

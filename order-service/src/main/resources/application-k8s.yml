@@ -1,3 +1,8 @@
+# AI Assistance Disclosure
+# Tool: Cursor (Auto), date: 2026-10-15
+# Scope: Boilerplate/config assistance for Order Service under author-fixed requirements and architecture.
+# Author review: Varun Sivakumar generated ideas, designed implementation, validated correctness, edited where needed, and verified behavior/tests.
+
 # Kubernetes (deploy/charts/foc-service). Activate with SPRING_PROFILES_ACTIVE=k8s,
 # set in deploy/values/services/order.yaml. Values come from the chart's env contract.
 spring:
@@ -8,9 +13,9 @@ spring:
     username: ${PGUSER}
     password: ${PGPASSWORD}
     hikari:
-      # Full-run create/read is I/O heavy; default 10 stalls Tomcat workers.
-      # 32 pods × 30 ≈ 960; RDS db.m7g.xlarge allows ~1800.
-      maximum-pool-size: 30
+      # Idle/dev on db.t4g.micro: keep 10 (2 pods × 10 leaves room for peers).
+      # Full-run on xlarge: bump to 30 — see load-test/README.md scale-up.
+      maximum-pool-size: 10
   kafka:
     # KAFKA_* are set by the chart for KafkaUser "order" (ADR-0004): the TLS
     # listener with SCRAM-SHA-512, and the cluster CA as a mounted PEM file.

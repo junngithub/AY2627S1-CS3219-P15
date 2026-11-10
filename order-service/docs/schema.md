@@ -1,3 +1,10 @@
+<!--
+AI Assistance Disclosure
+Tool: Cursor (Auto), date: 2026-10-15
+Scope: Documentation wording for Order Service under author-fixed design.
+Author review: Varun Sivakumar generated ideas, designed implementation, validated correctness, edited where needed, and verified behavior/tests.
+-->
+
 # Database schema
 
 Flyway owns the schema. Hibernate validates it and does not create or alter tables. Migrations `V1` through `V5` in `src/main/resources/db/migration` produce the tables below. There are no foreign keys: `order_id` columns are plain UUIDs.

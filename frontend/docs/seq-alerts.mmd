@@ -1,0 +1,22 @@
+sequenceDiagram
+    actor U as Requester
+    participant App as Browser app
+    participant LS as localStorage
+    participant GW as Gateway
+    participant Order as Order Service
+
+    loop every 30 seconds while the tab is visible, and on returning to it
+        App->>GW: GET /api/v1/orders/alerts?page=0&size=20
+        GW->>Order: authorize, forward
+        Order-->>App: latest 20 status changes on my requests
+    end
+    App->>LS: read foc.alerts.seen and foc.alerts.cleared for this user
+    Note over App: dot shows when the newest alert is after seen
+    U->>App: open the bell
+    App->>LS: write foc.alerts.seen = newest alert time
+    alt Clear all
+        App->>LS: cleared.before = now
+    else clear one row
+        App->>LS: add the alert id to cleared.ids, latest 200 kept
+    end
+    Note over App,Order: Order keeps no read state, so seen and cleared live in this browser only

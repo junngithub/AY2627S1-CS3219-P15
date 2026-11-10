@@ -1,3 +1,8 @@
+# AI Assistance Disclosure
+# Tool: Cursor (Auto), date: 2026-11-09
+# Scope: Boilerplate/config assistance for Admin Service under author-fixed requirements and architecture.
+# Author review: Sahana Avantika generated ideas, designed implementation, validated correctness, edited where needed, and verified behavior/tests.
+
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 pydantic==2.9.2

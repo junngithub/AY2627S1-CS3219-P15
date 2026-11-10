@@ -1,3 +1,8 @@
+# AI Assistance Disclosure
+# Tool: Cursor (Auto), date: 2026-11-01
+# Scope: Implementation assistance for the k6 peak/soak script under author-fixed load-test design.
+# Author review: Varun Sivakumar generated ideas, designed implementation, validated correctness, edited where needed, and verified behavior/tests.
+
 // Backend load. Hits Order directly with the gateway identity headers.
 // Order then calls User, Supplier, Credit, and, on escalate, Admin.
 //
